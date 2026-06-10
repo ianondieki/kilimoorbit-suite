@@ -1,0 +1,31 @@
+{
+  "execution_mode": "logistics_replan",
+  "current_month": "April",
+  "active_delivery": {
+    "delivery_id": "DEL-2024-089",
+    "crop_type": "cabbage",
+    "origin": "Ol Kalou",
+    "original_destination": "Nakuru Market",
+    "original_net_profit_kes": 12400
+  },
+  "disruption_event": {
+    "type": "ROAD_CLOSURE",
+    "detail": "B5 road flooded at Gilgil bridge — impassable for all vehicles"
+  },
+  "available_alternative_routes": [
+    {
+      "route_id": "ALT-001",
+      "new_destination": "Naivasha Market",
+      "time_penalty_minutes": 45,
+      "cost_penalty_kes": 1200,
+      "cargo_risk_level": "Low"
+    },
+    {
+      "route_id": "ALT-002",
+      "new_destination": "Nakuru Market via C77",
+      "time_penalty_minutes": 90,
+      "cost_penalty_kes": 2800,
+      "cargo_risk_level": "Medium"
+    }
+  ]
+}

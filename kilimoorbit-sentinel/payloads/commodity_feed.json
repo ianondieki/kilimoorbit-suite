@@ -1,0 +1,88 @@
+{
+  "feed_name": "KilimoOrbit Commodity Board",
+  "currency": "KES",
+  "unit": "kg",
+  "data_age_minutes": 30,
+  "commodities": [
+    {
+      "crop": "maize", "emoji": "🌽",
+      "quotes": [
+        { "market": "Wakulima Nairobi", "price": 52, "delta": 3 },
+        { "market": "Eldoret Main", "price": 46, "delta": -2 },
+        { "market": "Kibuye Kisumu", "price": 50, "delta": 1 }
+      ]
+    },
+    {
+      "crop": "beans", "emoji": "🫘",
+      "quotes": [
+        { "market": "Nyamakima Nairobi", "price": 135, "delta": 5 },
+        { "market": "Karatina", "price": 128, "delta": 2 },
+        { "market": "Nakuru Wholesale", "price": 130, "delta": -3 }
+      ]
+    },
+    {
+      "crop": "onions", "emoji": "🧅",
+      "quotes": [
+        { "market": "Wakulima Nairobi", "price": 78, "delta": 6 },
+        { "market": "Kongowea Mombasa", "price": 85, "delta": 4 },
+        { "market": "Karatina", "price": 70, "delta": -2 }
+      ]
+    },
+    {
+      "crop": "carrots", "emoji": "🥕",
+      "quotes": [
+        { "market": "Marikiti Nairobi", "price": 48, "delta": -1 },
+        { "market": "Nakuru Wholesale", "price": 42, "delta": 2 },
+        { "market": "Limuru", "price": 38, "delta": 0 }
+      ]
+    },
+    {
+      "crop": "oranges", "emoji": "🍊",
+      "quotes": [
+        { "market": "Kongowea Mombasa", "price": 55, "delta": 2 },
+        { "market": "Wakulima Nairobi", "price": 62, "delta": 3 },
+        { "market": "Kibuye Kisumu", "price": 58, "delta": -1 }
+      ]
+    },
+    {
+      "crop": "tomato", "emoji": "🍅",
+      "quotes": [
+        { "market": "Meru Main Market", "price": 42, "delta": 2 },
+        { "market": "Nairobi Wakulima Market", "price": 67, "delta": 5 },
+        { "market": "Kongowea Mombasa", "price": 72, "delta": 4 }
+      ]
+    },
+    {
+      "crop": "potatoes", "emoji": "🥔",
+      "quotes": [
+        { "market": "Nakuru Wholesale", "price": 45, "delta": -2 },
+        { "market": "Wakulima Nairobi", "price": 52, "delta": 1 },
+        { "market": "Eldoret Main", "price": 40, "delta": 0 }
+      ]
+    },
+    {
+      "crop": "cabbage", "emoji": "🥬",
+      "quotes": [
+        { "market": "Marikiti Nairobi", "price": 30, "delta": 1 },
+        { "market": "Kongowea Mombasa", "price": 34, "delta": 2 },
+        { "market": "Kibuye Kisumu", "price": 28, "delta": -1 }
+      ]
+    },
+    {
+      "crop": "bananas", "emoji": "🍌",
+      "quotes": [
+        { "market": "Kibuye Kisumu", "price": 38, "delta": 1 },
+        { "market": "Wakulima Nairobi", "price": 44, "delta": 2 },
+        { "market": "Karatina", "price": 35, "delta": 0 }
+      ]
+    },
+    {
+      "crop": "avocado", "emoji": "🥑",
+      "quotes": [
+        { "market": "Wakulima Nairobi", "price": 95, "delta": 7 },
+        { "market": "Kongowea Mombasa", "price": 105, "delta": 5 },
+        { "market": "Karatina", "price": 88, "delta": 3 }
+      ]
+    }
+  ]
+}

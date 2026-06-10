@@ -1,0 +1,12 @@
+node_modules/
+<<<<<<< HEAD
+.expo/
+dist/
+*.log
+=======
+.env
+*.log
+.DS_Store
+dist/
+coverage/
+>>>>>>> 1a7694b745e9dbc8ac9f5d49b2b0b448c551cc3f

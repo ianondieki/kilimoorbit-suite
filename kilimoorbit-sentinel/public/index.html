@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="loam">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KilimoOrbit Sentinel · Mission Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+/* ── THEMES ─────────────────────────────────────────────── */
+:root, [data-theme="loam"]{
+  --bg:#101B12; --panel:#18271B; --raised:#223827; --line:#35503A;
+  --accent:#E9B44C; --alert:#E0532F; --ok:#6FBF73;
+  --ink:#EFEADB; --dim:#ADB7A0; --field:#0C150E; --field-ink:#C9DCC0;
+  --glowA:rgba(111,191,115,.06); --glowB:rgba(233,180,76,.05);
+}
+[data-theme="nyota"]{
+  --bg:#0B1020; --panel:#121A30; --raised:#1B2848; --line:#324470;
+  --accent:#7FD1E8; --alert:#FF6E5E; --ok:#8BE8A0;
+  --ink:#EEF3FB; --dim:#A0ACCB; --field:#080D1A; --field-ink:#BBD0EE;
+  --glowA:rgba(127,209,232,.07); --glowB:rgba(139,232,160,.05);
+}
+[data-theme="savanna"]{
+  --bg:#EFE6D3; --panel:#F8F2E4; --raised:#FFFBEF; --line:#D6C9A8;
+  --accent:#9A5B22; --alert:#C03A1E; --ok:#3E7A3E;
+  --ink:#241F12; --dim:#59503A; --field:#FFF9EA; --field-ink:#43381E;
+  --glowA:rgba(154,91,34,.06); --glowB:rgba(62,122,62,.05);
+}
+:root{ --mono:'IBM Plex Mono',ui-monospace,monospace; --sans:'Archivo',system-ui,sans-serif; }
+*{box-sizing:border-box;margin:0;padding:0}
+html{color-scheme:dark light}
+body{
+  background:var(--bg);color:var(--ink);font-family:var(--sans);
+  min-height:100vh;font-size:15px;line-height:1.5;transition:background .25s,color .25s;
+  background-image:
+    radial-gradient(1200px 500px at 80% -10%, var(--glowA), transparent 60%),
+    radial-gradient(900px 400px at 0% 110%, var(--glowB), transparent 60%);
+}
+a{color:var(--accent)} button{font-family:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+
+/* ── HEADER + ORBIT + TICKER ─────────────────────────────── */
+header{border-bottom:1px solid var(--line);padding:0 28px;position:relative}
+.head-row{display:flex;align-items:center;gap:16px;padding:18px 0 14px;flex-wrap:wrap}
+.wordmark{font-variation-settings:'wdth' 118,'wght' 800;font-size:21px;letter-spacing:.14em;text-transform:uppercase}
+.wordmark em{font-style:normal;color:var(--accent)}
+.tagline{font-family:var(--mono);font-size:11.5px;color:var(--dim);letter-spacing:.08em}
+.spacer{flex:1}
+.themes{display:flex;gap:6px}
+.theme-dot{width:24px;height:24px;border-radius:50%;border:2px solid var(--line);padding:0}
+.theme-dot.on{border-color:var(--accent)}
+.theme-dot[data-t="loam"]{background:linear-gradient(135deg,#101B12 50%,#E9B44C 50%)}
+.theme-dot[data-t="nyota"]{background:linear-gradient(135deg,#0B1020 50%,#7FD1E8 50%)}
+.theme-dot[data-t="savanna"]{background:linear-gradient(135deg,#EFE6D3 50%,#9A5B22 50%)}
+.engine-badge{font-family:var(--mono);font-size:11px;letter-spacing:.1em;border:1px solid var(--line);
+  border-radius:999px;padding:6px 14px;display:flex;align-items:center;gap:8px;background:var(--panel)}
+.engine-badge .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent)}
+.engine-badge.live .dot{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.orbit{height:3px;background:var(--panel);position:relative;border-radius:2px}
+.orbit::after{content:"";position:absolute;top:-2px;width:90px;height:7px;border-radius:4px;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);animation:sweep 7s linear infinite}
+@keyframes sweep{from{left:-90px}to{left:100%}}
+/* marquee ticker (Apex §4.1) */
+.ticker{overflow:hidden;border-bottom:1px solid var(--line);background:var(--panel);white-space:nowrap}
+.ticker-track{display:inline-block;padding:7px 0;font-family:var(--mono);font-size:11.5px;color:var(--dim);
+  animation:tick 38s linear infinite;will-change:transform}
+.ticker-track b{color:var(--accent)} .ticker-track .warn{color:var(--alert)}
+.ticker-track span{margin-right:42px}
+@keyframes tick{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@media (prefers-reduced-motion:reduce){
+  .orbit::after{animation:none;left:30%}
+  .ticker-track{animation:none;white-space:normal}
+  *{transition:none!important;animation:none!important}
+}
+
+/* ── LAYOUT ──────────────────────────────────────────────── */
+main{max-width:1320px;margin:0 auto;padding:24px 28px 60px;display:grid;gap:22px;
+  grid-template-columns:235px 1fr 1fr;grid-template-areas:
+  "routes editor decision" "auto auto auto" "suite suite suite"}
+@media(max-width:1080px){main{grid-template-columns:1fr 1fr;grid-template-areas:"routes editor" "decision decision" "auto auto" "suite suite"}}
+@media(max-width:720px){main{grid-template-columns:1fr;grid-template-areas:"routes" "editor" "decision" "auto" "suite";padding:16px 14px 50px}}
+.panel{background:linear-gradient(180deg,color-mix(in srgb,var(--panel) 88%,var(--ink) 4%),var(--panel) 55%);
+  border:1px solid var(--line);border-radius:14px;padding:20px 18px;
+  box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 9%,transparent), 0 8px 24px -18px rgba(0,0,0,.8)}
+.panel h2{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:color-mix(in srgb,var(--ink) 72%,var(--dim));margin-bottom:14px}
+
+/* ── ROUTE RAIL ──────────────────────────────────────────── */
+#routes{grid-area:routes;display:flex;flex-direction:column;gap:8px;align-self:start}
+.route-btn{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--raised);
+  border:1px solid var(--line);border-radius:10px;color:var(--ink);padding:11px 12px;transition:border-color .15s,transform .1s}
+.route-btn:hover{border-color:var(--accent);transform:translateX(2px)} .route-btn:active{transform:scale(.985)}
+.route-btn.selected{border-color:var(--accent);box-shadow:inset 0 0 0 100vmax color-mix(in srgb,var(--accent) 8%,transparent)}
+.route-key{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--bg);background:var(--accent);
+  border-radius:6px;width:30px;height:30px;flex:none;display:grid;place-items:center}
+.route-btn.probe .route-key{background:var(--line);color:var(--dim)}
+.route-name{font-size:13px;font-weight:600;line-height:1.25}
+.route-sub{font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+
+/* ── EDITOR ──────────────────────────────────────────────── */
+#editor{grid-area:editor;display:flex;flex-direction:column}
+#payload{flex:1;min-height:320px;width:100%;resize:vertical;background:var(--field);color:var(--field-ink);
+  border:1px solid var(--line);border-radius:10px;font-family:var(--mono);font-size:12.5px;line-height:1.55;padding:14px;tab-size:2}
+#payload:focus{border-color:var(--accent);outline:none}
+.editor-foot{display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--raised);color:var(--ink);border-radius:9px;padding:10px 16px;
+  font-size:13px;font-weight:600;transition:border-color .15s,transform .1s}
+.btn:hover{border-color:var(--accent);transform:translateY(-1px)} .btn:active{transform:scale(.97)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+.btn[disabled]{opacity:.5;cursor:wait}
+.json-status{font-family:var(--mono);font-size:11.5px;color:var(--dim)} .json-status.bad{color:var(--alert)}
+
+/* ── DECISION ────────────────────────────────────────────── */
+#decision{grid-area:decision;display:flex;flex-direction:column;min-height:430px}
+.decision-meta{display:flex;gap:14px;font-family:var(--mono);font-size:12px;color:var(--dim);margin-bottom:12px;flex-wrap:wrap}
+.decision-meta b{color:var(--ink)}
+#card{flex:1}
+.empty{height:100%;display:grid;place-items:center;text-align:center;color:color-mix(in srgb,var(--ink) 60%,var(--dim));font-size:14px;
+  border:1px dashed var(--line);border-radius:10px;padding:30px;font-size:13.5px}
+.empty .glyph{font-size:30px;display:block;margin-bottom:10px}
+.dcard{border:1px solid var(--line);border-radius:12px;overflow:hidden;animation:rise .3s ease}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.dcard-head{padding:10px 16px;font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;
+  background:var(--raised);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.dcard-body{padding:18px 16px}
+.kes-big{font-variation-settings:'wdth' 110,'wght' 800;font-size:36px;color:var(--accent);line-height:1.1}
+.kes-label{font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:.1em;margin-bottom:4px}
+.statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0}
+.stat{background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:10px;text-align:center}
+.stat b{display:block;font-family:var(--mono);font-size:15px;color:var(--accent)}
+.stat span{font-family:var(--mono);font-size:9.5px;color:var(--dim);letter-spacing:.06em}
+.pill{font-family:var(--mono);font-size:10.5px;border:1px solid var(--line);border-radius:999px;padding:3px 10px;letter-spacing:.08em}
+.pill.HIGH,.pill.LIVE,.pill.CLEAR,.pill.Low{color:var(--ok);border-color:var(--ok)}
+.pill.MEDIUM,.pill.WEATHER_DELAY,.pill.Medium,.pill.WARNING{color:var(--accent);border-color:var(--accent)}
+.pill.LOW,.pill.CRITICAL,.pill.STALE_DATA,.pill.High,.pill.Critical,.pill.ROAD_IMPASSABLE,.pill.BATTERY_RISK{color:var(--alert);border-color:var(--alert)}
+.sentinel{margin-top:14px;border:1px solid var(--line);border-radius:10px;background:var(--raised);padding:12px}
+.sentinel h4{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--dim);margin-bottom:8px}
+.riskrow{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.caution{font-size:12.5px;border-left:3px solid var(--alert);padding:7px 10px;background:var(--panel);border-radius:0 8px 8px 0;margin-top:8px}
+.insight{font-size:13px;color:color-mix(in srgb,var(--ink) 68%,var(--dim));margin-top:7px;line-height:1.5}
+.insight b{color:var(--ink);font-weight:600}
+/* chat */
+.bubble{max-width:92%;background:var(--raised);border:1px solid var(--line);border-radius:14px 14px 14px 4px;padding:13px 16px;font-size:15px}
+.bubble.user{margin-left:auto;border-radius:14px 14px 4px 14px;border-color:var(--accent);margin-bottom:12px}
+.bubble-meta{font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-top:6px;display:flex;gap:10px;align-items:center}
+.speak-btn{border:1px solid var(--line);background:none;color:var(--dim);border-radius:6px;font-size:12px;padding:2px 8px}
+.speak-btn:hover{border-color:var(--accent);color:var(--ink)}
+.voicebar{display:flex;gap:8px;margin-top:14px;align-items:center}
+.voicebar input{flex:1;background:var(--field);color:var(--field-ink);border:1px solid var(--line);border-radius:9px;
+  padding:10px 12px;font-size:13.5px;font-family:inherit}
+.voicebar input:focus{border-color:var(--accent);outline:none}
+.mic{width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:var(--raised);font-size:17px;flex:none}
+.mic.rec{border-color:var(--alert);color:var(--alert);animation:pulse 1.2s ease infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--alert) 40%,transparent)}50%{box-shadow:0 0 0 9px transparent}}
+.tts-toggle{font-family:var(--mono);font-size:10.5px;color:var(--dim);display:flex;align-items:center;gap:6px;user-select:none;cursor:pointer}
+/* phone */
+.phone{max-width:330px;margin:0 auto;background:var(--field);border:1px solid var(--line);border-radius:22px;padding:14px 12px 18px}
+.phone-top{font-family:var(--mono);font-size:10px;color:var(--dim);display:flex;justify-content:space-between;padding:0 6px 10px}
+.sms{background:var(--raised);border-left:3px solid var(--alert);border-radius:10px;padding:12px;font-size:13.5px}
+.sms-from{font-family:var(--mono);font-size:10px;color:var(--alert);letter-spacing:.12em;margin-bottom:5px}
+.sms-count{font-family:var(--mono);font-size:10px;color:var(--dim);text-align:right;margin-top:6px}
+.opmsg{margin-top:14px;font-size:13px;color:var(--dim);border:1px dashed var(--line);border-radius:10px;padding:11px}
+.opmsg b{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink);display:block;margin-bottom:5px}
+.flagrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+/* onboarding */
+.stepper{display:flex;gap:6px;margin-bottom:16px}
+.step{flex:1;height:6px;border-radius:3px;background:var(--raised)}
+.step.done{background:var(--ok)} .step.now{background:var(--accent)}
+.prompt-card{background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:14px;font-size:15px}
+.fieldtags{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.ftag{font-family:var(--mono);font-size:10.5px;border-radius:999px;padding:3px 10px;border:1px solid var(--line)}
+.ftag.got{color:var(--ok);border-color:var(--ok)} .ftag.need{color:var(--dim)}
+/* replan */
+.divert{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:12px;margin-bottom:14px;flex-wrap:wrap}
+.divert .node{border:1px solid var(--line);border-radius:8px;padding:7px 12px;background:var(--raised)}
+.divert .node.dead{text-decoration:line-through;color:var(--dim);border-color:var(--alert)}
+.divert .node.new{border-color:var(--accent);color:var(--accent);font-weight:600}
+.divert .arrow{color:var(--dim)}
+.driver{margin-top:10px;font-size:13.5px;border-left:3px solid var(--ok);padding:8px 12px;background:var(--raised);border-radius:0 8px 8px 0}
+/* error */
+.expected{display:flex;gap:10px;align-items:center;border:1px solid var(--ok);border-radius:10px;
+  padding:10px 12px;margin-bottom:12px;background:color-mix(in srgb,var(--ok) 8%,transparent);font-size:12.5px}
+.expected b{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--ok);white-space:nowrap}
+.panel-sub{font-family:var(--mono);font-size:10px;color:var(--dim);margin:-8px 0 12px;letter-spacing:.04em}
+.err .dcard-head{color:var(--alert)}
+.err-type{font-family:var(--mono);font-size:20px;color:var(--alert);margin-bottom:6px}
+.err-fields{font-family:var(--mono);font-size:12px;color:var(--accent);margin-top:8px}
+details.raw{margin-top:14px}
+details.raw summary{font-family:var(--mono);font-size:11px;color:var(--dim);cursor:pointer;letter-spacing:.1em}
+pre.rawjson{margin-top:8px;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:12px;
+  font-family:var(--mono);font-size:11.5px;overflow:auto;max-height:280px;color:var(--field-ink)}
+
+/* ── AUTOPILOT ───────────────────────────────────────────── */
+#auto{grid-area:auto}
+.auto-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.timeline{display:flex;flex-direction:column;gap:0}
+.tstep{display:grid;grid-template-columns:26px 1fr;gap:14px;position:relative;padding-bottom:18px}
+.tstep::before{content:"";position:absolute;left:12px;top:26px;bottom:0;width:2px;background:var(--line)}
+.tstep:last-child::before{display:none}
+.tnode{width:26px;height:26px;border-radius:50%;border:2px solid var(--accent);background:var(--panel);
+  display:grid;place-items:center;font-family:var(--mono);font-size:10px;color:var(--accent);z-index:1}
+.tbody{background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:11px 13px}
+.tagent{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--accent)}
+.taction{font-size:13px;margin:3px 0 7px}
+.tout{font-family:var(--mono);font-size:11px;color:var(--dim);white-space:pre-wrap;word-break:break-word;max-height:130px;overflow:auto}
+.tms{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:6px}
+.brief{margin-top:14px;border:1px solid var(--accent);border-radius:10px;padding:14px;background:color-mix(in srgb,var(--accent) 7%,var(--panel))}
+.brief b{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--accent);display:block;margin-bottom:6px}
+
+/* ── SUITE ───────────────────────────────────────────────── */
+#suite{grid-area:suite}
+.suite-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.suite-score{font-family:var(--mono);font-size:13px;color:var(--dim)} .suite-score b{color:var(--ok);font-size:16px}
+.tests{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.test{border:1px solid var(--line);border-radius:12px;padding:13px 14px;background:var(--raised);font-size:13px;
+  display:flex;flex-direction:column;gap:6px;min-height:92px;animation:fadeup .4s ease backwards;
+  box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 7%,transparent)}
+.test.pending{border-style:dashed;background:color-mix(in srgb,var(--raised) 60%,var(--panel))}
+@keyframes fadeup{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.kes-big{font-variant-numeric:tabular-nums}
+.tstep{animation:fadeup .4s ease backwards}
+.test .t-head{display:flex;justify-content:space-between;gap:8px;font-family:var(--mono);font-size:12px;color:var(--ink)}
+.test .verdict{font-weight:700;font-size:12px;letter-spacing:.06em}
+.test.pass{border-color:color-mix(in srgb,var(--ok) 55%,transparent)} .test.pass .verdict{color:var(--ok)}
+.test.fail{border-color:var(--alert)} .test.fail .verdict{color:var(--alert)}
+.test.pending .verdict{color:var(--dim)}
+.test .t-detail{color:color-mix(in srgb,var(--ink) 70%,var(--dim));font-size:12.5px;line-height:1.45;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.test .t-ms{font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+.spin{display:inline-block;width:11px;height:11px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-1px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+footer{max-width:1320px;margin:0 auto;padding:0 28px 30px;display:flex;gap:20px;flex-wrap:wrap;
+  font-family:var(--mono);font-size:12px;color:var(--dim)}
+footer b{color:var(--ink)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="head-row">
+    <div>
+      <div class="wordmark">Kilimo<em>Orbit</em> Sentinel</div>
+      <div class="tagline">APEX v2.0 DECISION ENGINE · MISSION CONTROL · KE</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="themes" role="group" aria-label="Theme">
+      <button class="theme-dot on" data-t="loam" title="Loam (night field)" aria-label="Loam theme"></button>
+      <button class="theme-dot" data-t="nyota" title="Nyota (satellite night)" aria-label="Nyota theme"></button>
+      <button class="theme-dot" data-t="savanna" title="Savanna (daylight)" aria-label="Savanna theme"></button>
+    </div>
+    <div class="engine-badge" id="engineBadge"><span class="dot"></span><span id="engineLabel">CONNECTING…</span></div>
+  </div>
+  <div class="orbit" aria-hidden="true"></div>
+</header>
+<div class="ticker" aria-hidden="true"><div class="ticker-track" id="ticker"></div></div>
+
+<main>
+  <section id="routes" class="panel" aria-label="Execution routes">
+    <h2>Ground Stations</h2>
+  </section>
+
+  <section id="editor" class="panel" aria-label="Payload editor">
+    <h2>Uplink Payload</h2>
+    <div class="panel-sub">the raw JSON this console transmits to APEX — inspect or edit freely, then retransmit. (The Android app hides all of this from farmers.)</div>
+    <textarea id="payload" spellcheck="false" aria-label="JSON payload editor"></textarea>
+    <div class="editor-foot">
+      <button class="btn btn-primary" id="runBtn">Transmit to APEX</button>
+      <button class="btn" id="fmtBtn">Format JSON</button>
+      <span class="json-status" id="jsonStatus">valid JSON</span>
+    </div>
+  </section>
+
+  <section id="decision" class="panel" aria-label="APEX decision">
+    <h2>Decision Downlink</h2>
+    <div class="decision-meta" id="decisionMeta" hidden>
+      <span>latency <b id="latVal">—</b></span><span>engine <b id="engVal">—</b></span><span>mode <b id="modeVal">—</b></span>
+    </div>
+    <div id="card"><div class="empty"><div><span class="glyph">🛰</span>Select a ground station, review the payload, and transmit.<br/>APEX returns a structured decision here.</div></div></div>
+  </section>
+
+  <section id="auto" class="panel" aria-label="Sentinel Autopilot">
+    <div class="auto-head">
+      <h2 style="margin:0">Sentinel Autopilot · Agentic Chain</h2>
+      <button class="btn btn-primary" id="autoBtn">Engage Autopilot</button>
+      <span class="json-status">sense → arbitrage → weather gate → broadcast → brief</span>
+    </div>
+    <div id="autoBody"><div class="empty" style="min-height:120px"><div>Autopilot chains APEX routes autonomously: it compiles the arbitrage run, applies the §2.4 weather gate, auto-broadcasts a hold alert to farmers if the route is unsafe, and files a mission brief.</div></div></div>
+  </section>
+
+  <section id="suite" class="panel" aria-label="Verification suite">
+    <div class="suite-head">
+      <h2 style="margin:0">Verification Suite</h2>
+      <button class="btn" id="suiteBtn">Run all 7 checks</button>
+      <span class="suite-score" id="suiteScore"></span>
+    </div>
+    <div class="tests" id="tests"></div>
+  </section>
+</main>
+
+<footer>
+  <span>requests this session: <b id="reqCount">0</b></span>
+  <span>avg latency: <b id="avgLat">—</b></span>
+  <span>model: <b>gemini-2.5-flash</b> · temperature 0 · Apex v2.0 JSON contract</span>
+</footer>
+
+<script>
+const ROUTES = [
+  { key:"A", id:"arbitrage",  name:"Arbitrage Compile",  sub:"profit × climate matrix" },
+  { key:"B", id:"user_chat",  name:"Farmer Chat",        sub:"voice + text advisory" },
+  { key:"C", id:"alert",      name:"Alert Broadcast",    sub:"tiered push alerts" },
+  { key:"D", id:"onboarding", name:"Onboarding Intake",  sub:"5-step profile setup" },
+  { key:"E", id:"replan",     name:"Logistics Replan",   sub:"mid-transit rerouting" },
+  { key:"∅", id:"cold",       name:"Cold-Start Probe",   sub:"{} → UNKNOWN_ROUTE", probe:true },
+  { key:"!", id:"corrupt",    name:"Integrity Probe",    sub:"battery 150 → DATA_ERROR", probe:true },
+];
+const TEST_NAMES = ["Cold start","Integrity guard","Route A · arbitrage","Route B · chat","Route C · alert","Route D · onboarding","Route E · replan"];
+const $ = (id)=>document.getElementById(id);
+let payloads = {}, reqCount = 0, latSum = 0, ttsOn = true, currentStation = "arbitrage";
+const fmtKES = (n)=> n==null ? "— (suppressed)" : "KES "+Number(n).toLocaleString("en-KE");
+const esc = (s)=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ── themes ── */
+document.querySelectorAll(".theme-dot").forEach(b=>b.onclick=()=>{
+  document.documentElement.dataset.theme = b.dataset.t;
+  document.querySelectorAll(".theme-dot").forEach(x=>x.classList.toggle("on",x===b));
+  try{ localStorage.setItem("ko-theme", b.dataset.t); }catch{}
+});
+try{
+  const t = localStorage.getItem("ko-theme");
+  if(t) document.querySelector(`.theme-dot[data-t="${t}"]`)?.click();
+}catch{}
+
+/* ── boot ── */
+init();
+async function init(){
+  renderRouteButtons(); renderTestGrid();
+  try{
+    const meta = await (await fetch("/api/meta")).json();
+    payloads = meta.payloads;
+    commodityFeed = meta.commodity_feed ?? null;
+    setEngine(meta.engine);
+    buildTicker();
+    selectRoute("arbitrage");
+  }catch{ $("engineLabel").textContent = "SERVER OFFLINE"; }
+}
+function setEngine(mode){
+  $("engineLabel").textContent = mode==="LIVE" ? "LIVE · GEMINI 2.5 FLASH" : "OFFLINE MOCK ENGINE";
+  $("engineBadge").classList.toggle("live", mode==="LIVE");
+}
+let commodityFeed = null;
+function buildTicker(){
+  const items = [];
+  for(const c of commodityFeed?.commodities ?? []){
+    const best = [...c.quotes].sort((a,b)=>b.price-a.price)[0];
+    const up = best.delta >= 0;
+    items.push(`${c.emoji} <b>${esc(c.crop.toUpperCase())}</b> ${esc(best.market)} KES ${best.price}/kg <span class="${up?"":"warn"}">${up?"▲":"▼"}${Math.abs(best.delta)}</span>`);
+  }
+  items.push(`<span class="warn">⚠ LONG RAINS ACTIVE — MURRAM CORRIDORS SOFT</span>`);
+  items.push(`E-BODA ${esc(payloads.arbitrage?.vehicle_telemetry?.vehicle_id??"")} BATTERY ${payloads.arbitrage?.vehicle_telemetry?.battery_level??"—"}%`);
+  items.push(`SOIL MOISTURE ${payloads.arbitrage?.iot_telemetry?.soil_moisture??"—"}% · RAIN 24H ${payloads.arbitrage?.iot_telemetry?.rainfall_mm_last_24h??"—"}mm`);
+  const half = items.map(i=>`<span>${i}</span>`).join("");
+  $("ticker").innerHTML = half + half; /* duplicated for seamless loop */
+}
+
+/* ── route rail ── */
+function renderRouteButtons(){
+  const wrap = $("routes");
+  for(const r of ROUTES){
+    const b = document.createElement("button");
+    b.className = "route-btn"+(r.probe?" probe":"");
+    b.dataset.id = r.id;
+    b.innerHTML = `<span class="route-key">${r.key}</span><span><span class="route-name">${r.name}</span><br/><span class="route-sub">${r.sub}</span></span>`;
+    b.onclick = ()=>selectRoute(r.id);
+    wrap.appendChild(b);
+  }
+}
+function selectRoute(id){
+  currentStation = id;
+  document.querySelectorAll(".route-btn").forEach(b=>b.classList.toggle("selected", b.dataset.id===id));
+  let p;
+  if(id==="cold") p = {};
+  else if(id==="corrupt"){
+    p = JSON.parse(JSON.stringify(payloads.arbitrage||{}));
+    if(p.vehicle_telemetry) p.vehicle_telemetry.battery_level = 150;
+  } else p = payloads[id] || {};
+  $("payload").value = JSON.stringify(p,null,2);
+  validateJson();
+}
+
+/* ── editor ── */
+$("payload").addEventListener("input", validateJson);
+$("fmtBtn").onclick = ()=>{ try{ $("payload").value = JSON.stringify(JSON.parse($("payload").value),null,2); validateJson(); }catch{} };
+function validateJson(){
+  const s = $("jsonStatus");
+  try{ JSON.parse($("payload").value); s.textContent="valid JSON"; s.classList.remove("bad"); return true; }
+  catch(e){ s.textContent="invalid JSON — "+e.message.slice(0,60); s.classList.add("bad"); return false; }
+}
+
+/* ── transmit ── */
+$("runBtn").onclick = ()=>transmit();
+async function transmit(){
+  if(!validateJson()) return;
+  const btn = $("runBtn");
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Transmitting…';
+  try{
+    const res = await (await fetch("/api/apex",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({payload:JSON.parse($("payload").value)})})).json();
+    reqCount++; latSum += res.latency_ms;
+    $("reqCount").textContent = reqCount;
+    $("avgLat").textContent = Math.round(latSum/reqCount)+" ms";
+    $("decisionMeta").hidden = false;
+    $("latVal").textContent = res.latency_ms+" ms";
+    $("engVal").textContent = res.engine;
+    $("modeVal").textContent = res.result?.execution_mode || "—";
+    setEngine(res.engine);
+    renderDecision(res.result);
+  }catch(e){
+    $("card").innerHTML = `<div class="empty"><div><span class="glyph">⚠</span>Request failed: ${esc(e.message)}</div></div>`;
+  }finally{ btn.disabled = false; btn.textContent = "Transmit to APEX"; }
+}
+
+/* ── decision cards (Apex v2.0 schemas) ── */
+function renderDecision(r){
+  const card = $("card");
+  if(!r){ card.innerHTML = '<div class="empty"><div>No response.</div></div>'; return; }
+  let html = "";
+  if(r.execution_mode === "error" || r.error_type) html = errorCard(r);
+  else switch(r.execution_mode){
+    case "arbitrage_compile": html = arbitrageCard(r); break;
+    case "user_chat":         html = chatCard(r); break;
+    case "alert_broadcast":   html = alertCard(r); break;
+    case "onboarding_intake": html = onboardCard(r); break;
+    case "logistics_replan":  html = replanCard(r); break;
+    default: html = errorCard(r);
+  }
+  card.innerHTML = html + rawJson(r);
+  runCountUps(card);
+  wireChatExtras(r);
+}
+function runCountUps(scope){
+  if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  scope.querySelectorAll("[data-countup]").forEach(el=>{
+    const v = Number(el.dataset.countup);
+    if(!Number.isFinite(v) || el.dataset.countup==="") return;
+    const t0 = performance.now(), dur = 850;
+    const tick = (now)=>{
+      const p = Math.min(1,(now-t0)/dur), eased = 1-Math.pow(1-p,3);
+      el.textContent = "KES "+Math.round(v*eased).toLocaleString("en-KE");
+      if(p<1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+const rawJson = (r)=>`<details class="raw"><summary>RAW JSON</summary><pre class="rawjson">${esc(JSON.stringify(r,null,2))}</pre></details>`;
+
+function errorCard(r){
+  const probe = currentStation === "cold" || currentStation === "corrupt";
+  const expectedType = currentStation === "cold" ? "UNKNOWN_ROUTE" : "DATA_ERROR";
+  const banner = probe
+    ? (r.error_type === expectedType
+        ? `<div class="expected"><b>✓ EXPECTED RESULT</b><span>This probe deliberately sends invalid input. A structured ${expectedType} response means the integrity contract is working — this is a PASS, not a failure.</span></div>`
+        : `<div class="expected" style="border-color:var(--alert)"><b style="color:var(--alert)">✗ UNEXPECTED</b><span>Probe expected ${expectedType} but got ${r.error_type ?? "something else"} — this one IS a real problem.</span></div>`)
+    : "";
+  return banner + `<div class="dcard err"><div class="dcard-head"><span>APEX · STRUCTURED ERROR</span><span>${esc(r.error_type||"ERROR")}</span></div>
+  <div class="dcard-body">
+    <div class="err-type">${esc(r.error_type||"UNKNOWN")}</div>
+    <div>${esc(r.error_message||"")}</div>
+    ${r.failed_fields?.length?`<div class="err-fields">failed_fields: ${esc(r.failed_fields.join(", "))}</div>`:""}
+    ${r.out_of_bounds_fields?.length?`<div class="err-fields">out_of_bounds: ${esc(r.out_of_bounds_fields.join(", "))}</div>`:""}
+    ${r.valid_routes?`<div class="err-fields">valid routes: ${esc(r.valid_routes.join(" · "))}</div>`:""}
+    ${r.recovery_suggestion?`<div class="insight" style="margin-top:10px">↻ ${esc(r.recovery_suggestion)}</div>`:""}
+  </div></div>`;
+}
+function riskPills(s){
+  return `<div class="riskrow">
+    <span class="pill ${s.frost_risk?"CRITICAL":"CLEAR"}">FROST ${s.frost_risk?"RISK":"OK"}</span>
+    <span class="pill ${s.drought_risk?"CRITICAL":"CLEAR"}">DROUGHT ${s.drought_risk?"RISK":"OK"}</span>
+    <span class="pill ${s.flood_risk?"CRITICAL":"CLEAR"}">FLOOD ${s.flood_risk?"RISK":"OK"}</span>
+    <span class="pill ${esc(s.pre_farming_risk_level)}">${esc(s.pre_farming_risk_level)} PRE-FARM RISK</span>
+  </div>`;
+}
+function sentinelBlock(s){
+  if(!s) return "";
+  return `<div class="sentinel"><h4>CLIMATE RISK SENTINEL · ${esc(s.current_kenyan_season)} · ${esc(s.farm_altitude_zone)}</h4>
+    ${riskPills(s)}
+    <div class="caution">⚠ ${esc(s.climate_caution_alert)}</div>
+    ${s.recommended_seed_variety_adjustment?`<div class="insight">🌱 <b>Variety:</b> ${esc(s.recommended_seed_variety_adjustment)}</div>`:""}
+  </div>`;
+}
+function arbitrageCard(r){
+  const c = r.cargo_optimized_route||{};
+  const w = r.widget_insights||{};
+  return `<div class="dcard"><div class="dcard-head"><span>ROUTE A · ARBITRAGE</span>
+    <span><span class="pill ${esc(r.price_status)}">${esc(r.price_status)}</span> <span class="pill ${esc(r.data_confidence)}">${esc(r.data_confidence)}</span> <span class="pill ${esc(c.logistics_risk_flag)}">${esc(c.logistics_risk_flag)}</span></span></div>
+  <div class="dcard-body">
+    <div class="kes-label">PROJECTED NET · ${esc(c.optimal_market_destination)} · ${esc(c.crop_type)}</div>
+    <div class="kes-big" data-countup="${c.net_profit_projection_kes ?? ""}">${fmtKES(c.net_profit_projection_kes)}</div>
+    <div class="statgrid">
+      <div class="stat"><b>${c.estimated_yield_kg?.toLocaleString("en-KE")??"—"} kg</b><span>EST. YIELD</span></div>
+      <div class="stat"><b>${c.live_market_wholesale_price_per_kg??"—"}/kg</b><span>LIVE PRICE KES</span></div>
+      <div class="stat"><b>${fmtKES(c.transit_cost_kes)}</b><span>TRANSIT · ${c.distance_km??"—"} KM</span></div>
+    </div>
+    ${sentinelBlock(r.climate_risk_sentinel)}
+    <div class="insight" style="margin-top:12px">📈 ${esc(w.market_price_summary)}</div>
+    <div class="insight">🛣 ${esc(w.routing_profit_summary)}</div>
+    ${w.data_quality_notice?`<div class="insight">ℹ ${esc(w.data_quality_notice)}</div>`:""}
+  </div></div>`;
+}
+function chatCard(r){
+  let userMsg = ""; try{ userMsg = JSON.parse($("payload").value).user_message || ""; }catch{}
+  return `<div class="dcard"><div class="dcard-head"><span>ROUTE B · FARMER CHAT</span>
+    <span class="pill MEDIUM">${esc(r.intent_detected||"—").toUpperCase()}</span></div>
+  <div class="dcard-body">
+    ${userMsg?`<div class="bubble user">${esc(userMsg)}</div>`:""}
+    <div class="bubble">${esc(r.chat_response)}
+      <div class="bubble-meta">APEX · ${String(r.chat_response||"").trim().split(/\s+/).length} words · screen ${esc(r.current_screen||"—")}
+        <button class="speak-btn" id="speakBtn" title="Read aloud">🔊 speak</button></div>
+    </div>
+    <div class="voicebar">
+      <button class="mic" id="micBtn" title="Hold to talk (voice assistant)" aria-label="Voice input">🎙</button>
+      <input id="chatInput" placeholder="Uliza Apex… ask about prices, weather, routes" aria-label="Ask Apex" />
+      <button class="btn btn-primary" id="sendBtn">Send</button>
+      <label class="tts-toggle"><input type="checkbox" id="ttsChk" checked /> voice replies</label>
+    </div>
+  </div></div>`;
+}
+function alertCard(r){
+  return `<div class="dcard"><div class="dcard-head"><span>ROUTE C · BROADCAST · ${esc(r.alert_type)}</span>
+    <span class="pill ${esc(r.severity)}">${esc(r.severity)}</span></div>
+  <div class="dcard-body">
+    <div class="phone"><div class="phone-top"><span>Safaricom</span><span>09:14</span></div>
+      <div class="sms"><div class="sms-from">KILIMOORBIT · ${esc(r.alert_type)}</div>${esc(r.farmer_push_message)}
+      <div class="sms-count">${String(r.farmer_push_message||"").trim().split(/\s+/).length} words · id ${esc((r.alert_id||"").slice(0,8))}</div></div></div>
+    <div class="opmsg"><b>OPERATOR TECHNICAL VIEW</b>${esc(r.operator_technical_message||"")}</div>
+    ${r.recommended_action?`<div class="driver">▶ ${esc(r.recommended_action)}</div>`:""}
+    <div class="flagrow">
+      <span class="pill ${r.requires_immediate_action?"CRITICAL":"CLEAR"}">IMMEDIATE ACTION: ${r.requires_immediate_action?"YES":"NO"}</span>
+      <span class="pill ${r.auto_escalate_to_cooperative?"WARNING":"CLEAR"}">CO-OP ESCALATION: ${r.auto_escalate_to_cooperative?"YES":"NO"}</span>
+      <span class="pill MEDIUM">${(r.affected_farmer_ids||[]).length} FARMERS</span>
+    </div>
+  </div></div>`;
+}
+function onboardCard(r){
+  const total = 5, now = Math.min(r.onboarding_step||1,total);
+  const steps = Array.from({length:total},(_,i)=>`<div class="step ${i+1<now?"done":i+1===now?"now":""}"></div>`).join("");
+  const got = (r.fields_collected_so_far||[]).map(f=>`<span class="ftag got">✓ ${esc(f)}</span>`).join("");
+  const need = (r.fields_still_needed||[]).map(f=>`<span class="ftag need">○ ${esc(f)}</span>`).join("");
+  return `<div class="dcard"><div class="dcard-head"><span>ROUTE D · ONBOARDING</span><span>STEP ${now}/${total}</span></div>
+  <div class="dcard-body">
+    <div class="stepper">${steps}</div>
+    <div class="prompt-card">${esc(r.next_prompt)}</div>
+    <div class="fieldtags">${got}${need}</div>
+    ${r.farm_risk_preview?sentinelBlock(r.farm_risk_preview):""}
+  </div></div>`;
+}
+function replanCard(r){
+  const a = r.recommended_alternative_route||{};
+  const w = r.widget_insights||{};
+  return `<div class="dcard"><div class="dcard-head"><span>ROUTE E · REPLAN · ${esc(r.disruption_type)}</span>
+    <span class="pill ${r.replan_status==="REROUTED"?"CLEAR":"CRITICAL"}">${esc(r.replan_status)}</span></div>
+  <div class="dcard-body">
+    <div class="divert">
+      <span class="node">${esc(r.original_route_id||"ORIGIN")}</span><span class="arrow">──▶</span>
+      <span class="node dead">original destination</span><span class="arrow">⇢</span>
+      <span class="node new">${esc(a.new_destination||"—")}</span>
+    </div>
+    <div class="statgrid">
+      <div class="stat"><b>${fmtKES(a.revised_net_profit_kes)}</b><span>REVISED NET</span></div>
+      <div class="stat"><b>+${a.added_time_minutes??"—"} min</b><span>ADDED TIME · +${fmtKES(a.added_cost_kes)}</span></div>
+      <div class="stat"><b class="pill ${esc(a.cargo_spoilage_risk)}" style="font-size:11px">${esc(a.cargo_spoilage_risk||"—")}</b><span>SPOILAGE RISK</span></div>
+    </div>
+    <div class="insight">🧭 ${esc(w.replan_summary||"")}</div>
+    <div class="insight">💰 ${esc(w.margin_impact_note||"")}</div>
+    <div class="flagrow">
+      <span class="pill ${r.operator_action_required?"WARNING":"CLEAR"}">OPERATOR ACTION: ${r.operator_action_required?"REQUIRED":"NONE"}</span>
+      <span class="pill ${r.escalate_to_cooperative?"CRITICAL":"CLEAR"}">CO-OP ESCALATION: ${r.escalate_to_cooperative?"YES":"NO"}</span>
+    </div>
+  </div></div>`;
+}
+
+/* ── VOICE ASSISTANT (Web Speech API — free, on-device/browser) ── */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+function speak(text){
+  if(!ttsOn || !("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(String(text).replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu,""));
+  const sw = /\b(bei|nyanya|soko|shamba|karibu|mvua|iko|kwa)\b/i.test(text);
+  u.lang = sw ? "sw-KE" : "en-KE";
+  const v = speechSynthesis.getVoices().find(v=>v.lang.startsWith(sw?"sw":"en"));
+  if(v) u.voice = v;
+  u.rate = 1.02;
+  speechSynthesis.speak(u);
+}
+function wireChatExtras(r){
+  const sb = $("speakBtn"); if(sb) sb.onclick = ()=>{ ttsOn=true; $("ttsChk")&&($("ttsChk").checked=true); speak(r.chat_response); };
+  const chk = $("ttsChk"); if(chk){ chk.checked = ttsOn; chk.onchange = ()=>{ ttsOn = chk.checked; if(!ttsOn) speechSynthesis?.cancel(); }; }
+  const send = $("sendBtn"), input = $("chatInput");
+  const fire = ()=>{
+    const msg = input.value.trim(); if(!msg) return;
+    let p; try{ p = JSON.parse($("payload").value); }catch{ p = {}; }
+    if(p.execution_mode!=="user_chat") p = JSON.parse(JSON.stringify(payloads.user_chat||{execution_mode:"user_chat",current_screen:"dashboard_home"}));
+    p.user_message = msg;
+    $("payload").value = JSON.stringify(p,null,2);
+    validateJson(); transmit().then(()=>{});
+  };
+  if(send){ send.onclick = fire; input.onkeydown = e=>{ if(e.key==="Enter") fire(); }; }
+  const mic = $("micBtn");
+  if(mic){
+    if(!SR){ mic.disabled = true; mic.title = "Voice input needs Chrome or Edge (Web Speech API)"; }
+    else mic.onclick = ()=>{
+      const rec = new SR();
+      rec.lang = "en-KE"; rec.interimResults = false; rec.maxAlternatives = 1;
+      mic.classList.add("rec"); mic.textContent = "●";
+      rec.onresult = (e)=>{ input.value = e.results[0][0].transcript; };
+      rec.onend = ()=>{ mic.classList.remove("rec"); mic.textContent = "🎙"; if(input.value.trim()) fire(); };
+      rec.onerror = ()=>{ mic.classList.remove("rec"); mic.textContent = "🎙"; };
+      rec.start();
+    };
+  }
+  if(r?.execution_mode === "user_chat" && r.chat_response) speak(r.chat_response);
+}
+if("speechSynthesis" in window) speechSynthesis.onvoiceschanged = ()=>{};
+
+/* ── AUTOPILOT ── */
+$("autoBtn").onclick = async ()=>{
+  const btn = $("autoBtn");
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Autopilot running…';
+  try{
+    const data = await (await fetch("/api/autopilot",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"})).json();
+    const tl = data.steps.map((s,i)=>`
+      <div class="tstep" style="animation-delay:${i*120}ms">
+        <div class="tnode">${i+1}</div>
+        <div class="tbody">
+          <div class="tagent">${esc(s.agent)}</div>
+          <div class="taction">${esc(s.action)}</div>
+          <div class="tout">${esc(JSON.stringify(summarize(s.output),null,1)).slice(0,700)}</div>
+          <div class="tms">${s.latency_ms} ms</div>
+        </div>
+      </div>`).join("");
+    $("autoBody").innerHTML = `<div class="timeline">${tl}</div>
+      <div class="brief"><b>MISSION BRIEF · CONFIDENCE ${esc(data.brief?.output?.confidence??data.steps.at(-1)?.output?.confidence??"—")}</b>
+      ${esc(data.steps.at(-1)?.output?.headline??"")}<div class="insight">${esc(data.steps.at(-1)?.output?.next_review??"")}</div></div>`;
+  }catch(e){
+    $("autoBody").innerHTML = `<div class="empty"><div>Autopilot failed: ${esc(e.message)}</div></div>`;
+  }finally{ btn.disabled=false; btn.textContent="Engage Autopilot"; }
+};
+function summarize(o){
+  if(!o || typeof o!=="object") return o;
+  const c = {...o};
+  delete c.affected_farmer_ids; delete c.widget_insights;
+  if(c.climate_risk_sentinel) c.climate_risk_sentinel = { season:c.climate_risk_sentinel.current_kenyan_season, risk:c.climate_risk_sentinel.pre_farming_risk_level };
+  return c;
+}
+
+/* ── suite ── */
+function renderTestGrid(results){
+  $("tests").innerHTML = TEST_NAMES.map((n,i)=>{
+    const r = results?.[i];
+    const cls = r ? (r.pass?"pass":"fail") : "pending";
+    return `<div class="test ${cls}" style="animation-delay:${i*70}ms">
+      <div class="t-head"><span>${i+1} · ${n}</span><span class="verdict">${r?(r.pass?"PASS":"FAIL"):"—"}</span></div>
+      <div class="t-detail">${esc(r?.detail|| "awaiting run — press ▶ Run all 7 checks above")}</div>
+      <div class="t-ms">${r?r.latency_ms+" ms":""}</div>
+    </div>`;
+  }).join("");
+}
+$("suiteBtn").onclick = async ()=>{
+  const btn = $("suiteBtn");
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Running…';
+  $("suiteScore").textContent = "";
+  try{
+    const data = await (await fetch("/api/suite",{method:"POST"})).json();
+    renderTestGrid(data.results);
+    $("suiteScore").innerHTML = `<b>${data.passed}/${data.total}</b> checks passed · engine ${data.engine}`;
+  }catch(e){ $("suiteScore").textContent = "suite failed: "+e.message; }
+  finally{ btn.disabled=false; btn.textContent="Run all 7 checks"; }
+};
+</script>
+</body>
+</html>

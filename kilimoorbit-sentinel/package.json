@@ -1,0 +1,25 @@
+{
+  "name": "kilimoorbit-sentinel",
+  "version": "1.0.0",
+  "description": "KilimoOrbit Sentinel — Gemini-powered agri-logistics intelligence engine (APEX) with 5 execution routes, hardened error schemas, and a Mission Control dashboard.",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "test": "node src/tests/run_all_tests.js",
+    "start": "node src/server.js",
+    "route:arbitrage": "node src/routes/arbitrage.js",
+    "route:chat": "node src/routes/user_chat.js",
+    "route:alert": "node src/routes/alert.js",
+    "route:onboarding": "node src/routes/onboarding.js",
+    "route:replan": "node src/routes/replan.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@google/genai": "^1.0.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  },
+  "license": "MIT"
+}

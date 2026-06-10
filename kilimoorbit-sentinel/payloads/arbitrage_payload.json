@@ -1,0 +1,41 @@
+{
+  "execution_mode": "arbitrage_compile",
+  "current_month": "April",
+  "farm_location": {
+    "county": "Meru",
+    "sub_county": "Buuri",
+    "altitude_m": 2100,
+    "road_type": "murram"
+  },
+  "crop_type": "tomato",
+  "field_area_acres": 2.5,
+  "market_data": {
+    "available_markets": [
+      {
+        "market_name": "Meru Main Market",
+        "wholesale_price_per_kg": 42,
+        "distance_km": 18,
+        "transit_cost_kes": 800
+      },
+      {
+        "market_name": "Nairobi Wakulima Market",
+        "wholesale_price_per_kg": 67,
+        "distance_km": 210,
+        "transit_cost_kes": 4500
+      }
+    ],
+    "data_age_minutes": 45
+  },
+  "vehicle_telemetry": {
+    "vehicle_id": "EBODA-KE-007",
+    "vehicle_type": "e-boda",
+    "battery_level": 78,
+    "charge_kwh": 2.1,
+    "current_location": "Buuri"
+  },
+  "iot_telemetry": {
+    "soil_moisture": 62,
+    "temperature_celsius": 19,
+    "rainfall_mm_last_24h": 34
+  }
+}

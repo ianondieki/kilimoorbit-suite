@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "KilimoOrbit Sentinel",
+    "slug": "kilimoorbit-sentinel",
+    "version": "1.0.0",
+    "scheme": "kilimoorbit",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "android": {
+      "package": "com.kilimoorbit.sentinel",
+      "adaptiveIcon": { "backgroundColor": "#101B12" }
+    },
+    "plugins": ["expo-router"],
+    "experiments": { "typedRoutes": false }
+  }
+}

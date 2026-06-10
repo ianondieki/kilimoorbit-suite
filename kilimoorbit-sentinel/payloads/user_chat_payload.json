@@ -1,0 +1,17 @@
+{
+  "execution_mode": "user_chat",
+  "current_screen": "dashboard_home",
+  "current_month": "April",
+  "user_message": "Niambie, je bei ya nyanya iko juu au chini wiki hii?",
+  "market_data": {
+    "available_markets": [
+      {
+        "market_name": "Meru Main Market",
+        "wholesale_price_per_kg": 42,
+        "distance_km": 18,
+        "transit_cost_kes": 800
+      }
+    ],
+    "data_age_minutes": 30
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "execution_mode": "onboarding_intake",
+  "current_month": "April",
+  "onboarding_step": 3,
+  "partial_profile": {
+    "farmer_name": "Wanjiru Kamau",
+    "county": "Nyandarua",
+    "sub_county": "Ol Kalou",
+    "altitude_m": 2400
+  }
+}

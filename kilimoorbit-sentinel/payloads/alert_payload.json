@@ -1,0 +1,10 @@
+{
+  "execution_mode": "alert_broadcast",
+  "current_month": "April",
+  "alert_trigger": {
+    "type": "PEST_PRESSURE",
+    "severity": "CRITICAL",
+    "detail": "Fall Armyworm infestation detected across 3 farms in Meru sub-county via satellite NDVI anomaly"
+  },
+  "affected_farmer_ids": ["FARMER-001", "FARMER-002", "FARMER-003"]
+}
