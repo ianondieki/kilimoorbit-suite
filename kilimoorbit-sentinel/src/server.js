@@ -8,6 +8,7 @@
  */
 import "dotenv/config";
 import express from "express";
+import nodemailer from "nodemailer";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -29,6 +30,60 @@ const loadPayload = (f) => {
 };
 const payloadFiles = readdirSync(join(root, "payloads")).filter((f) => f.endsWith("_payload.json"));
 
+/* ── LIVE TELEMETRY SIMULATOR ─────────────────────────────────────────────
+ * The repo ships static fixtures; without sensors connected every refresh
+ * showed identical numbers. This layer applies a bounded random walk (state
+ * persists across requests) so each refresh / Autopilot run sees fresh,
+ * plausible telemetry and prices. The verification suite bypasses it and
+ * keeps using the raw fixtures, so tests stay deterministic.
+ */
+const drift = (v, step, min, max) =>
+  Math.min(max, Math.max(min, v + (Math.random() * 2 - 1) * step));
+
+const sim = (() => {
+  const base = loadPayload("arbitrage_payload.json");
+  return {
+    battery: base.vehicle_telemetry.battery_level,
+    soil: base.iot_telemetry.soil_moisture,
+    temp: base.iot_telemetry.temperature_celsius,
+    rain: base.iot_telemetry.rainfall_mm_last_24h,
+    prices: base.market_data.available_markets.map((m) => m.wholesale_price_per_kg),
+  };
+})();
+
+function liveArbitragePayload() {
+  const p = loadPayload("arbitrage_payload.json");
+  // e-boda drains in service and swaps to a fresh battery at the depot below 20%
+  sim.battery = sim.battery <= 20 ? 96 : Math.max(5, sim.battery - Math.random() * 1.5);
+  sim.soil = drift(sim.soil, 3, 20, 90);
+  sim.temp = drift(sim.temp, 0.8, 12, 33);
+  sim.rain = drift(sim.rain, 5, 0, 80);
+  sim.prices = sim.prices.map((v) => drift(v, v * 0.02, 1, 490));
+  p.vehicle_telemetry.battery_level = Math.round(sim.battery);
+  p.vehicle_telemetry.charge_kwh = Number(((sim.battery / 100) * 2.7).toFixed(2));
+  p.iot_telemetry.soil_moisture = Math.round(sim.soil);
+  p.iot_telemetry.temperature_celsius = Number(sim.temp.toFixed(1));
+  p.iot_telemetry.rainfall_mm_last_24h = Math.round(sim.rain);
+  p.market_data.available_markets.forEach((m, i) => {
+    m.wholesale_price_per_kg = Math.round(sim.prices[i]);
+  });
+  p.market_data.data_age_minutes = 5 + Math.floor(Math.random() * 50);
+  p.telemetry_captured_at = new Date().toISOString();
+  return p;
+}
+
+function liveCommodityFeed() {
+  const feed = loadPayload("commodity_feed.json");
+  feed.data_age_minutes = 3 + Math.floor(Math.random() * 40);
+  for (const c of feed.commodities)
+    for (const q of c.quotes) {
+      const np = Math.max(1, Math.round(q.price + (Math.random() * 2 - 1) * q.price * 0.03));
+      q.delta = np - q.price;
+      q.price = np;
+    }
+  return feed;
+}
+
 app.get("/api/health", (_req, res) =>
   res.json({ status: "ok", engine: engineMode(), uptime_s: Math.round(process.uptime()) })
 );
@@ -36,12 +91,73 @@ app.get("/api/health", (_req, res) =>
 app.get("/api/meta", (_req, res) => {
   const payloads = {};
   for (const f of payloadFiles) payloads[f.replace("_payload.json", "")] = loadPayload(f);
+  payloads.arbitrage = liveArbitragePayload();
   res.json({
     engine: engineMode(),
     model: "gemini-2.5-flash",
     payloads,
-    commodity_feed: loadPayload("commodity_feed.json"),
+    commodity_feed: liveCommodityFeed(),
   });
+});
+
+/* ── SIGN-IN + WELCOME EMAIL ──────────────────────────────────────────────
+ * POST /api/signin { name, email } → sends a karibu email via SMTP when the
+ * SMTP_* env vars are configured; otherwise logs it and reports SIMULATED so
+ * the app can tell the user delivery isn't wired up yet.
+ */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function mailTransport() {
+  if (process.env.SMTP_URL) return nodemailer.createTransport(process.env.SMTP_URL);
+  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS)
+    return nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT || 587),
+      secure: Number(process.env.SMTP_PORT) === 465,
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    });
+  return null;
+}
+
+app.post("/api/signin", async (req, res) => {
+  try {
+    const name = String(req.body?.name ?? "").trim();
+    const email = String(req.body?.email ?? "").trim();
+    if (!name || !EMAIL_RE.test(email))
+      return res.status(400).json({ error: "A name and a valid email address are required." });
+
+    const text = [
+      `Habari ${name},`,
+      "",
+      "Karibu KilimoOrbit Sentinel — your account is now active on this device.",
+      "From the app you can track live masoko prices, climate risk for your shamba,",
+      "e-boda routing, and chat with Apex in English or Kiswahili.",
+      "",
+      `Engine mode at sign-in: ${engineMode()}`,
+      "",
+      "Asante,",
+      "The KilimoOrbit team",
+    ].join("\n");
+
+    const transport = mailTransport();
+    if (!transport) {
+      console.log(`[signin] SMTP not configured — welcome email for ${email} simulated:\n${text}\n`);
+      return res.json({
+        status: "SIMULATED",
+        email,
+        message: "Signed in. SMTP is not configured on the server (set SMTP_* in .env), so the welcome email was simulated.",
+      });
+    }
+    await transport.sendMail({
+      from: process.env.SMTP_FROM || `KilimoOrbit Sentinel <${process.env.SMTP_USER}>`,
+      to: email,
+      subject: "Karibu KilimoOrbit Sentinel 🌿",
+      text,
+    });
+    res.json({ status: "SENT", email, message: `Welcome email sent to ${email}.` });
+  } catch (err) {
+    res.status(500).json({ error: err?.message ?? String(err) });
+  }
 });
 
 app.post("/api/apex", async (req, res) => {
@@ -188,7 +304,7 @@ app.post("/api/autopilot", async (req, res) => {
       return output;
     };
 
-    const farmPayload = req.body?.payload ?? loadPayload("arbitrage_payload.json");
+    const farmPayload = req.body?.payload ?? liveArbitragePayload();
 
     await trace("SENSE", "Ingest farm telemetry, market feed and vehicle state", async () => ({
       farm: `${farmPayload.farm_location?.county} / ${farmPayload.farm_location?.sub_county} @ ${farmPayload.farm_location?.altitude_m}m`,

@@ -71,5 +71,9 @@ export const runAutopilot = () =>
   // LIVE mode chains several Gemini calls, so give Autopilot a longer window.
   post<{ engine: string; steps: AutopilotStep[]; brief?: any }>("/api/autopilot", {}, 60000);
 
+export type SignInResult = { status: "SENT" | "SIMULATED"; email: string; message: string };
+export const signIn = (name: string, email: string) =>
+  post<SignInResult>("/api/signin", { name, email });
+
 export const fmtKES = (n: number | null | undefined) =>
   n == null ? "— suppressed" : `KES ${Number(n).toLocaleString("en-KE")}`;
