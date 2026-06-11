@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View, Text, TextInput, Pressable, FlatList, StyleSheet, KeyboardAvoidingView, Platform, Switch,
 } from "react-native";
@@ -7,9 +7,11 @@ import * as Speech from "expo-speech";
 import Pill from "../../components/Pill";
 import { Enter, PressScale } from "../../components/Motion";
 import { useTheme } from "../../lib/theme-context";
-import { callApex, type ChatResult, type ApexError } from "../../lib/api";
+import { callApex, getMeta, type ChatResult, type ApexError } from "../../lib/api";
 
 type Msg = { id: string; from: "user" | "apex"; text: string; intent?: string };
+
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 const QUICK = [
   "Je, bei ya nyanya iko juu wiki hii?",
@@ -26,6 +28,17 @@ export default function Chat() {
   const [busy, setBusy] = useState(false);
   const [voice, setVoice] = useState(true);
   const list = useRef<FlatList>(null);
+  const market = useRef<any>(null);
+
+  // Pull live market context once so price questions get real quotes; chat still works without it.
+  useEffect(() => {
+    getMeta()
+      .then((m) => {
+        market.current =
+          m.payloads?.user_chat?.market_data ?? m.payloads?.arbitrage?.market_data ?? null;
+      })
+      .catch(() => {});
+  }, []);
 
   const speak = (text: string) => {
     if (!voice) return;
@@ -45,8 +58,9 @@ export default function Chat() {
       const res = await callApex<ChatResult | ApexError>({
         execution_mode: "user_chat",
         current_screen: "mobile_chat",
-        current_month: "April",
+        current_month: MONTHS[new Date().getMonth()],
         user_message: text,
+        ...(market.current ? { market_data: market.current } : {}),
       });
       const r = res.result;
       const reply =

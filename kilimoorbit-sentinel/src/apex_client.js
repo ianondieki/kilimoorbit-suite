@@ -130,12 +130,13 @@ function climateSentinel({ county, altitude_m, road_type }, month, crop) {
     s.key === "LONG_RAINS" || (s.key === "SHORT_RAINS" && ["Kisumu","Homa Bay","Siaya","Mombasa","Kilifi","Kwale","Busia"].includes(county));
   const landslide = s.key === "LONG_RAINS" && alt > 2000;
 
+  // Risk level only ever escalates — a Critical rating must never be downgraded.
+  const RANK = { Low: 0, Medium: 1, High: 2, Critical: 3 };
   let level = "Low";
-  if (flood_risk || drought_risk) level = "Medium";
-  if ((frost_risk && alt > 2500) || (drought_risk && zone === "ASAL")) level = "Critical";
-  else if (frost_risk || landslide || (s.key === "SHORT_RAINS")) level = "High";
-  else if (s.key === "LONG_RAINS" && landslide) level = "High";
-  if (s.key === "LONG_RAINS" && alt > 2000) level = "High"; // landslide modifier
+  const escalate = (l) => { if (RANK[l] > RANK[level]) level = l; };
+  if (flood_risk || drought_risk) escalate("Medium");
+  if (frost_risk || landslide || s.key === "SHORT_RAINS") escalate("High");
+  if ((frost_risk && alt > 2500) || (drought_risk && zone === "ASAL")) escalate("Critical");
 
   let variety = null;
   if (s.key === "SHORT_RAINS")
@@ -204,9 +205,13 @@ function mockEngine(payload) {
   switch (mode) {
     /* ── ROUTE A ─────────────────────────────────────────────────────── */
     case "arbitrage_compile": {
+      const markets = payload.market_data.available_markets;
+      if (!Array.isArray(markets) || markets.length === 0)
+        return dataError(["market_data.available_markets"], []);
       const age = payload.market_data.data_age_minutes ?? 9999;
       const stale = age > 120;
-      const confidence = stale ? "MEDIUM" : age < 60 ? "HIGH" : "MEDIUM";
+      // §3A.5: projections are suppressed only at LOW — stale data must therefore tag LOW.
+      const confidence = stale ? "LOW" : age < 60 ? "HIGH" : "MEDIUM";
       const sentinel = climateSentinel(payload.farm_location, payload.current_month, payload.crop_type);
       const { season_key, ...climate_risk_sentinel } = sentinel;
 
@@ -214,7 +219,7 @@ function mockEngine(payload) {
         (payload.field_area_acres ?? 1) *
           (YIELD_KG_PER_ACRE[payload.crop_type?.toLowerCase()] ?? YIELD_KG_PER_ACRE.default)
       );
-      const ranked = payload.market_data.available_markets
+      const ranked = markets
         .map((m) => ({ ...m, net: m.wholesale_price_per_kg * yieldKg - m.transit_cost_kes }))
         .sort((a, b) => b.net - a.net);
       const best = ranked[0];
@@ -388,11 +393,12 @@ function mockEngine(payload) {
     case "logistics_replan": {
       const d = payload.active_delivery;
       const riskRank = { Low: 0, Medium: 1, High: 2 };
+      const rank = (r) => riskRank[r?.cargo_risk_level] ?? 1; // unknown levels rank as Medium
       const ranked = [...payload.available_alternative_routes].sort(
         (a, b) =>
           a.time_penalty_minutes - b.time_penalty_minutes ||
           a.cost_penalty_kes - b.cost_penalty_kes ||
-          riskRank[a.cargo_risk_level] - riskRank[b.cargo_risk_level]
+          rank(a) - rank(b)
       );
       const best = ranked[0];
       const viable = best && d.original_net_profit_kes - best.cost_penalty_kes > 0;
@@ -414,7 +420,7 @@ function mockEngine(payload) {
         escalate_to_cooperative: !best,
         widget_insights: {
           replan_summary: best
-            ? `Divert ${d.crop_type} cargo to ${best.new_destination} adding ${best.time_penalty_minutes} minutes with ${best.cargo_risk_level.toLowerCase()} spoilage risk.`
+            ? `Divert ${d.crop_type} cargo to ${best.new_destination} adding ${best.time_penalty_minutes} minutes with ${(best.cargo_risk_level ?? "unknown").toLowerCase()} spoilage risk.`
             : "No viable alternative route exists; cargo holds at origin pending cooperative dispatch.",
           margin_impact_note: best
             ? `Margin trims from KES ${d.original_net_profit_kes.toLocaleString("en-KE")} to KES ${revised.toLocaleString("en-KE")} after reroute costs.`

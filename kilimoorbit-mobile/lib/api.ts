@@ -42,25 +42,34 @@ export type Meta = {
   commodity_feed?: CommodityFeed;
 };
 
-async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+/** Fetch with a hard timeout — an unreachable LAN IP otherwise hangs the UI indefinitely. */
+async function request<T>(path: string, init?: RequestInit, timeoutMs = 15000): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${API_BASE}${path}`, { ...init, signal: controller.signal });
+    if (!res.ok) throw new Error(`Sentinel server ${res.status}`);
+    return res.json();
+  } catch (e: any) {
+    throw e?.name === "AbortError" ? new Error(`Sentinel server timed out after ${timeoutMs / 1000}s`) : e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const post = <T,>(path: string, body: unknown, timeoutMs?: number) =>
+  request<T>(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`Sentinel server ${res.status}`);
-  return res.json();
-}
+  }, timeoutMs);
 
-export const getMeta = async (): Promise<Meta> => {
-  const res = await fetch(`${API_BASE}/api/meta`);
-  if (!res.ok) throw new Error(`Sentinel server ${res.status}`);
-  return res.json();
-};
+export const getMeta = () => request<Meta>("/api/meta");
 export const callApex = <T = any>(payload: unknown) =>
   post<{ result: T; latency_ms: number; engine: string }>("/api/apex", { payload });
 export const runAutopilot = () =>
-  post<{ engine: string; steps: AutopilotStep[] }>("/api/autopilot", {});
+  // LIVE mode chains several Gemini calls, so give Autopilot a longer window.
+  post<{ engine: string; steps: AutopilotStep[]; brief?: any }>("/api/autopilot", {}, 60000);
 
 export const fmtKES = (n: number | null | undefined) =>
   n == null ? "— suppressed" : `KES ${Number(n).toLocaleString("en-KE")}`;
