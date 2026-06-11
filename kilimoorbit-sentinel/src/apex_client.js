@@ -190,6 +190,26 @@ function weatherGate(payload, seasonKey) {
   return "CLEAR";
 }
 
+/* Route B intent regexes — shared by direct matching and follow-up resolution. */
+const INTENT_RES = {
+  price: /\b(bei|price|nyanya|tomato|soko|market|kg)\b/i,
+  weather: /\b(mvua|rain|weather|hali ya hewa|frost|baridi|joto)\b/i,
+  logistics: /\b(route|deliver|usafiri|boda|gari)\b/i,
+};
+const FOLLOW_UP_RE = /\b(je|na|what about|how about|why|kwa nini|there|huko|hapo|pia|tena|again|tomorrow|kesho)\b/i;
+
+/** Bound conversation memory regardless of client behavior (token + abuse guard). */
+function trimHistory(p) {
+  if (!Array.isArray(p.chat_history)) return p;
+  return {
+    ...p,
+    chat_history: p.chat_history.slice(-8).map((h) => ({
+      role: h?.role === "user" ? "user" : "apex",
+      text: String(h?.text ?? "").slice(0, 280),
+    })),
+  };
+}
+
 /* Conservative Kenyan smallholder yields (kg per acre) for §3A step 3. */
 const YIELD_KG_PER_ACRE = {
   tomato: 4000, cabbage: 6000, potato: 4500, potatoes: 4500,
@@ -278,10 +298,25 @@ function mockEngine(payload) {
       const m = payload.market_data?.available_markets?.[0];
       const settingsQ = /\b(settings?|notification|sign ?out|account|battery plan)\b/i.test(msg);
       const historyQ = /\b(history|export|spreadsheet|timeline|gps)\b/i.test(msg);
-      const priceQ = /\b(bei|price|nyanya|tomato|soko|market|kg)\b/i.test(msg);
-      const weatherQ = /\b(mvua|rain|weather|hali ya hewa|frost|baridi|joto)\b/i.test(msg);
-      const logisticsQ = /\b(route|deliver|usafiri|boda|gari)\b/i.test(msg);
+      let priceQ = INTENT_RES.price.test(msg);
+      let weatherQ = INTENT_RES.weather.test(msg);
+      let logisticsQ = INTENT_RES.logistics.test(msg);
       const sw = /\b(je|bei|nyanya|niambie|habari|shamba|soko|mvua|iko)\b/i.test(msg);
+
+      // Conversation memory: an elliptical follow-up ("Na kesho je?", "what about
+      // tomorrow?") inherits the most recent topic found in chat_history.
+      if (!settingsQ && !historyQ && !priceQ && !weatherQ && !logisticsQ) {
+        const hist = Array.isArray(payload.chat_history) ? payload.chat_history : [];
+        const words = msg.trim().split(/\s+/).filter(Boolean).length;
+        if (hist.length && (FOLLOW_UP_RE.test(msg) || words <= 4)) {
+          for (let i = hist.length - 1; i >= 0; i--) {
+            const txt = String(hist[i]?.text ?? "");
+            if (INTENT_RES.price.test(txt)) { priceQ = true; break; }
+            if (INTENT_RES.weather.test(txt)) { weatherQ = true; break; }
+            if (INTENT_RES.logistics.test(txt)) { logisticsQ = true; break; }
+          }
+        }
+      }
 
       let intent = "general_advisory", reply;
       if (settingsQ) {
@@ -508,7 +543,8 @@ export async function callApex(payload) {
     const { failed, oob } = validate(p, mode);
     if (failed.length || oob.length) return dataError(failed, oob);
 
-    return engineMode() === "MOCK" ? mockEngine(p) : await generateLive(p);
+    const safe = trimHistory(p);
+    return engineMode() === "MOCK" ? mockEngine(safe) : await generateLive(safe);
   } catch (err) {
     return {
       execution_mode: "error",

@@ -136,6 +136,20 @@ const SUITE = [
     assert: (r) => r?.climate_risk_sentinel?.pre_farming_risk_level === "Critical",
     detail: (r) => `risk = ${r?.climate_risk_sentinel?.pre_farming_risk_level} · zone = ${r?.climate_risk_sentinel?.farm_altitude_zone}`,
   },
+  {
+    id: 11, name: "Memory: follow-up inherits topic from chat_history",
+    payload: () => {
+      const p = loadPayload("user_chat_payload.json");
+      p.chat_history = [
+        { role: "user", text: "Je, bei ya nyanya iko juu wiki hii?" },
+        { role: "apex", text: "Bei ya nyanya Meru Main Market iko KES 42 kwa kilo. 🍅" },
+      ];
+      p.user_message = "Na kesho je, niuze huko?";
+      return p;
+    },
+    assert: (r) => r?.intent_detected === "price_query",
+    detail: (r) => `intent = ${r?.intent_detected} · "${r?.chat_response}"`,
+  },
 ];
 
 app.post("/api/suite", async (_req, res) => {

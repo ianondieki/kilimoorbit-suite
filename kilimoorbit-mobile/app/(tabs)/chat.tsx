@@ -10,9 +10,19 @@ import { Enter, PressScale } from "../../components/Motion";
 import { useTheme } from "../../lib/theme-context";
 import { callApex, getMeta, type ChatResult, type ApexError } from "../../lib/api";
 
-type Msg = { id: string; from: "user" | "apex"; text: string; intent?: string };
+type Msg = { id: string; from: "user" | "apex"; text: string; intent?: string; err?: boolean };
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+const WELCOME: Msg = {
+  id: "w",
+  from: "apex",
+  text: "Karibu! Ask me about masoko prices, weather windows, or delivery routing. 🌿",
+  intent: "general_advisory",
+};
+
+const CHAT_LOG_KEY = "ko-chat-log";
+const HISTORY_TURNS = 6; // prior turns sent to Apex as conversation memory
 
 const QUICK = [
   "Je, bei ya nyanya iko juu wiki hii?",
@@ -22,32 +32,57 @@ const QUICK = [
 
 export default function Chat() {
   const t = useTheme();
-  const [msgs, setMsgs] = useState<Msg[]>([
-    { id: "w", from: "apex", text: "Karibu! Ask me about masoko prices, weather windows, or delivery routing. 🌿", intent: "general_advisory" },
-  ]);
+  const [msgs, setMsgs] = useState<Msg[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [voice, setVoice] = useState(true);
   const list = useRef<FlatList>(null);
   const market = useRef<any>(null);
+  const hydrated = useRef(false);
 
-  // Pull live market context once so price questions get real quotes; chat still works without it.
+  // Hydrate persisted conversation + preferences, and pull live market context
+  // once so price questions get real quotes; chat still works without any of it.
   useEffect(() => {
+    AsyncStorage.getItem(CHAT_LOG_KEY)
+      .then((raw) => {
+        if (!raw) return;
+        try {
+          const saved = JSON.parse(raw);
+          if (Array.isArray(saved) && saved.length) {
+            setMsgs(saved);
+            setTimeout(() => list.current?.scrollToEnd({ animated: false }), 80);
+          }
+        } catch {}
+      })
+      .catch(() => {})
+      .finally(() => { hydrated.current = true; });
+    AsyncStorage.getItem("ko-voice")
+      .then((v) => { if (v != null) setVoice(v === "1"); })
+      .catch(() => {});
     getMeta()
       .then((m) => {
         market.current =
           m.payloads?.user_chat?.market_data ?? m.payloads?.arbitrage?.market_data ?? null;
       })
       .catch(() => {});
-    AsyncStorage.getItem("ko-voice")
-      .then((v) => { if (v != null) setVoice(v === "1"); })
-      .catch(() => {});
   }, []);
+
+  // Persist the conversation so it survives app restarts (capped at 50 turns).
+  useEffect(() => {
+    if (!hydrated.current) return;
+    AsyncStorage.setItem(CHAT_LOG_KEY, JSON.stringify(msgs.slice(-50))).catch(() => {});
+  }, [msgs]);
 
   const toggleVoice = (v: boolean) => {
     setVoice(v);
     if (!v) Speech.stop();
     AsyncStorage.setItem("ko-voice", v ? "1" : "0").catch(() => {});
+  };
+
+  const clearChat = () => {
+    Speech.stop();
+    setMsgs([WELCOME]);
+    AsyncStorage.removeItem(CHAT_LOG_KEY).catch(() => {});
   };
 
   const speak = (text: string) => {
@@ -63,6 +98,12 @@ export default function Chat() {
     if (!text || busy) return;
     setInput("");
     setBusy(true);
+    // Prior turns only (connection-error bubbles excluded) — the new message
+    // travels as user_message, the context as chat_history.
+    const chat_history = msgs
+      .filter((m) => !m.err)
+      .slice(-HISTORY_TURNS)
+      .map((m) => ({ role: m.from, text: m.text }));
     setMsgs((m) => [...m, { id: `u${Date.now()}`, from: "user", text }]);
     setTimeout(() => list.current?.scrollToEnd({ animated: true }), 50);
     try {
@@ -71,6 +112,7 @@ export default function Chat() {
         current_screen: "mobile_chat",
         current_month: MONTHS[new Date().getMonth()],
         user_message: text,
+        chat_history,
         ...(market.current ? { market_data: market.current } : {}),
       });
       const r = res.result;
@@ -82,7 +124,7 @@ export default function Chat() {
       setMsgs((m) => [...m, { id: `a${Date.now()}`, from: "apex", text: reply, intent }]);
       speak(reply);
     } catch (e: any) {
-      setMsgs((m) => [...m, { id: `e${Date.now()}`, from: "apex", text: `Cannot reach Sentinel server — ${e.message}` }]);
+      setMsgs((m) => [...m, { id: `e${Date.now()}`, from: "apex", text: `Cannot reach Sentinel server — ${e.message}`, err: true }]);
     } finally {
       setBusy(false);
       setTimeout(() => list.current?.scrollToEnd({ animated: true }), 80);
@@ -94,7 +136,10 @@ export default function Chat() {
       <View style={[s.top, { borderBottomColor: t.line }]}>
         <Text style={[s.title, { color: t.ink }]}>APEX <Text style={{ color: t.accent }}>CHAT</Text></Text>
         <View style={s.voiceRow}>
-          <Text style={{ color: t.dim, fontFamily: "monospace", fontSize: 10 }}>VOICE REPLIES</Text>
+          <Pressable onPress={clearChat} hitSlop={10} accessibilityLabel="Clear conversation">
+            <Text style={{ color: t.dim, fontSize: 17 }}>↺</Text>
+          </Pressable>
+          <Text style={{ color: t.dim, fontFamily: "monospace", fontSize: 10 }}>VOICE</Text>
           <Switch
             value={voice}
             onValueChange={toggleVoice}
@@ -117,7 +162,7 @@ export default function Chat() {
                 s.bubble,
                 item.from === "user"
                   ? { alignSelf: "flex-end", borderColor: t.accent, backgroundColor: t.raised }
-                  : { alignSelf: "flex-start", borderColor: t.line, backgroundColor: t.panel },
+                  : { alignSelf: "flex-start", borderColor: item.err ? t.alert : t.line, backgroundColor: t.panel },
               ]}
             >
               <Text style={{ color: t.ink, fontSize: 15 }}>{item.text}</Text>

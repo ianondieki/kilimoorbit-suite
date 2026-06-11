@@ -19,7 +19,7 @@ const C = {
   gold: (s) => `\x1b[33m${s}\x1b[0m`,
 };
 
-const TOTAL = 10;
+const TOTAL = 11;
 let passed = 0;
 const results = [];
 
@@ -175,6 +175,26 @@ await runTest(
     ok: r?.climate_risk_sentinel?.pre_farming_risk_level === "Critical",
     detail: `risk = ${r?.climate_risk_sentinel?.pre_farming_risk_level}  ·  zone = ${r?.climate_risk_sentinel?.farm_altitude_zone}`,
   })
+);
+
+// 11 ─ CONVERSATION MEMORY
+const followUp = loadPayload("user_chat_payload.json");
+followUp.chat_history = [
+  { role: "user", text: "Je, bei ya nyanya iko juu wiki hii?" },
+  { role: "apex", text: "Bei ya nyanya Meru Main Market iko KES 42 kwa kilo. 🍅" },
+];
+followUp.user_message = "Na kesho je, niuze huko?";
+await runTest(
+  11,
+  "MEMORY — elliptical follow-up inherits price topic from chat_history",
+  followUp,
+  (r) => {
+    const words = String(r?.chat_response ?? "").trim().split(/\s+/).filter(Boolean).length;
+    return {
+      ok: r?.intent_detected === "price_query" && words > 0 && words < 25,
+      detail: `intent = ${r?.intent_detected}  ·  "${r?.chat_response}"`,
+    };
+  }
 );
 
 // ─ SUMMARY
