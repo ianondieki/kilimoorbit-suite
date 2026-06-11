@@ -63,6 +63,12 @@ function validate(payload, mode) {
     const v = dig(payload, f);
     return v === undefined || v === null || v === "unknown";
   });
+  // §1.3: arbitrage is meaningless without at least one market to rank.
+  if (mode === "arbitrage_compile" && !failed.includes("market_data")) {
+    const mkts = dig(payload, "market_data.available_markets");
+    if (!Array.isArray(mkts) || mkts.length === 0)
+      failed.push("market_data.available_markets");
+  }
 
   const oob = [];
   for (const b of BOUNDS) {
@@ -101,7 +107,9 @@ const ASAL_COUNTIES = ["Turkana","Marsabit","Isiolo","Garissa","Wajir","Mandera"
 const FROST_COUNTIES = ["Meru","Nyandarua","Limuru","Kericho","Kiambu","Nyeri"];
 
 function season(month) {
-  const i = MONTHS.indexOf(month);
+  const i = MONTHS.findIndex(
+    (m) => m.toLowerCase() === String(month ?? "").trim().toLowerCase()
+  );
   if (i >= 2 && i <= 4) return { name: "Long Rains (Machi–Mei)", key: "LONG_RAINS" };
   if (i >= 9 && i <= 11) return { name: "Short Rains (Oktoba–Desemba)", key: "SHORT_RAINS" };
   if (i >= 5 && i <= 8) return { name: "Cold/Dry Season (Juni–Septemba)", key: "COLD_DRY" };
@@ -205,9 +213,7 @@ function mockEngine(payload) {
   switch (mode) {
     /* ── ROUTE A ─────────────────────────────────────────────────────── */
     case "arbitrage_compile": {
-      const markets = payload.market_data.available_markets;
-      if (!Array.isArray(markets) || markets.length === 0)
-        return dataError(["market_data.available_markets"], []);
+      const markets = payload.market_data.available_markets; // non-empty — validate() guarantees it
       const age = payload.market_data.data_age_minutes ?? 9999;
       const stale = age > 120;
       // §3A.5: projections are suppressed only at LOW — stale data must therefore tag LOW.
@@ -446,21 +452,63 @@ export function engineMode() {
   return process.env.GEMINI_API_KEY ? "LIVE" : "MOCK";
 }
 
+const LIVE_TIMEOUT_MS = Number(process.env.APEX_TIMEOUT_MS || 30_000);
+const LIVE_RETRIES = 1;
+
+const withTimeout = (promise, ms) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      const t = setTimeout(
+        () => reject(new Error(`Gemini call timed out after ${ms / 1000}s`)),
+        ms
+      );
+      t.unref?.();
+    }),
+  ]);
+
+async function generateLive(payload) {
+  let lastErr;
+  for (let attempt = 0; attempt <= LIVE_RETRIES; attempt++) {
+    try {
+      const response = await withTimeout(
+        getClient().models.generateContent({
+          model: MODEL,
+          contents: [{ role: "user", parts: [{ text: JSON.stringify(payload) }] }],
+          config: {
+            systemInstruction: APEX_SYSTEM,
+            temperature: 0,
+            responseMimeType: "application/json",
+          },
+        }),
+        LIVE_TIMEOUT_MS
+      );
+      const raw = response.text;
+      if (!raw) throw new Error("Empty response from Gemini");
+      const parsed = JSON.parse(stripFences(raw));
+      if (!parsed || typeof parsed !== "object" || typeof parsed.execution_mode !== "string")
+        throw new Error("Gemini response violates the Apex contract (missing execution_mode)");
+      return parsed;
+    } catch (err) {
+      lastErr = err;
+      if (attempt < LIVE_RETRIES)
+        await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 export async function callApex(payload) {
   try {
-    if (engineMode() === "MOCK") return mockEngine(payload ?? {});
-    const response = await getClient().models.generateContent({
-      model: MODEL,
-      contents: [{ role: "user", parts: [{ text: JSON.stringify(payload ?? {}) }] }],
-      config: {
-        systemInstruction: APEX_SYSTEM,
-        temperature: 0,
-        responseMimeType: "application/json",
-      },
-    });
-    const raw = response.text;
-    if (!raw) throw new Error("Empty response from Gemini");
-    return JSON.parse(stripFences(raw));
+    const p = payload ?? {};
+    // §1 integrity is deterministic code, not model behavior: enforce it for BOTH
+    // engines so invalid payloads never reach (or get billed by) Gemini.
+    const mode = p?.execution_mode;
+    if (!mode || !VALID_ROUTES.includes(mode)) return unknownRoute(mode);
+    const { failed, oob } = validate(p, mode);
+    if (failed.length || oob.length) return dataError(failed, oob);
+
+    return engineMode() === "MOCK" ? mockEngine(p) : await generateLive(p);
   } catch (err) {
     return {
       execution_mode: "error",

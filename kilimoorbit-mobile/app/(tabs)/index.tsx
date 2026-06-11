@@ -4,6 +4,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Header from "../../components/Header";
 import Ticker from "../../components/Ticker";
 import Sidebar from "../../components/Sidebar";
@@ -16,6 +17,8 @@ import {
 } from "../../lib/api";
 
 type Engine = "LIVE" | "MOCK" | "OFFLINE";
+
+const CACHE_KEY = "ko-dash-cache";
 
 export default function Dashboard() {
   const t = useTheme();
@@ -38,10 +41,28 @@ export default function Dashboard() {
         setErr((res.result as ApexError).error_message ?? "Apex returned an error");
       } else {
         setArb(res.result as ArbitrageResult);
+        AsyncStorage.setItem(
+          CACHE_KEY,
+          JSON.stringify({ meta: m, arb: res.result, ts: Date.now() })
+        ).catch(() => {});
       }
     } catch (e: any) {
       setEngine("OFFLINE");
-      setErr(`Cannot reach the Sentinel server — check API_BASE in lib/config.ts. (${e.message})`);
+      // Rural connectivity drops are normal — fall back to the last good snapshot.
+      let restored = false;
+      const cached = await AsyncStorage.getItem(CACHE_KEY).catch(() => null);
+      if (cached) {
+        try {
+          const { meta: cm, arb: ca, ts } = JSON.parse(cached);
+          setMeta(cm);
+          setArb(ca);
+          const mins = Math.max(1, Math.round((Date.now() - ts) / 60000));
+          setErr(`Offline — showing data cached ${mins} min ago. (${e.message})`);
+          restored = true;
+        } catch {}
+      }
+      if (!restored)
+        setErr(`Cannot reach the Sentinel server — check API_BASE in lib/config.ts. (${e.message})`);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -118,7 +139,7 @@ export default function Dashboard() {
             <CountUp value={c.net_profit_projection_kes} style={[st.kesBig, { color: t.accent }]} />
             <View style={st.statRow}>
               <Stat label="EST. YIELD" value={`${c.estimated_yield_kg?.toLocaleString("en-KE") ?? "—"} kg`} />
-              <Stat label="LIVE PRICE" value={c.live_market_wholesale_price_per_kg != null ? `${c.live_market_wholesale_price_per_kg}/kg` : "—"} />
+              <Stat label="LIVE PRICE" value={c.live_market_wholesale_price_per_kg != null ? `KES ${c.live_market_wholesale_price_per_kg}/kg` : "—"} />
               <Stat label={`TRANSIT · ${c.distance_km ?? "—"} KM`} value={fmtKES(c.transit_cost_kes)} />
             </View>
             <View style={{ flexDirection: "row", marginTop: 10 }}>

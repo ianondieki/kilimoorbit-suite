@@ -3,6 +3,7 @@ import {
   View, Text, TextInput, Pressable, FlatList, StyleSheet, KeyboardAvoidingView, Platform, Switch,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Speech from "expo-speech";
 import Pill from "../../components/Pill";
 import { Enter, PressScale } from "../../components/Motion";
@@ -38,7 +39,16 @@ export default function Chat() {
           m.payloads?.user_chat?.market_data ?? m.payloads?.arbitrage?.market_data ?? null;
       })
       .catch(() => {});
+    AsyncStorage.getItem("ko-voice")
+      .then((v) => { if (v != null) setVoice(v === "1"); })
+      .catch(() => {});
   }, []);
+
+  const toggleVoice = (v: boolean) => {
+    setVoice(v);
+    if (!v) Speech.stop();
+    AsyncStorage.setItem("ko-voice", v ? "1" : "0").catch(() => {});
+  };
 
   const speak = (text: string) => {
     if (!voice) return;
@@ -54,6 +64,7 @@ export default function Chat() {
     setInput("");
     setBusy(true);
     setMsgs((m) => [...m, { id: `u${Date.now()}`, from: "user", text }]);
+    setTimeout(() => list.current?.scrollToEnd({ animated: true }), 50);
     try {
       const res = await callApex<ChatResult | ApexError>({
         execution_mode: "user_chat",
@@ -86,7 +97,7 @@ export default function Chat() {
           <Text style={{ color: t.dim, fontFamily: "monospace", fontSize: 10 }}>VOICE REPLIES</Text>
           <Switch
             value={voice}
-            onValueChange={(v) => { setVoice(v); if (!v) Speech.stop(); }}
+            onValueChange={toggleVoice}
             trackColor={{ true: t.accent, false: t.line }}
             thumbColor={t.panel}
           />
@@ -121,6 +132,13 @@ export default function Chat() {
             </View>
             </Enter>
           )}
+          ListFooterComponent={
+            busy ? (
+              <View style={[s.bubble, { alignSelf: "flex-start", borderColor: t.line, backgroundColor: t.panel }]}>
+                <Text style={{ color: t.dim, fontSize: 15 }}>Apex inaandika…</Text>
+              </View>
+            ) : null
+          }
         />
 
         <View style={s.quickRow}>

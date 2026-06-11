@@ -19,15 +19,29 @@ const app = express();
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(join(root, "public")));
 
-const loadPayload = (f) =>
-  JSON.parse(readFileSync(join(root, "payloads", f), "utf8"));
+// Fixture files are static for the lifetime of the process — read each once,
+// hand out deep clones so callers (the suite mutates payloads) can't corrupt the cache.
+const payloadCache = new Map();
+const loadPayload = (f) => {
+  if (!payloadCache.has(f))
+    payloadCache.set(f, JSON.parse(readFileSync(join(root, "payloads", f), "utf8")));
+  return structuredClone(payloadCache.get(f));
+};
+const payloadFiles = readdirSync(join(root, "payloads")).filter((f) => f.endsWith("_payload.json"));
+
+app.get("/api/health", (_req, res) =>
+  res.json({ status: "ok", engine: engineMode(), uptime_s: Math.round(process.uptime()) })
+);
 
 app.get("/api/meta", (_req, res) => {
   const payloads = {};
-  for (const f of readdirSync(join(root, "payloads")).filter((f) => f.endsWith("_payload.json")))
-    payloads[f.replace("_payload.json", "")] = loadPayload(f);
-  const commodity_feed = JSON.parse(readFileSync(join(root, "payloads", "commodity_feed.json"), "utf8"));
-  res.json({ engine: engineMode(), model: "gemini-2.5-flash", payloads, commodity_feed });
+  for (const f of payloadFiles) payloads[f.replace("_payload.json", "")] = loadPayload(f);
+  res.json({
+    engine: engineMode(),
+    model: "gemini-2.5-flash",
+    payloads,
+    commodity_feed: loadPayload("commodity_feed.json"),
+  });
 });
 
 app.post("/api/apex", async (req, res) => {
@@ -89,6 +103,39 @@ const SUITE = [
     assert: (r) => r?.execution_mode === "logistics_replan" && Boolean(r?.replan_status),
     detail: (r) => `${r?.replan_status} → ${r?.recommended_alternative_route?.new_destination}`,
   },
+  {
+    id: 8, name: "Integrity: stale feed → STALE_DATA + suppression",
+    payload: () => {
+      const p = loadPayload("arbitrage_payload.json");
+      p.market_data.data_age_minutes = 300;
+      return p;
+    },
+    assert: (r) =>
+      r?.price_status === "STALE_DATA" &&
+      r?.cargo_optimized_route?.net_profit_projection_kes == null,
+    detail: (r) => `price_status = ${r?.price_status} · net = ${r?.cargo_optimized_route?.net_profit_projection_kes ?? "null"}`,
+  },
+  {
+    id: 9, name: "Integrity: empty market list → DATA_ERROR",
+    payload: () => {
+      const p = loadPayload("arbitrage_payload.json");
+      p.market_data.available_markets = [];
+      return p;
+    },
+    assert: (r) => r?.error_type === "DATA_ERROR",
+    detail: (r) => `error_type = ${r?.error_type} · fields = ${JSON.stringify(r?.failed_fields)}`,
+  },
+  {
+    id: 10, name: "Climate: ASAL hot/dry season → Critical risk",
+    payload: () => {
+      const p = loadPayload("arbitrage_payload.json");
+      p.current_month = "January";
+      p.farm_location = { county: "Turkana", sub_county: "Loima", altitude_m: 600, road_type: "murram" };
+      return p;
+    },
+    assert: (r) => r?.climate_risk_sentinel?.pre_farming_risk_level === "Critical",
+    detail: (r) => `risk = ${r?.climate_risk_sentinel?.pre_farming_risk_level} · zone = ${r?.climate_risk_sentinel?.farm_altitude_zone}`,
+  },
 ];
 
 app.post("/api/suite", async (_req, res) => {
@@ -140,6 +187,16 @@ app.post("/api/autopilot", async (req, res) => {
     const arb = await trace("APEX·ROUTE-A", "Compile crop arbitrage + climate risk matrix", () =>
       callApex(farmPayload)
     );
+
+    // Without an arbitrage result there is nothing to gate or dispatch — abort the chain.
+    if (arb?.execution_mode === "error") {
+      const brief = await trace("MISSION-BRIEF", "Abort — arbitrage compile failed", async () => ({
+        headline: `Autopilot aborted: ${arb.error_type} — ${arb.error_message ?? "arbitrage compile failed."}`,
+        next_review: arb.recovery_suggestion ?? "Fix the payload or resync telemetry, then re-engage Autopilot.",
+        confidence: "LOW",
+      }));
+      return res.json({ engine: engineMode(), steps, brief, aborted: true });
+    }
 
     const flag = arb?.cargo_optimized_route?.logistics_risk_flag ?? "CLEAR";
     const gate = await trace("WEATHER-GATE", "Evaluate §2.4 logistics weather gate on optimal route", async () => ({
