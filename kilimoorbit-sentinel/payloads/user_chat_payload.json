@@ -3,6 +3,10 @@
   "current_screen": "dashboard_home",
   "current_month": "April",
   "user_message": "Niambie, je bei ya nyanya iko juu au chini wiki hii?",
+  "chat_history": [
+    { "role": "user", "text": "Habari Apex, soko liko aje leo?" },
+    { "role": "apex", "text": "Karibu! Masoko yako imara leo — uliza bei ya zao lolote nikupe live reading. 🌿" }
+  ],
   "market_data": {
     "available_markets": [
       {

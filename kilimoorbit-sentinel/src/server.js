@@ -19,15 +19,29 @@ const app = express();
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(join(root, "public")));
 
-const loadPayload = (f) =>
-  JSON.parse(readFileSync(join(root, "payloads", f), "utf8"));
+// Fixture files are static for the lifetime of the process — read each once,
+// hand out deep clones so callers (the suite mutates payloads) can't corrupt the cache.
+const payloadCache = new Map();
+const loadPayload = (f) => {
+  if (!payloadCache.has(f))
+    payloadCache.set(f, JSON.parse(readFileSync(join(root, "payloads", f), "utf8")));
+  return structuredClone(payloadCache.get(f));
+};
+const payloadFiles = readdirSync(join(root, "payloads")).filter((f) => f.endsWith("_payload.json"));
+
+app.get("/api/health", (_req, res) =>
+  res.json({ status: "ok", engine: engineMode(), uptime_s: Math.round(process.uptime()) })
+);
 
 app.get("/api/meta", (_req, res) => {
   const payloads = {};
-  for (const f of readdirSync(join(root, "payloads")).filter((f) => f.endsWith("_payload.json")))
-    payloads[f.replace("_payload.json", "")] = loadPayload(f);
-  const commodity_feed = JSON.parse(readFileSync(join(root, "payloads", "commodity_feed.json"), "utf8"));
-  res.json({ engine: engineMode(), model: "gemini-2.5-flash", payloads, commodity_feed });
+  for (const f of payloadFiles) payloads[f.replace("_payload.json", "")] = loadPayload(f);
+  res.json({
+    engine: engineMode(),
+    model: "gemini-2.5-flash",
+    payloads,
+    commodity_feed: loadPayload("commodity_feed.json"),
+  });
 });
 
 app.post("/api/apex", async (req, res) => {
@@ -89,22 +103,74 @@ const SUITE = [
     assert: (r) => r?.execution_mode === "logistics_replan" && Boolean(r?.replan_status),
     detail: (r) => `${r?.replan_status} → ${r?.recommended_alternative_route?.new_destination}`,
   },
+  {
+    id: 8, name: "Integrity: stale feed → STALE_DATA + suppression",
+    payload: () => {
+      const p = loadPayload("arbitrage_payload.json");
+      p.market_data.data_age_minutes = 300;
+      return p;
+    },
+    assert: (r) =>
+      r?.price_status === "STALE_DATA" &&
+      r?.cargo_optimized_route?.net_profit_projection_kes == null,
+    detail: (r) => `price_status = ${r?.price_status} · net = ${r?.cargo_optimized_route?.net_profit_projection_kes ?? "null"}`,
+  },
+  {
+    id: 9, name: "Integrity: empty market list → DATA_ERROR",
+    payload: () => {
+      const p = loadPayload("arbitrage_payload.json");
+      p.market_data.available_markets = [];
+      return p;
+    },
+    assert: (r) => r?.error_type === "DATA_ERROR",
+    detail: (r) => `error_type = ${r?.error_type} · fields = ${JSON.stringify(r?.failed_fields)}`,
+  },
+  {
+    id: 10, name: "Climate: ASAL hot/dry season → Critical risk",
+    payload: () => {
+      const p = loadPayload("arbitrage_payload.json");
+      p.current_month = "January";
+      p.farm_location = { county: "Turkana", sub_county: "Loima", altitude_m: 600, road_type: "murram" };
+      return p;
+    },
+    assert: (r) => r?.climate_risk_sentinel?.pre_farming_risk_level === "Critical",
+    detail: (r) => `risk = ${r?.climate_risk_sentinel?.pre_farming_risk_level} · zone = ${r?.climate_risk_sentinel?.farm_altitude_zone}`,
+  },
+  {
+    id: 11, name: "Memory: follow-up inherits topic from chat_history",
+    payload: () => {
+      const p = loadPayload("user_chat_payload.json");
+      p.chat_history = [
+        { role: "user", text: "Je, bei ya nyanya iko juu wiki hii?" },
+        { role: "apex", text: "Bei ya nyanya Meru Main Market iko KES 42 kwa kilo. 🍅" },
+      ];
+      p.user_message = "Na kesho je, niuze huko?";
+      return p;
+    },
+    assert: (r) => r?.intent_detected === "price_query",
+    detail: (r) => `intent = ${r?.intent_detected} · "${r?.chat_response}"`,
+  },
 ];
 
 app.post("/api/suite", async (_req, res) => {
-  const out = [];
-  for (const t of SUITE) {
-    const t0 = Date.now();
-    const r = await callApex(t.payload());
-    out.push({
-      id: t.id,
-      name: t.name,
-      pass: Boolean(t.assert(r)),
-      detail: t.detail(r),
-      latency_ms: Date.now() - t0,
-    });
+  try {
+    const out = [];
+    for (const t of SUITE) {
+      const t0 = Date.now();
+      const r = await callApex(t.payload());
+      out.push({
+        id: t.id,
+        name: t.name,
+        pass: Boolean(t.assert(r)),
+        detail: t.detail(r),
+        latency_ms: Date.now() - t0,
+      });
+    }
+    res.json({ engine: engineMode(), results: out, passed: out.filter((x) => x.pass).length, total: out.length });
+  } catch (err) {
+    // Express 4 doesn't catch async throws — without this, a bad payload file kills the process.
+    res.status(500).json({ error: err?.message ?? String(err) });
   }
-  res.json({ engine: engineMode(), results: out, passed: out.filter((x) => x.pass).length, total: out.length });
 });
 
 
@@ -113,61 +179,75 @@ app.post("/api/suite", async (_req, res) => {
  * Each step's reasoning and output is traced for the dashboard timeline.
  */
 app.post("/api/autopilot", async (req, res) => {
-  const steps = [];
-  const trace = async (agent, action, fn) => {
-    const t0 = Date.now();
-    const output = await fn();
-    steps.push({ agent, action, output, latency_ms: Date.now() - t0 });
-    return output;
-  };
+  try {
+    const steps = [];
+    const trace = async (agent, action, fn) => {
+      const t0 = Date.now();
+      const output = await fn();
+      steps.push({ agent, action, output, latency_ms: Date.now() - t0 });
+      return output;
+    };
 
-  const farmPayload = req.body?.payload ?? loadPayload("arbitrage_payload.json");
+    const farmPayload = req.body?.payload ?? loadPayload("arbitrage_payload.json");
 
-  await trace("SENSE", "Ingest farm telemetry, market feed and vehicle state", async () => ({
-    farm: `${farmPayload.farm_location?.county} / ${farmPayload.farm_location?.sub_county} @ ${farmPayload.farm_location?.altitude_m}m`,
-    crop: farmPayload.crop_type,
-    vehicle: `${farmPayload.vehicle_telemetry?.vehicle_id} (${farmPayload.vehicle_telemetry?.vehicle_type}, ${farmPayload.vehicle_telemetry?.battery_level}% battery)`,
-    rainfall_24h_mm: farmPayload.iot_telemetry?.rainfall_mm_last_24h,
-    markets_tracked: farmPayload.market_data?.available_markets?.length ?? 0,
-  }));
+    await trace("SENSE", "Ingest farm telemetry, market feed and vehicle state", async () => ({
+      farm: `${farmPayload.farm_location?.county} / ${farmPayload.farm_location?.sub_county} @ ${farmPayload.farm_location?.altitude_m}m`,
+      crop: farmPayload.crop_type,
+      vehicle: `${farmPayload.vehicle_telemetry?.vehicle_id} (${farmPayload.vehicle_telemetry?.vehicle_type}, ${farmPayload.vehicle_telemetry?.battery_level}% battery)`,
+      rainfall_24h_mm: farmPayload.iot_telemetry?.rainfall_mm_last_24h,
+      markets_tracked: farmPayload.market_data?.available_markets?.length ?? 0,
+    }));
 
-  const arb = await trace("APEX·ROUTE-A", "Compile crop arbitrage + climate risk matrix", () =>
-    callApex(farmPayload)
-  );
-
-  const flag = arb?.cargo_optimized_route?.logistics_risk_flag ?? "CLEAR";
-  const gate = await trace("WEATHER-GATE", "Evaluate §2.4 logistics weather gate on optimal route", async () => ({
-    logistics_risk_flag: flag,
-    decision: flag === "CLEAR" ? "DISPATCH_APPROVED" : "HOLD_AND_NOTIFY",
-    season: arb?.climate_risk_sentinel?.current_kenyan_season,
-    caution: arb?.climate_risk_sentinel?.climate_caution_alert,
-  }));
-
-  let alert = null;
-  if (gate.decision === "HOLD_AND_NOTIFY") {
-    alert = await trace("APEX·ROUTE-C", "Auto-broadcast weather hold to affected farmers", () =>
-      callApex({
-        execution_mode: "alert_broadcast",
-        current_month: farmPayload.current_month,
-        alert_trigger: {
-          type: "WEATHER_ANOMALY",
-          severity: "WARNING",
-          detail: arb?.climate_risk_sentinel?.climate_caution_alert,
-        },
-        affected_farmer_ids: ["FARMER-001", "FARMER-002", "FARMER-003"],
-      })
+    const arb = await trace("APEX·ROUTE-A", "Compile crop arbitrage + climate risk matrix", () =>
+      callApex(farmPayload)
     );
+
+    // Without an arbitrage result there is nothing to gate or dispatch — abort the chain.
+    if (arb?.execution_mode === "error") {
+      const brief = await trace("MISSION-BRIEF", "Abort — arbitrage compile failed", async () => ({
+        headline: `Autopilot aborted: ${arb.error_type} — ${arb.error_message ?? "arbitrage compile failed."}`,
+        next_review: arb.recovery_suggestion ?? "Fix the payload or resync telemetry, then re-engage Autopilot.",
+        confidence: "LOW",
+      }));
+      return res.json({ engine: engineMode(), steps, brief, aborted: true });
+    }
+
+    const flag = arb?.cargo_optimized_route?.logistics_risk_flag ?? "CLEAR";
+    const gate = await trace("WEATHER-GATE", "Evaluate §2.4 logistics weather gate on optimal route", async () => ({
+      logistics_risk_flag: flag,
+      decision: flag === "CLEAR" ? "DISPATCH_APPROVED" : "HOLD_AND_NOTIFY",
+      season: arb?.climate_risk_sentinel?.current_kenyan_season,
+      caution: arb?.climate_risk_sentinel?.climate_caution_alert,
+    }));
+
+    let alert = null;
+    if (gate.decision === "HOLD_AND_NOTIFY") {
+      alert = await trace("APEX·ROUTE-C", "Auto-broadcast weather hold to affected farmers", () =>
+        callApex({
+          execution_mode: "alert_broadcast",
+          current_month: farmPayload.current_month,
+          alert_trigger: {
+            type: "WEATHER_ANOMALY",
+            severity: "WARNING",
+            detail: arb?.climate_risk_sentinel?.climate_caution_alert,
+          },
+          affected_farmer_ids: ["FARMER-001", "FARMER-002", "FARMER-003"],
+        })
+      );
+    }
+
+    const brief = await trace("MISSION-BRIEF", "Compose operator mission brief", async () => ({
+      headline: flag === "CLEAR"
+        ? `Dispatch ${farmPayload.crop_type} to ${arb?.cargo_optimized_route?.optimal_market_destination} — projected net KES ${Number(arb?.cargo_optimized_route?.net_profit_projection_kes ?? 0).toLocaleString("en-KE")}.`
+        : `Hold ${farmPayload.crop_type} dispatch: ${flag} on the ${arb?.cargo_optimized_route?.optimal_market_destination} corridor. Farmers notified${alert ? " (alert " + alert.alert_id?.slice(0, 8) + ")" : ""}.`,
+      next_review: "Re-run Autopilot after the next telemetry refresh.",
+      confidence: arb?.data_confidence,
+    }));
+
+    res.json({ engine: engineMode(), steps, brief });
+  } catch (err) {
+    res.status(500).json({ error: err?.message ?? String(err) });
   }
-
-  const brief = await trace("MISSION-BRIEF", "Compose operator mission brief", async () => ({
-    headline: flag === "CLEAR"
-      ? `Dispatch ${farmPayload.crop_type} to ${arb?.cargo_optimized_route?.optimal_market_destination} — projected net KES ${Number(arb?.cargo_optimized_route?.net_profit_projection_kes ?? 0).toLocaleString("en-KE")}.`
-      : `Hold ${farmPayload.crop_type} dispatch: ${flag} on the ${arb?.cargo_optimized_route?.optimal_market_destination} corridor. Farmers notified${alert ? " (alert " + alert.alert_id?.slice(0, 8) + ")" : ""}.`,
-    next_review: "Re-run Autopilot after the next telemetry refresh.",
-    confidence: arb?.data_confidence,
-  }));
-
-  res.json({ engine: engineMode(), steps, brief });
 });
 
 const PORT = process.env.PORT || 4517;

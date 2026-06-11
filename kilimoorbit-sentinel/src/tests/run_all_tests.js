@@ -19,11 +19,12 @@ const C = {
   gold: (s) => `\x1b[33m${s}\x1b[0m`,
 };
 
+const TOTAL = 11;
 let passed = 0;
 const results = [];
 
 async function runTest(num, name, payload, assertFn) {
-  process.stdout.write(C.bold(`\n[${num}/7] ${name}\n`));
+  process.stdout.write(C.bold(`\n[${num}/${TOTAL}] ${name}\n`));
   const t0 = Date.now();
   const res = await callApex(payload);
   const ms = Date.now() - t0;
@@ -134,9 +135,71 @@ await runTest(
   })
 );
 
+// 8 ─ STALE FEED REGRESSION
+const stale = loadPayload("arbitrage_payload.json");
+stale.market_data.data_age_minutes = 300;
+await runTest(
+  8,
+  "INTEGRITY — stale feed (300 min) → STALE_DATA + suppression",
+  stale,
+  (r) => ({
+    ok:
+      r?.price_status === "STALE_DATA" &&
+      r?.cargo_optimized_route?.net_profit_projection_kes == null,
+    detail: `price_status = ${r?.price_status}  ·  net = ${r?.cargo_optimized_route?.net_profit_projection_kes ?? "null"}  ·  confidence = ${r?.data_confidence}`,
+  })
+);
+
+// 9 ─ EMPTY MARKET LIST REGRESSION
+const noMarkets = loadPayload("arbitrage_payload.json");
+noMarkets.market_data.available_markets = [];
+await runTest(
+  9,
+  "INTEGRITY — empty available_markets → DATA_ERROR",
+  noMarkets,
+  (r) => ({
+    ok: r?.error_type === "DATA_ERROR",
+    detail: `error_type = ${r?.error_type}  ·  failed_fields = ${JSON.stringify(r?.failed_fields)}`,
+  })
+);
+
+// 10 ─ ASAL DROUGHT CRITICAL REGRESSION
+const asal = loadPayload("arbitrage_payload.json");
+asal.current_month = "January";
+asal.farm_location = { county: "Turkana", sub_county: "Loima", altitude_m: 600, road_type: "murram" };
+await runTest(
+  10,
+  "CLIMATE — Turkana in January (ASAL hot/dry) → Critical risk",
+  asal,
+  (r) => ({
+    ok: r?.climate_risk_sentinel?.pre_farming_risk_level === "Critical",
+    detail: `risk = ${r?.climate_risk_sentinel?.pre_farming_risk_level}  ·  zone = ${r?.climate_risk_sentinel?.farm_altitude_zone}`,
+  })
+);
+
+// 11 ─ CONVERSATION MEMORY
+const followUp = loadPayload("user_chat_payload.json");
+followUp.chat_history = [
+  { role: "user", text: "Je, bei ya nyanya iko juu wiki hii?" },
+  { role: "apex", text: "Bei ya nyanya Meru Main Market iko KES 42 kwa kilo. 🍅" },
+];
+followUp.user_message = "Na kesho je, niuze huko?";
+await runTest(
+  11,
+  "MEMORY — elliptical follow-up inherits price topic from chat_history",
+  followUp,
+  (r) => {
+    const words = String(r?.chat_response ?? "").trim().split(/\s+/).filter(Boolean).length;
+    return {
+      ok: r?.intent_detected === "price_query" && words > 0 && words < 25,
+      detail: `intent = ${r?.intent_detected}  ·  "${r?.chat_response}"`,
+    };
+  }
+);
+
 // ─ SUMMARY
 console.log("\n" + C.bold("═".repeat(64)));
-const verdict = passed === 7 ? C.green(`${passed}/7 TESTS PASSED ✔`) : C.red(`${passed}/7 tests passed`);
+const verdict = passed === TOTAL ? C.green(`${passed}/${TOTAL} TESTS PASSED ✔`) : C.red(`${passed}/${TOTAL} tests passed`);
 console.log(C.bold(`  SUMMARY: ${verdict}`));
 console.log(C.bold("═".repeat(64)) + "\n");
-process.exit(passed === 7 ? 0 : 1);
+process.exit(passed === TOTAL ? 0 : 1);

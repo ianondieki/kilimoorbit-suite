@@ -1,6 +1,6 @@
 # KilimoOrbit Sentinel
 
-An AI agri-logistics decision engine for Kenyan smallholder farmers, powered by Google Gemini (APEX core). It routes JSON payloads through five execution modes — market arbitrage, farmer chat, alert broadcast, onboarding, and logistics replanning — and ships with a Mission Control web dashboard plus a 7-test verification suite.
+An AI agri-logistics decision engine for Kenyan smallholder farmers, powered by Google Gemini (APEX core). It routes JSON payloads through five execution modes — market arbitrage, farmer chat, alert broadcast, onboarding, and logistics replanning — and ships with a Mission Control web dashboard plus an 11-test verification suite.
 
 ## Prerequisites
 
@@ -12,11 +12,11 @@ An AI agri-logistics decision engine for Kenyan smallholder farmers, powered by 
 ```bash
 npm install
 cp .env.example .env       # then paste your GEMINI_API_KEY into .env
-npm test                   # runs the 7-test verification suite
+npm test                   # runs the 11-test verification suite
 npm start                  # launches Mission Control → http://localhost:4517
 ```
 
-> **No key yet?** The engine automatically falls back to a deterministic **offline mock** that implements the exact same route contracts, so `npm test` passes 7/7 and the dashboard is fully demoable without any API key. Set `APEX_MOCK=1` to force it; add a valid `GEMINI_API_KEY` to go live on `gemini-2.5-flash`.
+> **No key yet?** The engine automatically falls back to a deterministic **offline mock** that implements the exact same route contracts, so `npm test` passes 11/11 and the dashboard is fully demoable without any API key. Set `APEX_MOCK=1` to force it; add a valid `GEMINI_API_KEY` to go live on `gemini-2.5-flash`.
 
 ## Route reference
 
@@ -59,7 +59,7 @@ The governing prompt is loaded verbatim from **`src/apex_system_prompt.md`** (yo
 
 | Command                  | What it does                                  |
 |--------------------------|-----------------------------------------------|
-| `npm test`               | Cold start + integrity + all 5 routes (7/7)   |
+| `npm test`               | Cold start + integrity + all 5 routes + regressions (11/11)   |
 | `npm start`              | Mission Control dashboard on port 4517        |
 | `npm run route:arbitrage`| Fire Route A alone (likewise `route:chat`, `route:alert`, `route:onboarding`, `route:replan`) |
 "# kilimoorbit" 

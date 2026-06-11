@@ -63,6 +63,12 @@ function validate(payload, mode) {
     const v = dig(payload, f);
     return v === undefined || v === null || v === "unknown";
   });
+  // §1.3: arbitrage is meaningless without at least one market to rank.
+  if (mode === "arbitrage_compile" && !failed.includes("market_data")) {
+    const mkts = dig(payload, "market_data.available_markets");
+    if (!Array.isArray(mkts) || mkts.length === 0)
+      failed.push("market_data.available_markets");
+  }
 
   const oob = [];
   for (const b of BOUNDS) {
@@ -101,7 +107,9 @@ const ASAL_COUNTIES = ["Turkana","Marsabit","Isiolo","Garissa","Wajir","Mandera"
 const FROST_COUNTIES = ["Meru","Nyandarua","Limuru","Kericho","Kiambu","Nyeri"];
 
 function season(month) {
-  const i = MONTHS.indexOf(month);
+  const i = MONTHS.findIndex(
+    (m) => m.toLowerCase() === String(month ?? "").trim().toLowerCase()
+  );
   if (i >= 2 && i <= 4) return { name: "Long Rains (Machi–Mei)", key: "LONG_RAINS" };
   if (i >= 9 && i <= 11) return { name: "Short Rains (Oktoba–Desemba)", key: "SHORT_RAINS" };
   if (i >= 5 && i <= 8) return { name: "Cold/Dry Season (Juni–Septemba)", key: "COLD_DRY" };
@@ -130,12 +138,13 @@ function climateSentinel({ county, altitude_m, road_type }, month, crop) {
     s.key === "LONG_RAINS" || (s.key === "SHORT_RAINS" && ["Kisumu","Homa Bay","Siaya","Mombasa","Kilifi","Kwale","Busia"].includes(county));
   const landslide = s.key === "LONG_RAINS" && alt > 2000;
 
+  // Risk level only ever escalates — a Critical rating must never be downgraded.
+  const RANK = { Low: 0, Medium: 1, High: 2, Critical: 3 };
   let level = "Low";
-  if (flood_risk || drought_risk) level = "Medium";
-  if ((frost_risk && alt > 2500) || (drought_risk && zone === "ASAL")) level = "Critical";
-  else if (frost_risk || landslide || (s.key === "SHORT_RAINS")) level = "High";
-  else if (s.key === "LONG_RAINS" && landslide) level = "High";
-  if (s.key === "LONG_RAINS" && alt > 2000) level = "High"; // landslide modifier
+  const escalate = (l) => { if (RANK[l] > RANK[level]) level = l; };
+  if (flood_risk || drought_risk) escalate("Medium");
+  if (frost_risk || landslide || s.key === "SHORT_RAINS") escalate("High");
+  if ((frost_risk && alt > 2500) || (drought_risk && zone === "ASAL")) escalate("Critical");
 
   let variety = null;
   if (s.key === "SHORT_RAINS")
@@ -181,6 +190,26 @@ function weatherGate(payload, seasonKey) {
   return "CLEAR";
 }
 
+/* Route B intent regexes — shared by direct matching and follow-up resolution. */
+const INTENT_RES = {
+  price: /\b(bei|price|nyanya|tomato|soko|market|kg)\b/i,
+  weather: /\b(mvua|rain|weather|hali ya hewa|frost|baridi|joto)\b/i,
+  logistics: /\b(route|deliver|usafiri|boda|gari)\b/i,
+};
+const FOLLOW_UP_RE = /\b(je|na|what about|how about|why|kwa nini|there|huko|hapo|pia|tena|again|tomorrow|kesho)\b/i;
+
+/** Bound conversation memory regardless of client behavior (token + abuse guard). */
+function trimHistory(p) {
+  if (!Array.isArray(p.chat_history)) return p;
+  return {
+    ...p,
+    chat_history: p.chat_history.slice(-8).map((h) => ({
+      role: h?.role === "user" ? "user" : "apex",
+      text: String(h?.text ?? "").slice(0, 280),
+    })),
+  };
+}
+
 /* Conservative Kenyan smallholder yields (kg per acre) for §3A step 3. */
 const YIELD_KG_PER_ACRE = {
   tomato: 4000, cabbage: 6000, potato: 4500, potatoes: 4500,
@@ -204,9 +233,11 @@ function mockEngine(payload) {
   switch (mode) {
     /* ── ROUTE A ─────────────────────────────────────────────────────── */
     case "arbitrage_compile": {
+      const markets = payload.market_data.available_markets; // non-empty — validate() guarantees it
       const age = payload.market_data.data_age_minutes ?? 9999;
       const stale = age > 120;
-      const confidence = stale ? "MEDIUM" : age < 60 ? "HIGH" : "MEDIUM";
+      // §3A.5: projections are suppressed only at LOW — stale data must therefore tag LOW.
+      const confidence = stale ? "LOW" : age < 60 ? "HIGH" : "MEDIUM";
       const sentinel = climateSentinel(payload.farm_location, payload.current_month, payload.crop_type);
       const { season_key, ...climate_risk_sentinel } = sentinel;
 
@@ -214,7 +245,7 @@ function mockEngine(payload) {
         (payload.field_area_acres ?? 1) *
           (YIELD_KG_PER_ACRE[payload.crop_type?.toLowerCase()] ?? YIELD_KG_PER_ACRE.default)
       );
-      const ranked = payload.market_data.available_markets
+      const ranked = markets
         .map((m) => ({ ...m, net: m.wholesale_price_per_kg * yieldKg - m.transit_cost_kes }))
         .sort((a, b) => b.net - a.net);
       const best = ranked[0];
@@ -267,10 +298,25 @@ function mockEngine(payload) {
       const m = payload.market_data?.available_markets?.[0];
       const settingsQ = /\b(settings?|notification|sign ?out|account|battery plan)\b/i.test(msg);
       const historyQ = /\b(history|export|spreadsheet|timeline|gps)\b/i.test(msg);
-      const priceQ = /\b(bei|price|nyanya|tomato|soko|market|kg)\b/i.test(msg);
-      const weatherQ = /\b(mvua|rain|weather|hali ya hewa|frost|baridi|joto)\b/i.test(msg);
-      const logisticsQ = /\b(route|deliver|usafiri|boda|gari)\b/i.test(msg);
+      let priceQ = INTENT_RES.price.test(msg);
+      let weatherQ = INTENT_RES.weather.test(msg);
+      let logisticsQ = INTENT_RES.logistics.test(msg);
       const sw = /\b(je|bei|nyanya|niambie|habari|shamba|soko|mvua|iko)\b/i.test(msg);
+
+      // Conversation memory: an elliptical follow-up ("Na kesho je?", "what about
+      // tomorrow?") inherits the most recent topic found in chat_history.
+      if (!settingsQ && !historyQ && !priceQ && !weatherQ && !logisticsQ) {
+        const hist = Array.isArray(payload.chat_history) ? payload.chat_history : [];
+        const words = msg.trim().split(/\s+/).filter(Boolean).length;
+        if (hist.length && (FOLLOW_UP_RE.test(msg) || words <= 4)) {
+          for (let i = hist.length - 1; i >= 0; i--) {
+            const txt = String(hist[i]?.text ?? "");
+            if (INTENT_RES.price.test(txt)) { priceQ = true; break; }
+            if (INTENT_RES.weather.test(txt)) { weatherQ = true; break; }
+            if (INTENT_RES.logistics.test(txt)) { logisticsQ = true; break; }
+          }
+        }
+      }
 
       let intent = "general_advisory", reply;
       if (settingsQ) {
@@ -388,11 +434,12 @@ function mockEngine(payload) {
     case "logistics_replan": {
       const d = payload.active_delivery;
       const riskRank = { Low: 0, Medium: 1, High: 2 };
+      const rank = (r) => riskRank[r?.cargo_risk_level] ?? 1; // unknown levels rank as Medium
       const ranked = [...payload.available_alternative_routes].sort(
         (a, b) =>
           a.time_penalty_minutes - b.time_penalty_minutes ||
           a.cost_penalty_kes - b.cost_penalty_kes ||
-          riskRank[a.cargo_risk_level] - riskRank[b.cargo_risk_level]
+          rank(a) - rank(b)
       );
       const best = ranked[0];
       const viable = best && d.original_net_profit_kes - best.cost_penalty_kes > 0;
@@ -414,7 +461,7 @@ function mockEngine(payload) {
         escalate_to_cooperative: !best,
         widget_insights: {
           replan_summary: best
-            ? `Divert ${d.crop_type} cargo to ${best.new_destination} adding ${best.time_penalty_minutes} minutes with ${best.cargo_risk_level.toLowerCase()} spoilage risk.`
+            ? `Divert ${d.crop_type} cargo to ${best.new_destination} adding ${best.time_penalty_minutes} minutes with ${(best.cargo_risk_level ?? "unknown").toLowerCase()} spoilage risk.`
             : "No viable alternative route exists; cargo holds at origin pending cooperative dispatch.",
           margin_impact_note: best
             ? `Margin trims from KES ${d.original_net_profit_kes.toLocaleString("en-KE")} to KES ${revised.toLocaleString("en-KE")} after reroute costs.`
@@ -440,21 +487,64 @@ export function engineMode() {
   return process.env.GEMINI_API_KEY ? "LIVE" : "MOCK";
 }
 
+const LIVE_TIMEOUT_MS = Number(process.env.APEX_TIMEOUT_MS || 30_000);
+const LIVE_RETRIES = 1;
+
+const withTimeout = (promise, ms) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      const t = setTimeout(
+        () => reject(new Error(`Gemini call timed out after ${ms / 1000}s`)),
+        ms
+      );
+      t.unref?.();
+    }),
+  ]);
+
+async function generateLive(payload) {
+  let lastErr;
+  for (let attempt = 0; attempt <= LIVE_RETRIES; attempt++) {
+    try {
+      const response = await withTimeout(
+        getClient().models.generateContent({
+          model: MODEL,
+          contents: [{ role: "user", parts: [{ text: JSON.stringify(payload) }] }],
+          config: {
+            systemInstruction: APEX_SYSTEM,
+            temperature: 0,
+            responseMimeType: "application/json",
+          },
+        }),
+        LIVE_TIMEOUT_MS
+      );
+      const raw = response.text;
+      if (!raw) throw new Error("Empty response from Gemini");
+      const parsed = JSON.parse(stripFences(raw));
+      if (!parsed || typeof parsed !== "object" || typeof parsed.execution_mode !== "string")
+        throw new Error("Gemini response violates the Apex contract (missing execution_mode)");
+      return parsed;
+    } catch (err) {
+      lastErr = err;
+      if (attempt < LIVE_RETRIES)
+        await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 export async function callApex(payload) {
   try {
-    if (engineMode() === "MOCK") return mockEngine(payload ?? {});
-    const response = await getClient().models.generateContent({
-      model: MODEL,
-      contents: [{ role: "user", parts: [{ text: JSON.stringify(payload ?? {}) }] }],
-      config: {
-        systemInstruction: APEX_SYSTEM,
-        temperature: 0,
-        responseMimeType: "application/json",
-      },
-    });
-    const raw = response.text;
-    if (!raw) throw new Error("Empty response from Gemini");
-    return JSON.parse(stripFences(raw));
+    const p = payload ?? {};
+    // §1 integrity is deterministic code, not model behavior: enforce it for BOTH
+    // engines so invalid payloads never reach (or get billed by) Gemini.
+    const mode = p?.execution_mode;
+    if (!mode || !VALID_ROUTES.includes(mode)) return unknownRoute(mode);
+    const { failed, oob } = validate(p, mode);
+    if (failed.length || oob.length) return dataError(failed, oob);
+
+    const safe = trimHistory(p);
+    return engineMode() === "MOCK" ? mockEngine(safe) : await generateLive(safe);
   } catch (err) {
     return {
       execution_mode: "error",
