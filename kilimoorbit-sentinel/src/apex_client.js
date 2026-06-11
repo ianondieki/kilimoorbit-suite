@@ -124,8 +124,8 @@ function altitudeZone(altitude_m, county) {
   return "LOWLAND";
 }
 
-/** Full §2 assessment for a farm × month. */
-function climateSentinel({ county, altitude_m, road_type }, month, crop) {
+/** Full §2 assessment for a farm × month. Exported for the USSD service. */
+export function climateSentinel({ county, altitude_m, road_type }, month, crop) {
   const s = season(month);
   const zone = altitudeZone(altitude_m, county);
   const alt = altitude_m ?? 1500;

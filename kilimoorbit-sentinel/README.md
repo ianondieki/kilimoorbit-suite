@@ -1,6 +1,6 @@
 # KilimoOrbit Sentinel
 
-An AI agri-logistics decision engine for Kenyan smallholder farmers, powered by Google Gemini (APEX core). It routes JSON payloads through five execution modes — market arbitrage, farmer chat, alert broadcast, onboarding, and logistics replanning — and ships with a Mission Control web dashboard plus an 11-test verification suite.
+An AI agri-logistics decision engine for Kenyan smallholder farmers, powered by Google Gemini (APEX core). It routes JSON payloads through five execution modes — market arbitrage, farmer chat, alert broadcast, onboarding, and logistics replanning — and ships with a Mission Control web dashboard plus a 14-test verification suite.
 
 ## Prerequisites
 
@@ -12,11 +12,11 @@ An AI agri-logistics decision engine for Kenyan smallholder farmers, powered by 
 ```bash
 npm install
 cp .env.example .env       # then paste your GEMINI_API_KEY into .env
-npm test                   # runs the 11-test verification suite
+npm test                   # runs the 14-test verification suite
 npm start                  # launches Mission Control → http://localhost:4517
 ```
 
-> **No key yet?** The engine automatically falls back to a deterministic **offline mock** that implements the exact same route contracts, so `npm test` passes 11/11 and the dashboard is fully demoable without any API key. Set `APEX_MOCK=1` to force it; add a valid `GEMINI_API_KEY` to go live on `gemini-2.5-flash`.
+> **No key yet?** The engine automatically falls back to a deterministic **offline mock** that implements the exact same route contracts, so `npm test` passes 14/14 and the dashboard is fully demoable without any API key. Set `APEX_MOCK=1` to force it; add a valid `GEMINI_API_KEY` to go live on `gemini-2.5-flash`.
 
 ## Route reference
 
@@ -54,12 +54,13 @@ The governing prompt is loaded verbatim from **`src/apex_system_prompt.md`** (yo
 - **Live marquee ticker** (per Apex §4.1) — commodity prices, e-boda battery, soil moisture, and weather alerts scroll under the header.
 - **Three handcrafted themes** — Loam (night field), Nyota (satellite night), Savanna (daylight); persisted across sessions.
 - **Climate Sentinel cards** — frost/drought/flood pills, seed-variety guidance, and the seasonal caution rendered on every arbitrage and step-5 onboarding result.
+- **USSD service** (`POST /api/ussd`) — the whole engine on any feature phone, no app or data bundle needed. Africa's Talking gateway format (`sessionId`/`phoneNumber`/`text` form fields → `CON`/`END` plain text). Menu: 1 Bei za soko (live commodity quotes), 2 Hatari ya hewa (§2 climate risk by county), 3 Uliza Apex (chat with per-phone-number conversation memory across dial-ins). All screens are GSM-7 sanitized (no emoji) and ≤160 chars. **Go live:** create a free [Africa's Talking](https://africastalking.com) account, register a USSD channel, and point its callback URL at `https://<your-host>/api/ussd` — the sandbox simulator works against a tunnel (e.g. ngrok) for local testing.
 
 ## Scripts
 
 | Command                  | What it does                                  |
 |--------------------------|-----------------------------------------------|
-| `npm test`               | Cold start + integrity + all 5 routes + regressions (11/11)   |
+| `npm test`               | Cold start + integrity + all 5 routes + regressions + USSD (14/14)   |
 | `npm start`              | Mission Control dashboard on port 4517        |
 | `npm run route:arbitrage`| Fire Route A alone (likewise `route:chat`, `route:alert`, `route:onboarding`, `route:replan`) |
 "# kilimoorbit" 
