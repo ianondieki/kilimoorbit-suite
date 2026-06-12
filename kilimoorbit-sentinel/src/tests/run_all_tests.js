@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { callApex, engineMode } from "../apex_client.js";
+import { handleUssd } from "../ussd.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const loadPayload = (f) =>
@@ -19,14 +20,14 @@ const C = {
   gold: (s) => `\x1b[33m${s}\x1b[0m`,
 };
 
-const TOTAL = 11;
+const TOTAL = 14;
 let passed = 0;
 const results = [];
 
-async function runTest(num, name, payload, assertFn) {
+async function runTest(num, name, payload, assertFn, runner = callApex) {
   process.stdout.write(C.bold(`\n[${num}/${TOTAL}] ${name}\n`));
   const t0 = Date.now();
-  const res = await callApex(payload);
+  const res = await runner(payload);
   const ms = Date.now() - t0;
   const { ok, detail } = assertFn(res);
   if (ok) {
@@ -195,6 +196,44 @@ await runTest(
       detail: `intent = ${r?.intent_detected}  ·  "${r?.chat_response}"`,
     };
   }
+);
+
+// 12 ─ USSD MAIN MENU
+await runTest(
+  12,
+  "USSD — root request renders CON main menu",
+  { text: "" },
+  (r) => ({
+    ok: typeof r === "string" && r.startsWith("CON") && r.includes("Bei za soko"),
+    detail: `"${String(r).replaceAll("\n", " / ")}"`,
+  }),
+  handleUssd
+);
+
+// 13 ─ USSD PRICE FLOW
+await runTest(
+  13,
+  "USSD — 1*1 returns END crop quotes in KES within one screen",
+  { text: "1*1" },
+  (r) => ({
+    ok: typeof r === "string" && r.startsWith("END") && r.includes("KES") && r.length <= 164,
+    detail: `"${String(r).replaceAll("\n", " / ")}"`,
+  }),
+  handleUssd
+);
+
+// 14 ─ USSD APEX CHAT (GSM-7 safe)
+await runTest(
+  14,
+  "USSD — 3*<swali> returns GSM-safe END Apex reply with live price",
+  { text: "3*Je bei ya nyanya iko juu?", phoneNumber: "+254700000001" },
+  (r) => ({
+    ok:
+      typeof r === "string" && r.startsWith("END") && r.includes("KES") &&
+      r.length <= 164 && !/[\u{1F000}-\u{1FAFF}]/u.test(r),
+    detail: `"${String(r).replaceAll("\n", " / ")}"`,
+  }),
+  handleUssd
 );
 
 // ─ SUMMARY
