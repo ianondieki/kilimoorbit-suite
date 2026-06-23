@@ -13,6 +13,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { callApex, engineMode } from "./apex_client.js";
+import { createSokoRouter } from "./soko/routes.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
@@ -87,6 +88,9 @@ function liveCommodityFeed() {
 app.get("/api/health", (_req, res) =>
   res.json({ status: "ok", engine: engineMode(), uptime_s: Math.round(process.uptime()) })
 );
+
+// Soko marketplace — listings + claims, priced off the live commodity feed.
+app.use("/api/soko", createSokoRouter({ liveFeed: liveCommodityFeed }));
 
 app.get("/api/meta", (_req, res) => {
   const payloads = {};

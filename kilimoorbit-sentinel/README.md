@@ -38,10 +38,28 @@ kilimoorbit-sentinel/
 │   ├── apex_client.js        # Gemini caller + APEX XML system prompt + offline engine
 │   ├── server.js             # Mission Control API (Express)
 │   ├── routes/               # one runnable script per route (npm run route:*)
-│   └── tests/run_all_tests.js
+│   ├── soko/                 # Soko marketplace: flat-file store + API router
+│   └── tests/                # run_all_tests.js (APEX) + soko_tests.js (marketplace)
 ├── payloads/                 # the five canonical test payloads
+├── data/                     # Soko runtime store (gitignored, created on first listing)
 └── public/index.html         # Mission Control dashboard (vanilla JS, zero build)
 ```
+
+## Soko — community produce marketplace
+
+A lightweight marketplace layer that lets farmers list surplus produce and lets
+buyers / e-boda riders claim delivery runs. Listings are priced against the live
+commodity feed, so each one shows a **fair price** versus the nearest masoko.
+Persistence is a single gitignored flat file (`data/soko_store.json`) — no DB.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET`  | `/api/soko/listings` | Open listings, newest first (`?status=&crop=&county=`); fair price refreshed off the live feed |
+| `POST` | `/api/soko/listings` | Create a listing `{ farmer_name, crop, county, qty_kg, ask_per_kg }`; fair price auto-seeded |
+| `POST` | `/api/soko/listings/:id/claim` | Claim a run `{ claimer, role: "buyer"\|"rider" }` |
+| `POST` | `/api/soko/price-suggest` | `{ crop }` → fair price + per-market comparison from the feed |
+
+Run the marketplace suite with `npm run test:soko` (10/10, no LLM, no server).
 
 ## The Apex v2.0 system prompt
 
@@ -60,6 +78,7 @@ The governing prompt is loaded verbatim from **`src/apex_system_prompt.md`** (yo
 | Command                  | What it does                                  |
 |--------------------------|-----------------------------------------------|
 | `npm test`               | Cold start + integrity + all 5 routes + regressions (11/11)   |
+| `npm run test:soko`      | Soko marketplace store + fair-price suite (10/10)             |
 | `npm start`              | Mission Control dashboard on port 4517        |
 | `npm run route:arbitrage`| Fire Route A alone (likewise `route:chat`, `route:alert`, `route:onboarding`, `route:replan`) |
 "# kilimoorbit" 
