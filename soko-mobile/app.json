@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Soko",
+    "slug": "soko-mobile",
+    "version": "1.0.0",
+    "scheme": "soko",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "android": {
+      "package": "com.kilimoorbit.soko",
+      "adaptiveIcon": { "backgroundColor": "#101B12" }
+    },
+    "plugins": ["expo-router"],
+    "experiments": { "typedRoutes": false }
+  }
+}
