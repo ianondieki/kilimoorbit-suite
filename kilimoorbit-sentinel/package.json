@@ -6,6 +6,7 @@
   "main": "src/server.js",
   "scripts": {
     "test": "node src/tests/run_all_tests.js",
+    "test:soko": "node src/tests/soko_tests.js",
     "start": "node src/server.js",
     "route:arbitrage": "node src/routes/arbitrage.js",
     "route:chat": "node src/routes/user_chat.js",
