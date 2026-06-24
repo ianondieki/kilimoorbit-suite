@@ -158,6 +158,25 @@ export function claimListing(id, input = {}) {
   return { listing, claim };
 }
 
+/**
+ * Mark a claimed run as delivered — the rider/buyer confirms the produce
+ * arrived. Only a "claimed" listing can be delivered; throws otherwise.
+ */
+export function deliverListing(id) {
+  const db = read();
+  const listing = db.listings.find((l) => l.id === id);
+  if (!listing) throw new ValidationError("No listing with that id.", ["listing_id"]);
+  if (listing.status === "delivered")
+    throw new ValidationError("Listing is already delivered.", ["status"]);
+  if (listing.status !== "claimed")
+    throw new ValidationError("Only a claimed run can be marked delivered.", ["status"]);
+
+  listing.status = "delivered";
+  listing.delivered_at = new Date().toISOString();
+  write(db);
+  return listing;
+}
+
 /** Test/maintenance helper — wipe the store. */
 export function _reset() {
   write(structuredClone(EMPTY));

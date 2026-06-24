@@ -9,6 +9,7 @@
  *   GET  /api/soko/listings              ?status=&crop=&county=
  *   POST /api/soko/listings              { farmer_name, crop, county, qty_kg, ask_per_kg }
  *   POST /api/soko/listings/:id/claim    { claimer, role: "buyer"|"rider" }
+ *   POST /api/soko/listings/:id/deliver  (claimed → delivered)
  *   POST /api/soko/price-suggest         { crop }
  */
 import express from "express";
@@ -16,6 +17,7 @@ import {
   createListing,
   listListings,
   claimListing,
+  deliverListing,
   suggestPrice,
   ValidationError,
 } from "./store.js";
@@ -60,6 +62,17 @@ export function createSokoRouter({ liveFeed }) {
     try {
       const result = claimListing(req.params.id, req.body ?? {});
       res.json(result);
+    } catch (err) {
+      if (err instanceof ValidationError)
+        return res.status(400).json({ error: err.message, fields: err.fields });
+      res.status(500).json({ error: err?.message ?? String(err) });
+    }
+  });
+
+  router.post("/listings/:id/deliver", (req, res) => {
+    try {
+      const listing = deliverListing(req.params.id);
+      res.json({ listing });
     } catch (err) {
       if (err instanceof ValidationError)
         return res.status(400).json({ error: err.message, fields: err.fields });

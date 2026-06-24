@@ -12,8 +12,8 @@ const CROP_EMOJI: Record<string, string> = {
 const emojiFor = (crop: string) => CROP_EMOJI[crop.trim().toLowerCase()] ?? "🌾";
 
 export function ListingCard({
-  listing, onClaim,
-}: { listing: Listing; onClaim?: (l: Listing) => void }) {
+  listing, onClaim, onDeliver,
+}: { listing: Listing; onClaim?: (l: Listing) => void; onDeliver?: (l: Listing) => void }) {
   const t = useTheme();
   const d = priceDelta(listing.ask_per_kg, listing.fair_price_per_kg);
   const statusTone = listing.status === "open" ? "ok" : listing.status === "claimed" ? "accent" : "dim";
@@ -48,6 +48,12 @@ export function ListingCard({
       {onClaim && listing.status === "open" && (
         <View style={{ marginTop: 12 }}>
           <Button label="Claim this run" onPress={() => onClaim(listing)} />
+        </View>
+      )}
+
+      {onDeliver && listing.status === "claimed" && (
+        <View style={{ marginTop: 12 }}>
+          <Button label="Mark delivered" tone="ok" onPress={() => onDeliver(listing)} />
         </View>
       )}
     </View>
