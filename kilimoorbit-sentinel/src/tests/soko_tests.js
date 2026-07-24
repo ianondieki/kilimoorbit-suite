@@ -10,6 +10,7 @@ import {
   createListing,
   listListings,
   claimListing,
+  deliverListing,
   suggestPrice,
   _reset,
   ValidationError,
@@ -126,6 +127,22 @@ check("10 · claim on an unknown id is rejected", () => {
     return { ok: false };
   } catch (err) {
     return { ok: err instanceof ValidationError && err.fields.includes("listing_id") };
+  }
+});
+
+check("11 · deliverListing flips a claimed run → delivered + stamps time", () => {
+  const claimed = listListings({}).find((l) => l.status === "claimed");
+  const l = deliverListing(claimed.id);
+  return { ok: l.status === "delivered" && Boolean(l.delivered_at), detail: `delivered ${l.crop}` };
+});
+
+check("12 · delivering an open (unclaimed) listing is rejected", () => {
+  const open = createListing({ farmer_name: "Mwangi", crop: "carrots", county: "Nyandarua", qty_kg: 80, ask_per_kg: 45 }, commodities);
+  try {
+    deliverListing(open.id);
+    return { ok: false };
+  } catch (err) {
+    return { ok: err instanceof ValidationError && err.fields.includes("status") };
   }
 });
 

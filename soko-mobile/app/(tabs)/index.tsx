@@ -5,10 +5,10 @@ import { useFocusEffect } from "expo-router";
 import { useTheme } from "../../lib/theme-context";
 import { Header, Card, Button, Empty } from "../../components/ui";
 import { ListingCard } from "../../components/ListingCard";
-import { getListings, type Listing, type ListingStatus } from "../../lib/api";
+import { getListings, deliverListing, type Listing, type ListingStatus } from "../../lib/api";
 
 type Filter = "all" | ListingStatus;
-const FILTERS: Filter[] = ["all", "open", "claimed"];
+const FILTERS: Filter[] = ["all", "open", "claimed", "delivered"];
 
 export default function Market() {
   const t = useTheme();
@@ -34,6 +34,16 @@ export default function Market() {
   // Refresh whenever the tab regains focus (e.g. after posting from Sell).
   useFocusEffect(useCallback(() => { load(filter); }, [load, filter]));
   useEffect(() => { load(filter); }, [filter, load]);
+
+  const markDelivered = useCallback(async (l: Listing) => {
+    setErr(null);
+    try {
+      await deliverListing(l.id);
+      load(filter);
+    } catch (e: any) {
+      setErr(e?.message ?? "Could not mark this run delivered.");
+    }
+  }, [filter, load]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]}>
@@ -78,7 +88,7 @@ export default function Market() {
           <Empty text={`No ${filter === "all" ? "" : filter + " "}listings yet.\nPost surplus produce from the Sell tab.`} />
         )}
 
-        {listings.map((l) => <ListingCard key={l.id} listing={l} />)}
+        {listings.map((l) => <ListingCard key={l.id} listing={l} onDeliver={markDelivered} />)}
       </ScrollView>
     </SafeAreaView>
   );

@@ -57,9 +57,11 @@ Persistence is a single gitignored flat file (`data/soko_store.json`) — no DB.
 | `GET`  | `/api/soko/listings` | Open listings, newest first (`?status=&crop=&county=`); fair price refreshed off the live feed |
 | `POST` | `/api/soko/listings` | Create a listing `{ farmer_name, crop, county, qty_kg, ask_per_kg }`; fair price auto-seeded |
 | `POST` | `/api/soko/listings/:id/claim` | Claim a run `{ claimer, role: "buyer"\|"rider" }` |
+| `POST` | `/api/soko/listings/:id/deliver` | Mark a claimed run delivered (claimed → delivered) |
 | `POST` | `/api/soko/price-suggest` | `{ crop }` → fair price + per-market comparison from the feed |
 
-Run the marketplace suite with `npm run test:soko` (10/10, no LLM, no server).
+Listings move through **open → claimed → delivered**. Run the marketplace suite
+with `npm run test:soko` (12/12, no LLM, no server).
 
 ## The Apex v2.0 system prompt
 
@@ -78,7 +80,7 @@ The governing prompt is loaded verbatim from **`src/apex_system_prompt.md`** (yo
 | Command                  | What it does                                  |
 |--------------------------|-----------------------------------------------|
 | `npm test`               | Cold start + integrity + all 5 routes + regressions (11/11)   |
-| `npm run test:soko`      | Soko marketplace store + fair-price suite (10/10)             |
+| `npm run test:soko`      | Soko marketplace store + fair-price suite (12/12)             |
 | `npm start`              | Mission Control dashboard on port 4517        |
 | `npm run route:arbitrage`| Fire Route A alone (likewise `route:chat`, `route:alert`, `route:onboarding`, `route:replan`) |
 "# kilimoorbit" 

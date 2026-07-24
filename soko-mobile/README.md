@@ -13,9 +13,11 @@ powers the Sentinel app also serves the Soko API at `/api/soko/*`.
 
 | Tab | What it does |
 |---|---|
-| **Market** 🛒 | Browse all listings, filter by `open` / `claimed`, pull-to-refresh. Each card shows the ask vs the live market price. |
+| **Market** 🛒 | Browse all listings, filter by `open` / `claimed` / `delivered`, pull-to-refresh. Each card shows the ask vs the live market price, and a **Mark delivered** button on claimed runs. |
 | **Sell** 🏷 | Post surplus produce (crop, county, kg, ask). "Check market price" pulls the live per-market board before you commit. |
 | **Runs** 🛵 | Open runs only. Claim one as a **rider** or **buyer** from a bottom sheet; it flips to `claimed` for everyone. |
+
+Listings move through **open → claimed → delivered**.
 
 Three themes (Loam · Nyota · Savanna) shared with the Sentinel app — tap the
 chip in the header to cycle; the choice is persisted with AsyncStorage.
@@ -48,6 +50,7 @@ npm start                    # scan the QR with Expo Go
 | `GET`  | `/listings?status=` | Market, Runs |
 | `POST` | `/listings` | Sell |
 | `POST` | `/listings/:id/claim` | Runs |
+| `POST` | `/listings/:id/deliver` | Market (Mark delivered) |
 | `POST` | `/price-suggest` | Sell |
 
 ## Layout

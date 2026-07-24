@@ -14,6 +14,7 @@ export type Listing = {
   best_market: string | null;
   status: ListingStatus;
   created_at: string;
+  delivered_at?: string;
 };
 
 export type Claim = {
@@ -73,6 +74,9 @@ export const createListing = (body: NewListing) =>
 
 export const claimListing = (id: string, claimer: string, role: "buyer" | "rider") =>
   post<{ listing: Listing; claim: Claim }>(`/api/soko/listings/${id}/claim`, { claimer, role });
+
+export const deliverListing = (id: string) =>
+  post<{ listing: Listing }>(`/api/soko/listings/${id}/deliver`, {});
 
 export const suggestPrice = (crop: string) =>
   post<PriceSuggest>("/api/soko/price-suggest", { crop });
