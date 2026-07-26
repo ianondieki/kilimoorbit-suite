@@ -2,6 +2,7 @@ import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { useTheme } from "../lib/theme-context";
 import { Badge, Button } from "./ui";
+import { Enter, CountUp } from "./motion";
 import { fmtKES, priceDelta, type Listing } from "../lib/api";
 
 const CROP_EMOJI: Record<string, string> = {
@@ -12,13 +13,14 @@ const CROP_EMOJI: Record<string, string> = {
 const emojiFor = (crop: string) => CROP_EMOJI[crop.trim().toLowerCase()] ?? "🌾";
 
 export function ListingCard({
-  listing, onClaim, onDeliver,
-}: { listing: Listing; onClaim?: (l: Listing) => void; onDeliver?: (l: Listing) => void }) {
+  listing, onClaim, onDeliver, index = 0,
+}: { listing: Listing; onClaim?: (l: Listing) => void; onDeliver?: (l: Listing) => void; index?: number }) {
   const t = useTheme();
   const d = priceDelta(listing.ask_per_kg, listing.fair_price_per_kg);
   const statusTone = listing.status === "open" ? "ok" : listing.status === "claimed" ? "accent" : "dim";
 
   return (
+    <Enter index={index}>
     <View style={[st.card, { backgroundColor: t.panel, borderColor: t.line }]}>
       <View style={st.rowBetween}>
         <Text style={[st.title, { color: t.ink }]}>
@@ -34,7 +36,7 @@ export function ListingCard({
       <View style={[st.priceRow, { borderTopColor: t.line }]}>
         <View>
           <Text style={[st.askLabel, { color: t.dim }]}>ASK</Text>
-          <Text style={[st.ask, { color: t.accent }]}>{fmtKES(listing.ask_per_kg)}/kg</Text>
+          <CountUp value={listing.ask_per_kg} prefix="KES " suffix="/kg" style={[st.ask, { color: t.accent }]} />
         </View>
         <View style={{ alignItems: "flex-end" }}>
           <Badge label={d.label} tone={d.tone} />
@@ -57,6 +59,7 @@ export function ListingCard({
         </View>
       )}
     </View>
+    </Enter>
   );
 }
 

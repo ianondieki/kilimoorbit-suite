@@ -89,7 +89,7 @@ export default function Market() {
           <Empty text={`No ${filter === "all" ? "" : filter + " "}listings yet.\nPost surplus produce from the Sell tab.`} />
         )}
 
-        {listings.map((l) => <ListingCard key={l.id} listing={l} onDeliver={markDelivered} />)}
+        {listings.map((l, i) => <ListingCard key={l.id} index={i} listing={l} onDeliver={markDelivered} />)}
         </Bounded>
       </ScrollView>
     </SafeAreaView>

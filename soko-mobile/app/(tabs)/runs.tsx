@@ -70,8 +70,8 @@ export default function Runs() {
         {!err && !loading && open.length === 0 && (
           <Empty text={"No open runs right now.\nPull to refresh."} />
         )}
-        {open.map((l) => (
-          <ListingCard key={l.id} listing={l} onClaim={(x) => { setTarget(x); setModalErr(null); }} />
+        {open.map((l, i) => (
+          <ListingCard key={l.id} index={i} listing={l} onClaim={(x) => { setTarget(x); setModalErr(null); }} />
         ))}
         </Bounded>
       </ScrollView>

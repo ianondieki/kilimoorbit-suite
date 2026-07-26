@@ -3,6 +3,7 @@ import { View, Text, ScrollView, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../lib/theme-context";
 import { Header, Card, Button, Field, Badge, Bounded } from "../../components/ui";
+import { Pop } from "../../components/motion";
 import {
   createListing, suggestPrice, fmtKES, priceDelta,
   type PriceSuggest, type Listing,
@@ -56,13 +57,15 @@ export default function Sell() {
       <ScrollView contentContainerStyle={st.scroll} keyboardShouldPersistTaps="handled">
         <Bounded style={st.body}>
         {posted && (
-          <Card style={{ borderColor: t.ok }}>
-            <Text style={{ color: t.ok, fontWeight: "800", marginBottom: 6 }}>✓ LISTED</Text>
-            <Text style={{ color: t.ink }}>
-              {posted.qty_kg} kg of {posted.crop} in {posted.county} at {fmtKES(posted.ask_per_kg)}/kg.
-              {posted.fair_price_per_kg != null ? ` Market sits at ${fmtKES(posted.fair_price_per_kg)}/kg.` : ""}
-            </Text>
-          </Card>
+          <Pop key={posted.id}>
+            <Card style={{ borderColor: t.ok }}>
+              <Text style={{ color: t.ok, fontWeight: "800", marginBottom: 6 }}>✓ LISTED</Text>
+              <Text style={{ color: t.ink }}>
+                {posted.qty_kg} kg of {posted.crop} in {posted.county} at {fmtKES(posted.ask_per_kg)}/kg.
+                {posted.fair_price_per_kg != null ? ` Market sits at ${fmtKES(posted.fair_price_per_kg)}/kg.` : ""}
+              </Text>
+            </Card>
+          </Pop>
         )}
         {err && (
           <Card style={{ borderColor: t.alert }}>

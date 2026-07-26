@@ -11,7 +11,7 @@ import Sidebar from "../../components/Sidebar";
 import FAB from "../../components/FAB";
 import Pill from "../../components/Pill";
 import { Bounded } from "../../components/Bounded";
-import { Enter, PressScale, CountUp, Skeleton, LevelBar } from "../../components/Motion";
+import { Enter, PressScale, CountUp, Skeleton, LevelBar, Thinking } from "../../components/Motion";
 import { useTheme } from "../../lib/theme-context";
 import {
   getMeta, callApex, fmtKES, type Meta, type ArbitrageResult, type ApexError,
@@ -103,7 +103,16 @@ export default function Dashboard() {
         <Bounded style={st.body}>
         {loading && (
           <View style={[st.card, { backgroundColor: t.panel, borderColor: t.line }]}>
-            <Skeleton height={10} width={120} color={t.raised} />
+            <Thinking
+              color={t.accent}
+              messages={[
+                "Reading masoko prices…",
+                "Checking the weather window…",
+                "Comparing market routes…",
+                "Projecting your net profit…",
+              ]}
+            />
+            <Skeleton height={10} width={120} color={t.raised} style={{ marginTop: 14 }} />
             <Skeleton height={36} width={210} color={t.raised} style={{ marginTop: 14 }} />
             <View style={[st.statRow, { marginTop: 16 }]}>
               <Skeleton height={52} width={"31%"} color={t.raised} radius={10} />
@@ -148,6 +157,7 @@ export default function Dashboard() {
               <Pill
                 label={c.logistics_risk_flag}
                 tone={c.logistics_risk_flag === "CLEAR" ? "ok" : c.logistics_risk_flag === "WEATHER_DELAY" ? "warn" : "bad"}
+                pulse={c.logistics_risk_flag !== "CLEAR"}
               />
             </View>
             <Text style={[st.insight, { color: t.dim }]}>🛣 {arb!.widget_insights.routing_profit_summary}</Text>
@@ -164,10 +174,10 @@ export default function Dashboard() {
               {s9.current_kenyan_season} · {s9.farm_altitude_zone}
             </Text>
             <View style={st.pillRow}>
-              <Pill label={`FROST ${s9.frost_risk ? "RISK" : "OK"}`} tone={s9.frost_risk ? "bad" : "ok"} />
-              <Pill label={`DROUGHT ${s9.drought_risk ? "RISK" : "OK"}`} tone={s9.drought_risk ? "bad" : "ok"} />
-              <Pill label={`FLOOD ${s9.flood_risk ? "RISK" : "OK"}`} tone={s9.flood_risk ? "bad" : "ok"} />
-              <Pill label={`${s9.pre_farming_risk_level.toUpperCase()} RISK`} tone={riskTone(s9.pre_farming_risk_level)} />
+              <Pill label={`FROST ${s9.frost_risk ? "RISK" : "OK"}`} tone={s9.frost_risk ? "bad" : "ok"} pulse={s9.frost_risk} />
+              <Pill label={`DROUGHT ${s9.drought_risk ? "RISK" : "OK"}`} tone={s9.drought_risk ? "bad" : "ok"} pulse={s9.drought_risk} />
+              <Pill label={`FLOOD ${s9.flood_risk ? "RISK" : "OK"}`} tone={s9.flood_risk ? "bad" : "ok"} pulse={s9.flood_risk} />
+              <Pill label={`${s9.pre_farming_risk_level.toUpperCase()} RISK`} tone={riskTone(s9.pre_farming_risk_level)} pulse={s9.pre_farming_risk_level === "High" || s9.pre_farming_risk_level === "Critical"} />
             </View>
             <View style={[st.caution, { borderLeftColor: t.alert, backgroundColor: t.raised }]}>
               <Text style={{ color: t.ink, fontSize: 13 }}>⚠ {s9.climate_caution_alert}</Text>

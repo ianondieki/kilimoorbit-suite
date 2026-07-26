@@ -1,5 +1,5 @@
-import React from "react";
-import { View, Text, Pressable, TextInput, StyleSheet, ViewStyle } from "react-native";
+import React, { useRef } from "react";
+import { View, Text, Pressable, TextInput, StyleSheet, Animated, ViewStyle } from "react-native";
 import { useTheme, useThemeControls } from "../lib/theme-context";
 import type { Theme } from "../lib/themes";
 
@@ -56,16 +56,25 @@ export function Button({
 }: { label: string; onPress: () => void; disabled?: boolean; tone?: Tone }) {
   const t = useTheme();
   const c = toneColor(t, tone);
+  const scale = useRef(new Animated.Value(1)).current;
+  const spring = (v: number) =>
+    Animated.spring(scale, { toValue: v, useNativeDriver: true, speed: 40, bounciness: 6 }).start();
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPressIn={() => !disabled && spring(0.97)}
+      onPressOut={() => spring(1)}
       style={({ pressed }) => [
         s.btn,
-        { backgroundColor: c, opacity: disabled ? 0.45 : pressed ? 0.85 : 1 },
+        { backgroundColor: c, opacity: disabled ? 0.45 : pressed ? 0.9 : 1 },
       ]}
     >
-      <Text style={{ color: t.bg, fontWeight: "800", letterSpacing: 0.3 }}>{label}</Text>
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <Text style={{ color: t.bg, fontWeight: "800", letterSpacing: 0.3 }}>{label}</Text>
+      </Animated.View>
     </Pressable>
   );
 }

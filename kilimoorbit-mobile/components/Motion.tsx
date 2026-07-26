@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Pressable, ViewStyle, StyleProp, Text, TextStyle } from "react-native";
+import { Pressable, View, ViewStyle, StyleProp, Text, TextStyle } from "react-native";
 import Animated, {
   FadeInDown, FadeInUp, useSharedValue, useAnimatedStyle,
   withSpring, withRepeat, withTiming, Easing,
@@ -92,6 +92,33 @@ export function Skeleton({
     <Animated.View
       style={[{ height, width, borderRadius: radius, backgroundColor: color }, a, style]}
     />
+  );
+}
+
+/* ── Narrated "thinking" indicator — turns a long LIVE wait into a story
+      of what the engine is doing (masoko prices → weather → net profit) ── */
+export function Thinking({
+  color, messages = ["Working…"],
+}: { color: string; messages?: string[] }) {
+  const [i, setI] = useState(0);
+  const [dots, setDots] = useState("");
+  useEffect(() => {
+    const m = setInterval(() => setI((x) => (x + 1) % messages.length), 1600);
+    const d = setInterval(() => setDots((s) => (s.length >= 3 ? "" : s + "•")), 450);
+    return () => { clearInterval(m); clearInterval(d); };
+  }, [messages.length]);
+  const o = useSharedValue(0.4);
+  useEffect(() => {
+    o.value = withRepeat(withTiming(1, { duration: 700, easing: Easing.inOut(Easing.quad) }), -1, true);
+  }, []);
+  const a = useAnimatedStyle(() => ({ opacity: o.value }));
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+      <Animated.View style={[{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }, a]} />
+      <Text style={{ color, fontFamily: "monospace", fontSize: 11, letterSpacing: 1 }}>
+        {messages[i]} {dots}
+      </Text>
+    </View>
   );
 }
 
