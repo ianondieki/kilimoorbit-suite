@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { View, Text, ScrollView, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../lib/theme-context";
-import { Header, Card, Button, Field, Badge } from "../../components/ui";
+import { Header, Card, Button, Field, Badge, Bounded } from "../../components/ui";
 import {
   createListing, suggestPrice, fmtKES, priceDelta,
   type PriceSuggest, type Listing,
@@ -53,7 +53,8 @@ export default function Sell() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]}>
       <Header title="Sell" subtitle="List surplus produce" />
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={st.scroll} keyboardShouldPersistTaps="handled">
+        <Bounded style={st.body}>
         {posted && (
           <Card style={{ borderColor: t.ok }}>
             <Text style={{ color: t.ok, fontWeight: "800", marginBottom: 6 }}>✓ LISTED</Text>
@@ -116,12 +117,15 @@ export default function Sell() {
             )}
           </Card>
         )}
+        </Bounded>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const st = StyleSheet.create({
+  scroll: { flexGrow: 1 },
+  body: { padding: 16, paddingBottom: 40 },
   row: { flexDirection: "row", gap: 10, marginTop: 4 },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   head: { fontSize: 11, fontWeight: "700", letterSpacing: 0.5, marginBottom: 8 },

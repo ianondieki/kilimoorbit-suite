@@ -27,6 +27,16 @@ export function Card({ children, style }: { children: React.ReactNode; style?: V
   return <View style={[s.card, { backgroundColor: t.panel, borderColor: t.line }, style]}>{children}</View>;
 }
 
+/**
+ * Centers and caps content width so screens read well on wide viewports (web,
+ * tablets) instead of stretching cards edge-to-edge. On a phone the screen is
+ * narrower than CONTENT_MAX_W, so this is a transparent full-width pass-through.
+ */
+export const CONTENT_MAX_W = 760;
+export function Bounded({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
+  return <View style={[s.bounded, style]}>{children}</View>;
+}
+
 type Tone = "ok" | "alert" | "accent" | "dim";
 function toneColor(t: Theme, tone: Tone) {
   return tone === "ok" ? t.ok : tone === "alert" ? t.alert : tone === "accent" ? t.accent : t.dim;
@@ -100,6 +110,7 @@ export const s = StyleSheet.create({
   sub: { fontSize: 11, marginTop: 2 },
   themeChip: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6 },
   card: { borderWidth: 1, borderRadius: 14, padding: 16, marginBottom: 12 },
+  bounded: { width: "100%", maxWidth: CONTENT_MAX_W, alignSelf: "center" },
   badge: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
   btn: { borderRadius: 10, paddingVertical: 12, alignItems: "center", justifyContent: "center" },
   fieldLabel: { fontSize: 11, fontWeight: "700", letterSpacing: 0.5, marginBottom: 6, textTransform: "uppercase" },

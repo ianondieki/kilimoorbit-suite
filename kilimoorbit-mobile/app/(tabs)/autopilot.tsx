@@ -3,6 +3,7 @@ import { View, Text, ScrollView, StyleSheet, ActivityIndicator } from "react-nat
 import { SafeAreaView } from "react-native-safe-area-context";
 import Pill from "../../components/Pill";
 import { Enter, PressScale } from "../../components/Motion";
+import { Bounded } from "../../components/Bounded";
 import { useTheme } from "../../lib/theme-context";
 import { runAutopilot, type AutopilotStep } from "../../lib/api";
 
@@ -36,7 +37,8 @@ export default function Autopilot() {
       </View>
       <Text style={[s.sub, { color: t.dim }]}>sense → arbitrage → weather gate → broadcast → brief</Text>
 
-      <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 40 }}>
+      <ScrollView contentContainerStyle={s.scroll}>
+        <Bounded style={s.body}>
         {busy && <ActivityIndicator color={t.accent} style={{ marginTop: 30 }} />}
         {err && <Text style={{ color: t.alert, marginTop: 20 }}>{err}</Text>}
         {!steps && !busy && !err && (
@@ -83,6 +85,7 @@ export default function Autopilot() {
           </View>
           </Enter>
         )}
+        </Bounded>
       </ScrollView>
     </SafeAreaView>
   );
@@ -122,6 +125,8 @@ function StepSummary({ step }: { step: AutopilotStep }) {
 }
 
 const s = StyleSheet.create({
+  scroll: { flexGrow: 1 },
+  body: { padding: 14, paddingBottom: 40 },
   top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
   title: { fontSize: 14, fontWeight: "800", letterSpacing: 2 },
   engage: { borderRadius: 10, paddingHorizontal: 18, paddingVertical: 9 },

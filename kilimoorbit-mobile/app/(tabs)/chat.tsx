@@ -7,6 +7,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Speech from "expo-speech";
 import Pill from "../../components/Pill";
 import { Enter, PressScale } from "../../components/Motion";
+import { Bounded, CONTENT_MAX_W } from "../../components/Bounded";
 import { useTheme } from "../../lib/theme-context";
 import { callApex, getMeta, type ChatResult, type ApexError } from "../../lib/api";
 
@@ -154,7 +155,7 @@ export default function Chat() {
           ref={list}
           data={msgs}
           keyExtractor={(m) => m.id}
-          contentContainerStyle={{ padding: 14, gap: 10 }}
+          contentContainerStyle={s.chatContent}
           renderItem={({ item }) => (
             <Enter from={item.from === "user" ? "up" : "down"}>
             <View
@@ -186,15 +187,16 @@ export default function Chat() {
           }
         />
 
-        <View style={s.quickRow}>
+        <Bounded style={s.quickRow}>
           {QUICK.map((q) => (
             <Pressable key={q} onPress={() => send(q)} style={[s.quick, { borderColor: t.line }]}>
               <Text style={{ color: t.dim, fontSize: 11 }} numberOfLines={1}>{q}</Text>
             </Pressable>
           ))}
-        </View>
+        </Bounded>
 
         <View style={[s.inputRow, { borderTopColor: t.line, backgroundColor: t.panel }]}>
+          <Bounded style={s.inputInner}>
           <TextInput
             style={[s.input, { color: t.ink, backgroundColor: t.field, borderColor: t.line }]}
             placeholder="Uliza Apex…"
@@ -209,6 +211,7 @@ export default function Chat() {
             style={[s.send, { backgroundColor: t.accent, opacity: busy ? 0.5 : 1 }]}>
             <Text style={{ color: t.bg, fontWeight: "800" }}>{busy ? "…" : "Send"}</Text>
           </PressScale>
+          </Bounded>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -219,11 +222,13 @@ const s = StyleSheet.create({
   top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
   title: { fontSize: 14, fontWeight: "800", letterSpacing: 2 },
   voiceRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  chatContent: { padding: 14, gap: 10, width: "100%", maxWidth: CONTENT_MAX_W, alignSelf: "center" },
   bubble: { maxWidth: "86%", borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11 },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 7 },
   quickRow: { flexDirection: "row", gap: 6, paddingHorizontal: 12, paddingBottom: 8 },
   quick: { flexShrink: 1, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
-  inputRow: { flexDirection: "row", gap: 10, padding: 12, borderTopWidth: 1 },
+  inputRow: { padding: 12, borderTopWidth: 1 },
+  inputInner: { flexDirection: "row", gap: 10 },
   input: { flex: 1, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15 },
   send: { borderRadius: 12, paddingHorizontal: 18, justifyContent: "center" },
 });

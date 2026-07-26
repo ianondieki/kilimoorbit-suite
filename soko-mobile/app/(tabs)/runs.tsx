@@ -3,7 +3,7 @@ import { View, Text, ScrollView, RefreshControl, Pressable, StyleSheet, Modal } 
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
 import { useTheme } from "../../lib/theme-context";
-import { Header, Card, Button, Field, Empty } from "../../components/ui";
+import { Header, Card, Button, Field, Empty, Bounded } from "../../components/ui";
 import { ListingCard } from "../../components/ListingCard";
 import { getListings, claimListing, type Listing } from "../../lib/api";
 
@@ -53,12 +53,13 @@ export default function Runs() {
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]}>
       <Header title="Runs" subtitle="Open delivery runs to claim" />
       <ScrollView
-        contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+        contentContainerStyle={st.scroll}
         refreshControl={
           <RefreshControl refreshing={refreshing} tintColor={t.accent}
             onRefresh={() => { setRefreshing(true); load(); }} />
         }
       >
+        <Bounded style={st.body}>
         {err && (
           <Card style={{ borderColor: t.alert }}>
             <Text style={{ color: t.alert, fontWeight: "700", marginBottom: 6 }}>CONNECTION</Text>
@@ -72,6 +73,7 @@ export default function Runs() {
         {open.map((l) => (
           <ListingCard key={l.id} listing={l} onClaim={(x) => { setTarget(x); setModalErr(null); }} />
         ))}
+        </Bounded>
       </ScrollView>
 
       <Modal visible={!!target} transparent animationType="slide" onRequestClose={() => setTarget(null)}>
@@ -119,8 +121,10 @@ export default function Runs() {
 }
 
 const st = StyleSheet.create({
+  scroll: { flexGrow: 1 },
+  body: { padding: 16, paddingBottom: 32 },
   backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.5)" },
-  sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, padding: 20, paddingBottom: 36 },
+  sheet: { width: "100%", maxWidth: 520, alignSelf: "center", borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, padding: 20, paddingBottom: 36 },
   sheetTitle: { fontSize: 18, fontWeight: "800", textTransform: "capitalize" },
   roleRow: { flexDirection: "row", gap: 10, marginBottom: 14 },
   roleChip: { flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 12, alignItems: "center" },

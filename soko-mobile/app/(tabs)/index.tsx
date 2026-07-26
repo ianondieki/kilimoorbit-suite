@@ -3,7 +3,7 @@ import { View, Text, ScrollView, RefreshControl, Pressable, StyleSheet } from "r
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
 import { useTheme } from "../../lib/theme-context";
-import { Header, Card, Button, Empty } from "../../components/ui";
+import { Header, Card, Button, Empty, Bounded } from "../../components/ui";
 import { ListingCard } from "../../components/ListingCard";
 import { getListings, deliverListing, type Listing, type ListingStatus } from "../../lib/api";
 
@@ -49,7 +49,7 @@ export default function Market() {
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]}>
       <Header title="Soko" subtitle="Community produce marketplace" />
 
-      <View style={st.filters}>
+      <Bounded style={st.filters}>
         {FILTERS.map((f) => {
           const active = filter === f;
           return (
@@ -67,15 +67,16 @@ export default function Market() {
             </Pressable>
           );
         })}
-      </View>
+      </Bounded>
 
       <ScrollView
-        contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+        contentContainerStyle={st.scroll}
         refreshControl={
           <RefreshControl refreshing={refreshing} tintColor={t.accent}
             onRefresh={() => { setRefreshing(true); load(filter); }} />
         }
       >
+        <Bounded style={st.body}>
         {err && (
           <Card style={{ borderColor: t.alert }}>
             <Text style={{ color: t.alert, fontWeight: "700", marginBottom: 6 }}>CONNECTION</Text>
@@ -89,6 +90,7 @@ export default function Market() {
         )}
 
         {listings.map((l) => <ListingCard key={l.id} listing={l} onDeliver={markDelivered} />)}
+        </Bounded>
       </ScrollView>
     </SafeAreaView>
   );
@@ -97,4 +99,6 @@ export default function Market() {
 const st = StyleSheet.create({
   filters: { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingVertical: 10 },
   chip: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6 },
+  scroll: { flexGrow: 1 },
+  body: { padding: 16, paddingBottom: 32 },
 });

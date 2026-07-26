@@ -10,6 +10,7 @@ import Ticker from "../../components/Ticker";
 import Sidebar from "../../components/Sidebar";
 import FAB from "../../components/FAB";
 import Pill from "../../components/Pill";
+import { Bounded } from "../../components/Bounded";
 import { Enter, PressScale, CountUp, Skeleton, LevelBar } from "../../components/Motion";
 import { useTheme } from "../../lib/theme-context";
 import {
@@ -96,9 +97,10 @@ export default function Dashboard() {
       <Header engine={engine} onMenu={() => setMenu(true)} />
       <Ticker items={ticker} />
       <ScrollView
-        contentContainerStyle={st.body}
+        contentContainerStyle={st.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={t.accent} />}
       >
+        <Bounded style={st.body}>
         {loading && (
           <View style={[st.card, { backgroundColor: t.panel, borderColor: t.line }]}>
             <Skeleton height={10} width={120} color={t.raised} />
@@ -265,6 +267,7 @@ export default function Dashboard() {
           </View>
           </Enter>
         )}
+        </Bounded>
       </ScrollView>
 
       <FAB
@@ -290,6 +293,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 const st = StyleSheet.create({
+  scroll: { flexGrow: 1 },
   body: { padding: 14, gap: 14 },
   card: { borderWidth: 1, borderRadius: 14, padding: 16 },
   cardHead: { fontFamily: "monospace", fontSize: 11, fontWeight: "700", letterSpacing: 2, marginBottom: 10 },
