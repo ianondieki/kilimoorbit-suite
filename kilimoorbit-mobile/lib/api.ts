@@ -65,8 +65,11 @@ const post = <T,>(path: string, body: unknown, timeoutMs?: number) =>
   }, timeoutMs);
 
 export const getMeta = () => request<Meta>("/api/meta");
-export const callApex = <T = any>(payload: unknown) =>
-  post<{ result: T; latency_ms: number; engine: string }>("/api/apex", { payload });
+// A LIVE Gemini apex call (esp. the structured arbitrage compile) can take
+// 20s+, and the server's own cap is 30s — so the client must wait longer than
+// that. MOCK returns instantly, so this only matters live.
+export const callApex = <T = any>(payload: unknown, timeoutMs = 45000) =>
+  post<{ result: T; latency_ms: number; engine: string }>("/api/apex", { payload }, timeoutMs);
 export const runAutopilot = () =>
   // LIVE mode chains several Gemini calls, so give Autopilot a longer window.
   post<{ engine: string; steps: AutopilotStep[]; brief?: any }>("/api/autopilot", {}, 60000);
