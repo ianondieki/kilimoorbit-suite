@@ -127,7 +127,7 @@ export default function Dashboard() {
           <View style={[st.card, { backgroundColor: t.panel, borderColor: t.alert }]}>
             <Text style={[st.cardHead, { color: t.alert }]}>CONNECTION</Text>
             <Text style={{ color: t.ink }}>{err}</Text>
-            <PressScale onPress={load} style={[st.btn, { backgroundColor: t.accent, marginTop: 12 }]}>
+            <PressScale onPress={load} accessibilityLabel="Retry connection" style={[st.btn, { backgroundColor: t.accent, marginTop: 12 }]}>
               <Text style={{ color: t.bg, fontWeight: "700" }}>Retry</Text>
             </PressScale>
           </View>
@@ -271,7 +271,7 @@ export default function Dashboard() {
               </View>
               <Pill label="IN TRANSIT" tone="warn" />
             </View>
-            <PressScale onPress={() => router.push("/autopilot")} style={[st.btn, { borderColor: t.accent, borderWidth: 1, marginTop: 12 }]}>
+            <PressScale onPress={() => router.push("/autopilot")} accessibilityLabel="Open Autopilot for disruption replanning" style={[st.btn, { borderColor: t.accent, borderWidth: 1, marginTop: 12 }]}>
               <Text style={{ color: t.accent, fontWeight: "700" }}>Open Autopilot for disruption replanning</Text>
             </PressScale>
           </View>

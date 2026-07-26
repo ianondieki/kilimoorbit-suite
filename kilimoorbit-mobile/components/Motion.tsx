@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Pressable, View, ViewStyle, StyleProp, Text, TextStyle } from "react-native";
+import { Platform, Pressable, View, ViewStyle, StyleProp, Text, TextStyle } from "react-native";
 import Animated, {
   FadeInDown, FadeInUp, useSharedValue, useAnimatedStyle,
   withSpring, withRepeat, withTiming, Easing,
@@ -37,7 +37,9 @@ export function PressScale({
     <Pressable
       onPress={onPress}
       disabled={disabled}
+      accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      style={Platform.OS === "web" ? { cursor: "pointer" } : undefined}
       onPressIn={() => { s.value = withSpring(scaleTo, { damping: 18, stiffness: 320 }); }}
       onPressOut={() => { s.value = withSpring(1, { damping: 14, stiffness: 220 }); }}
     >

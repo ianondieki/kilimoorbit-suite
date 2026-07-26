@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Animated, Easing, Pressable, AccessibilityInfo,
+  Animated, Easing, Platform, Pressable, AccessibilityInfo,
   type StyleProp, type ViewStyle, type TextStyle,
 } from "react-native";
 import { Text } from "react-native";
@@ -72,6 +72,9 @@ export function PressScale({
       accessibilityRole={accessibilityRole ?? "button"}
       onPressIn={() => to(scaleTo)}
       onPressOut={() => to(1)}
+      style={
+        Platform.OS === "web" && !disabled ? ({ cursor: "pointer" } as ViewStyle) : undefined
+      }
     >
       <Animated.View style={[style, { transform: [{ scale: s }] }]}>{children}</Animated.View>
     </Pressable>

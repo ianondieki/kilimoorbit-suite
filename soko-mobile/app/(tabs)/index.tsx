@@ -3,7 +3,7 @@ import { View, Text, ScrollView, RefreshControl, Pressable, StyleSheet } from "r
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
 import { useTheme } from "../../lib/theme-context";
-import { Header, Card, Button, Empty, Bounded } from "../../components/ui";
+import { Header, Card, Button, Empty, Bounded, webPointer, type PressState } from "../../components/ui";
 import { ListingCard } from "../../components/ListingCard";
 import { getListings, deliverListing, type Listing, type ListingStatus } from "../../lib/api";
 
@@ -56,10 +56,21 @@ export default function Market() {
             <Pressable
               key={f}
               onPress={() => setFilter(f)}
-              style={[
-                st.chip,
-                { borderColor: active ? t.accent : t.line, backgroundColor: active ? t.raised : "transparent" },
-              ]}
+              accessibilityRole="button"
+              accessibilityLabel={f === "all" ? "Show all listings" : `Show ${f} listings`}
+              accessibilityState={{ selected: active }}
+              hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
+              style={(state) => {
+                const { hovered } = state as PressState;
+                return [
+                  st.chip,
+                  {
+                    borderColor: active || hovered ? t.accent : t.line,
+                    backgroundColor: active || hovered ? t.raised : "transparent",
+                  },
+                  webPointer,
+                ];
+              }}
             >
               <Text style={{ color: active ? t.accent : t.dim, fontSize: 12, fontWeight: "700", textTransform: "capitalize" }}>
                 {f}

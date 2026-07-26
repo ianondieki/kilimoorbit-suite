@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, Pressable, Animated, Easing, AccessibilityInfo, StyleSheet } from "react-native";
+import { View, Text, Pressable, Animated, Easing, AccessibilityInfo, StyleSheet, Platform } from "react-native";
 import { useTheme } from "../lib/theme-context";
+
+// RN core types only expose `pressed`; react-native-web also provides `hovered`.
+type PressState = { pressed: boolean; hovered?: boolean };
 
 export default function Header({
   engine, onMenu,
@@ -40,7 +43,16 @@ export default function Header({
 
   return (
     <View style={[s.row, { borderBottomColor: t.line, backgroundColor: t.bg }]}>
-      <Pressable onPress={onMenu} hitSlop={12} accessibilityLabel="Menu" accessibilityRole="button">
+      <Pressable
+        onPress={onMenu}
+        hitSlop={12}
+        accessibilityLabel="Open menu"
+        accessibilityRole="button"
+        style={({ pressed, hovered }: PressState) => [
+          Platform.OS === "web" && { cursor: "pointer" as const },
+          (hovered || pressed) && { opacity: 0.7 },
+        ]}
+      >
         <Text style={[s.burger, { color: t.ink }]}>☰</Text>
       </Pressable>
       <Text style={[s.brand, { color: t.ink }]}>

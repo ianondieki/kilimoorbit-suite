@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, Pressable, Text, View, Modal, StyleSheet } from "react-native";
+import { Animated, Pressable, Text, View, Modal, StyleSheet, Platform } from "react-native";
 import { useTheme } from "../lib/theme-context";
+
+// RN core types only expose `pressed`; react-native-web also provides `hovered`.
+type PressState = { pressed: boolean; hovered?: boolean };
 
 /** Apex §4.1 pulsing FAB → quick-action modal. */
 export default function FAB({ actions }: { actions: { label: string; onPress: () => void }[] }) {
@@ -23,17 +26,37 @@ export default function FAB({ actions }: { actions: { label: string; onPress: ()
   return (
     <>
       <Animated.View style={[s.fab, { backgroundColor: t.accent, transform: [{ scale }] }]}>
-        <Pressable onPress={() => setOpen(true)} hitSlop={8} accessibilityLabel="Quick actions">
+        <Pressable
+          onPress={() => setOpen(true)}
+          hitSlop={10}
+          accessibilityLabel="Open quick actions"
+          accessibilityRole="button"
+          style={({ pressed, hovered }: PressState) => [
+            Platform.OS === "web" && { cursor: "pointer" as const },
+            (hovered || pressed) && { opacity: 0.8 },
+          ]}
+        >
           <Text style={[s.plus, { color: t.bg }]}>＋</Text>
         </Pressable>
       </Animated.View>
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable style={s.scrim} onPress={() => setOpen(false)}>
+        <Pressable
+          style={s.scrim}
+          onPress={() => setOpen(false)}
+          accessibilityRole="button"
+          accessibilityLabel="Close quick actions"
+        >
           <View style={[s.sheet, { backgroundColor: t.panel, borderColor: t.line }]}>
             <Text style={[s.head, { color: t.dim }]}>QUICK ACTIONS</Text>
             {actions.map((a) => (
               <Pressable key={a.label} onPress={() => { setOpen(false); a.onPress(); }}
-                style={({ pressed }) => [s.action, { borderColor: t.line, opacity: pressed ? 0.6 : 1 }]}>
+                accessibilityRole="button"
+                accessibilityLabel={a.label}
+                style={({ pressed, hovered }: PressState) => [
+                  s.action,
+                  { borderColor: hovered ? t.accent : t.line, opacity: pressed ? 0.6 : 1 },
+                  Platform.OS === "web" && { cursor: "pointer" as const },
+                ]}>
                 <Text style={{ color: t.ink, fontSize: 15 }}>{a.label}</Text>
               </Pressable>
             ))}

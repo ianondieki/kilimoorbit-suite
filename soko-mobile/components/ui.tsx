@@ -1,7 +1,18 @@
 import React, { useRef } from "react";
-import { View, Text, Pressable, TextInput, StyleSheet, Animated, ViewStyle } from "react-native";
+import { View, Text, Pressable, TextInput, StyleSheet, Animated, Platform, ViewStyle } from "react-native";
 import { useTheme, useThemeControls } from "../lib/theme-context";
 import type { Theme } from "../lib/themes";
+
+/**
+ * react-native-web exposes `hovered` in the Pressable style callback, but the
+ * core RN types only declare `pressed` — this widens the callback state so we
+ * can read it without `any`. `hovered` is simply undefined on native.
+ */
+export type PressState = { pressed: boolean; hovered?: boolean };
+
+/** Web-only pointer cursor for interactive elements (empty no-op on native). */
+export const webPointer: ViewStyle =
+  Platform.OS === "web" ? ({ cursor: "pointer" } as ViewStyle) : {};
 
 /** App header: title + a tap-to-cycle theme chip (mirrors the Sentinel app's themes). */
 export function Header({ title, subtitle }: { title: string; subtitle?: string }) {
@@ -15,7 +26,20 @@ export function Header({ title, subtitle }: { title: string; subtitle?: string }
         </Text>
         {subtitle ? <Text style={[s.sub, { color: t.dim }]}>{subtitle}</Text> : null}
       </View>
-      <Pressable onPress={cycle} style={[s.themeChip, { borderColor: t.line, backgroundColor: t.raised }]}>
+      <Pressable
+        onPress={cycle}
+        accessibilityRole="button"
+        accessibilityLabel={`Switch theme, currently ${theme.name}`}
+        hitSlop={10}
+        style={(state) => {
+          const { hovered } = state as PressState;
+          return [
+            s.themeChip,
+            { borderColor: hovered ? t.accent : t.line, backgroundColor: t.raised },
+            webPointer,
+          ];
+        }}
+      >
         <Text style={{ color: t.accent, fontSize: 11, fontWeight: "700" }}>◐ {theme.name}</Text>
       </Pressable>
     </View>
@@ -67,10 +91,14 @@ export function Button({
       accessibilityLabel={label}
       onPressIn={() => !disabled && spring(0.97)}
       onPressOut={() => spring(1)}
-      style={({ pressed }) => [
-        s.btn,
-        { backgroundColor: c, opacity: disabled ? 0.45 : pressed ? 0.9 : 1 },
-      ]}
+      style={(state) => {
+        const { pressed, hovered } = state as PressState;
+        return [
+          s.btn,
+          { backgroundColor: c, opacity: disabled ? 0.45 : pressed ? 0.9 : hovered ? 0.92 : 1 },
+          Platform.OS === "web" && !disabled ? webPointer : null,
+        ];
+      }}
     >
       <Animated.View style={{ transform: [{ scale }] }}>
         <Text style={{ color: t.bg, fontWeight: "800", letterSpacing: 0.3 }}>{label}</Text>

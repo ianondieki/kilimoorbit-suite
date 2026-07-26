@@ -31,6 +31,10 @@ const QUICK = [
   "How do I change my notification settings?",
 ];
 
+// RN core types only expose `pressed`; react-native-web also provides `hovered`.
+type PressState = { pressed: boolean; hovered?: boolean };
+const webCursor = Platform.OS === "web" ? ({ cursor: "pointer" } as const) : null;
+
 export default function Chat() {
   const t = useTheme();
   const [msgs, setMsgs] = useState<Msg[]>([WELCOME]);
@@ -137,13 +141,23 @@ export default function Chat() {
       <View style={[s.top, { borderBottomColor: t.line }]}>
         <Text style={[s.title, { color: t.ink }]}>APEX <Text style={{ color: t.accent }}>CHAT</Text></Text>
         <View style={s.voiceRow}>
-          <Pressable onPress={clearChat} hitSlop={10} accessibilityLabel="Clear conversation">
+          <Pressable
+            onPress={clearChat}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Clear conversation"
+            style={({ pressed, hovered }: PressState) => [
+              webCursor,
+              (hovered || pressed) && { opacity: 0.7 },
+            ]}
+          >
             <Text style={{ color: t.dim, fontSize: 17 }}>↺</Text>
           </Pressable>
           <Text style={{ color: t.dim, fontFamily: "monospace", fontSize: 10 }}>VOICE</Text>
           <Switch
             value={voice}
             onValueChange={toggleVoice}
+            accessibilityLabel="Read replies aloud"
             trackColor={{ true: t.accent, false: t.line }}
             thumbColor={t.panel}
           />
@@ -170,7 +184,16 @@ export default function Chat() {
               {item.from === "apex" && (
                 <View style={s.metaRow}>
                   {item.intent ? <Pill label={item.intent.toUpperCase()} tone="warn" /> : null}
-                  <Pressable onPress={() => speak(item.text)} hitSlop={8}>
+                  <Pressable
+                    onPress={() => speak(item.text)}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel="Speak this reply aloud"
+                    style={({ pressed, hovered }: PressState) => [
+                      webCursor,
+                      (hovered || pressed) && { opacity: 0.7 },
+                    ]}
+                  >
                     <Text style={{ color: t.dim, fontSize: 12 }}>🔊 speak</Text>
                   </Pressable>
                 </View>
@@ -189,7 +212,18 @@ export default function Chat() {
 
         <Bounded style={s.quickRow}>
           {QUICK.map((q) => (
-            <Pressable key={q} onPress={() => send(q)} style={[s.quick, { borderColor: t.line }]}>
+            <Pressable
+              key={q}
+              onPress={() => send(q)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={`Ask: ${q}`}
+              style={({ pressed, hovered }: PressState) => [
+                s.quick,
+                { borderColor: hovered ? t.accent : t.line, opacity: pressed ? 0.6 : 1 },
+                webCursor,
+              ]}
+            >
               <Text style={{ color: t.dim, fontSize: 11 }} numberOfLines={1}>{q}</Text>
             </Pressable>
           ))}
@@ -207,7 +241,7 @@ export default function Chat() {
             returnKeyType="send"
             editable={!busy}
           />
-          <PressScale onPress={() => send()} disabled={busy}
+          <PressScale onPress={() => send()} disabled={busy} accessibilityLabel="Send message"
             style={[s.send, { backgroundColor: t.accent, opacity: busy ? 0.5 : 1 }]}>
             <Text style={{ color: t.bg, fontWeight: "800" }}>{busy ? "…" : "Send"}</Text>
           </PressScale>

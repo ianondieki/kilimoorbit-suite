@@ -3,7 +3,7 @@ import { View, Text, ScrollView, RefreshControl, Pressable, StyleSheet, Modal } 
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
 import { useTheme } from "../../lib/theme-context";
-import { Header, Card, Button, Field, Empty, Bounded } from "../../components/ui";
+import { Header, Card, Button, Field, Empty, Bounded, webPointer, type PressState } from "../../components/ui";
 import { ListingCard } from "../../components/ListingCard";
 import { getListings, claimListing, type Listing } from "../../lib/api";
 
@@ -91,7 +91,20 @@ export default function Runs() {
                 const active = role === r;
                 return (
                   <Pressable key={r} onPress={() => setRole(r)}
-                    style={[st.roleChip, { borderColor: active ? t.accent : t.line, backgroundColor: active ? t.raised : "transparent" }]}>
+                    accessibilityRole="button"
+                    accessibilityLabel={r === "rider" ? "Claim this run as a rider" : "Claim this run as a buyer"}
+                    accessibilityState={{ selected: active }}
+                    style={(state) => {
+                      const { hovered } = state as PressState;
+                      return [
+                        st.roleChip,
+                        {
+                          borderColor: active || hovered ? t.accent : t.line,
+                          backgroundColor: active || hovered ? t.raised : "transparent",
+                        },
+                        webPointer,
+                      ];
+                    }}>
                     <Text style={{ color: active ? t.accent : t.dim, fontWeight: "700", textTransform: "capitalize" }}>
                       {r === "rider" ? "🛵 Rider" : "🧺 Buyer"}
                     </Text>

@@ -31,7 +31,7 @@ export default function Autopilot() {
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]}>
       <View style={[s.top, { borderBottomColor: t.line }]}>
         <Text style={[s.title, { color: t.ink }]}>SENTINEL <Text style={{ color: t.accent }}>AUTOPILOT</Text></Text>
-        <PressScale onPress={engage} disabled={busy} style={[s.engage, { backgroundColor: t.accent, opacity: busy ? 0.5 : 1 }]}>
+        <PressScale onPress={engage} disabled={busy} accessibilityLabel={busy ? "Autopilot running" : "Engage autopilot"} style={[s.engage, { backgroundColor: t.accent, opacity: busy ? 0.5 : 1 }]}>
           <Text style={{ color: t.bg, fontWeight: "800" }}>{busy ? "Running…" : "Engage"}</Text>
         </PressScale>
       </View>

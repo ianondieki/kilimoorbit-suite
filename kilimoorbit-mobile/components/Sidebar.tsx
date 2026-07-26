@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Modal, View, Text, TextInput, Pressable, StyleSheet } from "react-native";
+import { Modal, View, Text, TextInput, Pressable, StyleSheet, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useTheme, useThemeControls } from "../lib/theme-context";
 import { THEMES } from "../lib/themes";
@@ -8,6 +8,10 @@ import { signIn } from "../lib/api";
 type Profile = { name: string; email: string };
 const PROFILE_KEY = "ko-profile";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// RN core types only expose `pressed`; react-native-web also provides `hovered`.
+type PressState = { pressed: boolean; hovered?: boolean };
+const webCursor = Platform.OS === "web" ? ({ cursor: "pointer" } as const) : null;
 
 /** Apex §4.1 hamburger sidebar: Settings, Notification Profiles, Account, Themes. */
 export default function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -59,15 +63,29 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
   };
 
   const Item = ({ label }: { label: string }) => (
-    <Pressable onPress={onClose} style={({ pressed }) => [s.item, { borderBottomColor: t.line, opacity: pressed ? 0.6 : 1 }]}>
+    <Pressable
+      onPress={onClose}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed, hovered }: PressState) => [
+        s.item,
+        { borderBottomColor: t.line, opacity: pressed ? 0.6 : 1 },
+        hovered && { backgroundColor: t.raised },
+        webCursor,
+      ]}
+    >
       <Text style={{ color: t.ink, fontSize: 15 }}>{label}</Text>
     </Pressable>
   );
 
   return (
     <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={s.scrim} onPress={onClose}>
-        <Pressable style={[s.panel, { backgroundColor: t.panel, borderRightColor: t.line }]} onPress={() => {}}>
+      <Pressable style={s.scrim} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close menu">
+        <Pressable
+          style={[s.panel, { backgroundColor: t.panel, borderRightColor: t.line }]}
+          onPress={() => {}}
+          accessible={false}
+        >
           <Text style={[s.head, { color: t.dim }]}>KILIMOORBIT MENU</Text>
           <Item label="⚙  Settings" />
           <Item label="🔔  Notification Profiles" />
@@ -76,7 +94,16 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
           <View style={s.swatches}>
             {THEMES.map((th) => (
               <Pressable key={th.key} onPress={() => setThemeKey(th.key)}
-                style={[s.swatch, { backgroundColor: th.bg, borderColor: th.accent }]}>
+                accessibilityRole="button"
+                accessibilityLabel={`Switch to ${th.name} theme`}
+                accessibilityState={{ selected: t.key === th.key }}
+                hitSlop={4}
+                style={({ pressed, hovered }: PressState) => [
+                  s.swatch,
+                  { backgroundColor: th.bg, borderColor: th.accent },
+                  (hovered || pressed) && { opacity: 0.85 },
+                  webCursor,
+                ]}>
                 <Text style={{ color: th.accent, fontSize: 11, fontWeight: "700" }}>{th.name}</Text>
               </Pressable>
             ))}
@@ -88,7 +115,13 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
               <Text style={{ color: t.ink, fontWeight: "700" }}>{profile.name}</Text>
               <Text style={{ color: t.dim, fontSize: 12, marginBottom: 10 }}>{profile.email}</Text>
               <Pressable onPress={signOut}
-                style={({ pressed }) => [s.btn, { borderColor: t.line, opacity: pressed ? 0.6 : 1 }]}>
+                accessibilityRole="button"
+                accessibilityLabel="Sign out"
+                style={({ pressed, hovered }: PressState) => [
+                  s.btn,
+                  { borderColor: hovered ? t.accent : t.line, opacity: pressed ? 0.6 : 1 },
+                  webCursor,
+                ]}>
                 <Text style={{ color: t.ink, fontSize: 14 }}>↩  Sign Out</Text>
               </Pressable>
             </View>
@@ -106,7 +139,14 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
                 keyboardType="email-address" autoCapitalize="none" autoCorrect={false}
               />
               <Pressable onPress={doSignIn} disabled={busy}
-                style={({ pressed }) => [s.btn, { backgroundColor: t.accent, borderColor: t.accent, opacity: busy || pressed ? 0.6 : 1 }]}>
+                accessibilityRole="button"
+                accessibilityLabel={busy ? "Signing in" : "Sign in"}
+                accessibilityState={{ disabled: busy }}
+                style={({ pressed, hovered }: PressState) => [
+                  s.btn,
+                  { backgroundColor: t.accent, borderColor: t.accent, opacity: busy || pressed ? 0.6 : hovered ? 0.88 : 1 },
+                  webCursor,
+                ]}>
                 <Text style={{ color: t.bg, fontWeight: "700", fontSize: 14 }}>{busy ? "Signing in…" : "Sign In"}</Text>
               </Pressable>
             </View>
