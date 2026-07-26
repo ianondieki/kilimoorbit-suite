@@ -19,6 +19,18 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
 const app = express();
 app.use(express.json({ limit: "1mb" }));
+
+// Allow the Expo web/mobile clients (served from a different origin/port) to
+// call this API from the browser. Dependency-free, permissive by design — this
+// is a local demo server, not a credentialed API.
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+
 app.use(express.static(join(root, "public")));
 
 // Fixture files are static for the lifetime of the process — read each once,
