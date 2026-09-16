@@ -1,8 +1,12 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View, Text, TextInput, Pressable, FlatList, StyleSheet, KeyboardAvoidingView, Platform, Switch,
 } from "react-native";
+import { webLang } from "../../lib/ui";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from "expo-router";
+import { refreshVoicePref, useVoicePref } from "../../lib/voice";
+import { MenuButton } from "../../components/Header";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Speech from "expo-speech";
 import Pill from "../../components/Pill";
@@ -40,7 +44,8 @@ export default function Chat() {
   const [msgs, setMsgs] = useState<Msg[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [voice, setVoice] = useState(true);
+  // Shared with the sidebar switch (lib/voice.ts): one value, always in sync.
+  const [voice, setVoicePref] = useVoicePref();
   const list = useRef<FlatList>(null);
   const market = useRef<any>(null);
   const hydrated = useRef(false);
@@ -61,9 +66,6 @@ export default function Chat() {
       })
       .catch(() => {})
       .finally(() => { hydrated.current = true; });
-    AsyncStorage.getItem("ko-voice")
-      .then((v) => { if (v != null) setVoice(v === "1"); })
-      .catch(() => {});
     getMeta()
       .then((m) => {
         market.current =
@@ -72,17 +74,20 @@ export default function Chat() {
       .catch(() => {});
   }, []);
 
+  // Re-read the stored voice preference on every focus (the shared store
+  // already keeps the sidebar and this screen in sync while mounted).
+  useFocusEffect(useCallback(() => { refreshVoicePref(); }, []));
+
+  // Turning read-aloud off anywhere (e.g. from the sidebar) stops speech now.
+  useEffect(() => { if (!voice) Speech.stop(); }, [voice]);
+
   // Persist the conversation so it survives app restarts (capped at 50 turns).
   useEffect(() => {
     if (!hydrated.current) return;
     AsyncStorage.setItem(CHAT_LOG_KEY, JSON.stringify(msgs.slice(-50))).catch(() => {});
   }, [msgs]);
 
-  const toggleVoice = (v: boolean) => {
-    setVoice(v);
-    if (!v) Speech.stop();
-    AsyncStorage.setItem("ko-voice", v ? "1" : "0").catch(() => {});
-  };
+  const toggleVoice = (v: boolean) => setVoicePref(v);
 
   const clearChat = () => {
     Speech.stop();
@@ -137,9 +142,12 @@ export default function Chat() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]} {...webLang("en")}>
       <View style={[s.top, { borderBottomColor: t.line }]}>
-        <Text style={[s.title, { color: t.ink }]}>APEX <Text style={{ color: t.accent }}>CHAT</Text></Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+          <MenuButton style={{ marginLeft: -12, marginVertical: -8 }} />
+          <Text style={[s.title, { color: t.ink }]}>APEX <Text style={{ color: t.accent }}>CHAT</Text></Text>
+        </View>
         <View style={s.voiceRow}>
           <Pressable
             onPress={clearChat}
@@ -253,7 +261,8 @@ export default function Chat() {
 }
 
 const s = StyleSheet.create({
-  top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
+  // minHeight 56 matches the dashboard Header and the docked sidebar head row.
+  top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 8, minHeight: 56, borderBottomWidth: 1 },
   title: { fontSize: 14, fontWeight: "800", letterSpacing: 2 },
   voiceRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   chatContent: { padding: 14, gap: 10, width: "100%", maxWidth: CONTENT_MAX_W, alignSelf: "center" },

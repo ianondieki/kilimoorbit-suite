@@ -1,14 +1,45 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, Pressable, Animated, Easing, AccessibilityInfo, StyleSheet, Platform } from "react-native";
+import { View, Text, Pressable, Animated, Easing, AccessibilityInfo, StyleSheet, type StyleProp, type ViewStyle } from "react-native";
 import { useTheme } from "../lib/theme-context";
+import { useLang } from "../lib/session";
+import { focusRing, webCursor, webLang, type PressState } from "../lib/ui";
+import { useMenu } from "./MenuContext";
+import { MenuGlyph } from "./Glyphs";
 
-// RN core types only expose `pressed`; react-native-web also provides `hovered`.
-type PressState = { pressed: boolean; hovered?: boolean };
-
-export default function Header({
-  engine, onMenu,
-}: { engine: "LIVE" | "MOCK" | "OFFLINE"; onMenu: () => void }) {
+/** 48x48 drawer opener for phone and medium widths (not rendered when docked). */
+export function MenuButton({ style }: { style?: StyleProp<ViewStyle> }) {
   const t = useTheme();
+  const { lang, t: tt } = useLang();
+  const { openMenu, isDocked } = useMenu();
+  if (isDocked) return null;
+  return (
+    <Pressable
+      onPress={openMenu}
+      {...webLang(lang)}
+      // Web: data-ko-menu-button, so the drawer can focus the new screen's
+      // menu button after it navigates (MenuContext closeMenu "screen").
+      {...({ dataSet: { koMenuButton: "1" } } as any)}
+      accessibilityRole="button"
+      accessibilityLabel={tt("menu.open")}
+      style={({ pressed, hovered, focused }: PressState) => [
+        { width: 48, height: 48, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+        (hovered || pressed) && { backgroundColor: t.raised },
+        webCursor,
+        focusRing(focused, t.accent),
+        style,
+      ]}
+    >
+      <MenuGlyph size={22} color={t.ink} />
+    </Pressable>
+  );
+}
+
+export default function Header({ engine }: { engine: "LIVE" | "MOCK" | "OFFLINE" }) {
+  const t = useTheme();
+  const { lang, t: tt } = useLang();
+  // Docked: the sidebar beside this header already shows the wordmark, so the
+  // header names the page instead of repeating the brand.
+  const { isDocked } = useMenu();
   const dot = engine === "LIVE" ? t.ok : engine === "MOCK" ? t.accent : t.alert;
   const online = engine === "LIVE" || engine === "MOCK";
 
@@ -43,21 +74,14 @@ export default function Header({
 
   return (
     <View style={[s.row, { borderBottomColor: t.line, backgroundColor: t.bg }]}>
-      <Pressable
-        onPress={onMenu}
-        hitSlop={12}
-        accessibilityLabel="Open menu"
-        accessibilityRole="button"
-        style={({ pressed, hovered }: PressState) => [
-          Platform.OS === "web" && { cursor: "pointer" as const },
-          (hovered || pressed) && { opacity: 0.7 },
-        ]}
-      >
-        <Text style={[s.burger, { color: t.ink }]}>☰</Text>
-      </Pressable>
-      <Text style={[s.brand, { color: t.ink }]}>
-        KILIMO<Text style={{ color: t.accent }}>ORBIT</Text> SENTINEL
-      </Text>
+      <MenuButton style={{ marginLeft: -12, marginVertical: -8 }} />
+      {isDocked ? (
+        <Text accessibilityRole="header" {...webLang(lang)} style={[s.brand, { color: t.ink }]}>{tt("nav.dashboard").toUpperCase()}</Text>
+      ) : (
+        <Text style={[s.brand, { color: t.ink }]}>
+          KILIMO<Text style={{ color: t.accent }}>ORBIT</Text> SENTINEL
+        </Text>
+      )}
       <View style={s.status}>
         <View style={s.dotWrap}>
           {online && !reduced && (
@@ -75,8 +99,8 @@ export default function Header({
   );
 }
 const s = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, gap: 14 },
-  burger: { fontSize: 22, fontWeight: "700" },
+  // minHeight 56 (border included) lines up with the docked sidebar head row.
+  row: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 8, minHeight: 56, borderBottomWidth: 1, gap: 14 },
   brand: { flex: 1, fontSize: 14, fontWeight: "800", letterSpacing: 2 },
   status: { flexDirection: "row", alignItems: "center", gap: 6 },
   dotWrap: { width: 8, height: 8, alignItems: "center", justifyContent: "center" },

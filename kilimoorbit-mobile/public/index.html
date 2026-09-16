@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<!-- Web shell for the single-page build (Expo CLI uses public/index.html as its
+     template). lang is "sw" because Kiswahili is the default language, and the
+     page is painted in the farmer's theme before the bundle arrives, so a slow
+     rural download shows the app's own background instead of a white page. -->
+<html lang="sw">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <meta name="theme-color" content="#101B12" />
+    <title>%WEB_TITLE%</title>
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+      /* Loam (the default theme) until the saved theme is read below. */
+      html,
+      body,
+      #root {
+        background-color: #101B12;
+      }
+    </style>
+    <script>
+      // Paint the saved theme and language first. Values come from the app's
+      // own storage (AsyncStorage on web is localStorage). Colours are the
+      // existing theme backgrounds in lib/themes.ts; keep them in sync.
+      (function () {
+        try {
+          var bg = { loam: "#101B12", nyota: "#0B1020", savanna: "#EFE6D3" }[localStorage.getItem("ko-theme")];
+          if (bg) {
+            var s = document.createElement("style");
+            s.textContent = "html,body,#root{background-color:" + bg + "}";
+            document.head.appendChild(s);
+            var m = document.querySelector('meta[name="theme-color"]');
+            if (m) m.setAttribute("content", bg);
+          }
+          if (localStorage.getItem("ko-lang") === "en") document.documentElement.lang = "en";
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+
+  <body>
+    <!-- Use static rendering with Expo Router to support running without JavaScript. -->
+    <noscript>
+      You need to enable JavaScript to run this app.
+    </noscript>
+    <!-- The root element for your Expo app. -->
+    <div id="root"></div>
+  </body>
+</html>

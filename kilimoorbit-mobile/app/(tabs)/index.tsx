@@ -2,17 +2,19 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View, Text, ScrollView, RefreshControl, StyleSheet, Pressable,
 } from "react-native";
+import { webLang } from "../../lib/ui";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Header from "../../components/Header";
 import Ticker from "../../components/Ticker";
-import Sidebar from "../../components/Sidebar";
 import FAB from "../../components/FAB";
 import Pill from "../../components/Pill";
 import { Bounded } from "../../components/Bounded";
 import { Enter, PressScale, CountUp, Skeleton, LevelBar, Thinking } from "../../components/Motion";
 import { useTheme } from "../../lib/theme-context";
+import { SAFE_EMOJI } from "../../lib/prices";
+import { CropCoin } from "../../components/ShambaPanel";
 import {
   getMeta, callApex, fmtKES, type Meta, type ArbitrageResult, type ApexError,
 } from "../../lib/api";
@@ -29,7 +31,6 @@ export default function Dashboard() {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [menu, setMenu] = useState(false);
 
   const load = useCallback(async () => {
     setErr(null);
@@ -78,7 +79,8 @@ export default function Dashboard() {
     const items: string[] = [];
     for (const cF of meta?.commodity_feed?.commodities ?? []) {
       const best = [...cF.quotes].sort((a, b) => b.price - a.price)[0];
-      items.push(`${cF.emoji} ${cF.crop.toUpperCase()} ${best.market} KES ${best.price}/kg ${best.delta >= 0 ? "▲" : "▼"}${Math.abs(best.delta)}`);
+      // Only emoji every phone can draw (the feed's newer ones, e.g. beans, show as boxes).
+      items.push(`${SAFE_EMOJI[cF.crop] ? SAFE_EMOJI[cF.crop] + " " : ""}${cF.crop.toUpperCase()} ${best.market} KES ${best.price}/kg ${best.delta >= 0 ? "▲" : "▼"}${Math.abs(best.delta)}`);
     }
     if (arb?.cargo_optimized_route.logistics_risk_flag !== "CLEAR" && arb)
       items.push(`⚠ ${arb.cargo_optimized_route.logistics_risk_flag} ON OPTIMAL CORRIDOR`);
@@ -93,8 +95,8 @@ export default function Dashboard() {
     lvl === "Low" ? "ok" : lvl === "Medium" ? "warn" : "bad";
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]}>
-      <Header engine={engine} onMenu={() => setMenu(true)} />
+    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]} {...webLang("en")}>
+      <Header engine={engine} />
       <Ticker items={ticker} />
       <ScrollView
         contentContainerStyle={st.scroll}
@@ -231,7 +233,7 @@ export default function Dashboard() {
                   const up = best.delta >= 0;
                   return (
                     <View key={cm.crop} style={[st.marketRow, { borderBottomColor: t.line }]}>
-                      <Text style={{ fontSize: 17, marginRight: 8 }}>{cm.emoji}</Text>
+                      <CropCoin cropKey={cm.crop} size={28} letters={cm.crop.slice(0, 2).toUpperCase()} />
                       <View style={{ flex: 1 }}>
                         <Text style={{ color: t.ink, fontWeight: "600", textTransform: "capitalize" }}>{cm.crop}</Text>
                         <Text style={{ color: t.dim, fontSize: 11, fontFamily: "monospace" }}>
@@ -287,7 +289,6 @@ export default function Dashboard() {
           { label: "🔄  Refresh telemetry", onPress: load },
         ]}
       />
-      <Sidebar open={menu} onClose={() => setMenu(false)} />
     </SafeAreaView>
   );
 }

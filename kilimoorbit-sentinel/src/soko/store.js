@@ -6,14 +6,15 @@
  * Reads return deep clones so callers can't corrupt the in-memory shape, and
  * every mutation is written through to disk so listings survive a restart.
  */
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const dataDir = join(here, "..", "..", "data");
-const storePath = join(dataDir, "soko_store.json");
+// SOKO_STORE_PATH lets tests (and deployments with a mounted volume) relocate the file.
+const storePath = process.env.SOKO_STORE_PATH || join(here, "..", "..", "data", "soko_store.json");
+const dataDir = dirname(storePath);
 
 const EMPTY = { listings: [], claims: [] };
 
@@ -22,15 +23,22 @@ function read() {
   try {
     const db = JSON.parse(readFileSync(storePath, "utf8"));
     return { listings: db.listings ?? [], claims: db.claims ?? [] };
-  } catch {
-    // A corrupt file shouldn't take the whole API down — start clean.
+  } catch (err) {
+    // A corrupt file shouldn't take the whole API down — quarantine it (never
+    // silently overwrite a farmer's listings) and start clean.
+    const quarantine = `${storePath}.corrupt-${Date.now()}`;
+    try { renameSync(storePath, quarantine); } catch {}
+    console.error(`[soko] store unreadable (${err?.message}); moved to ${quarantine}`);
     return structuredClone(EMPTY);
   }
 }
 
 function write(db) {
   if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
-  writeFileSync(storePath, JSON.stringify(db, null, 2));
+  // Write-then-rename so a crash mid-write can never leave a truncated store.
+  const tmp = `${storePath}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify(db, null, 2));
+  renameSync(tmp, storePath);
 }
 
 /** Throwable validation error the router maps to a 400. */
@@ -39,6 +47,22 @@ export class ValidationError extends Error {
     super(message);
     this.name = "ValidationError";
     this.fields = fields;
+  }
+}
+
+/** Thrown when the caller lacks the owner token — the router maps it to a 403. */
+export class ForbiddenError extends ValidationError {
+  constructor(message) {
+    super(message, ["owner_token"]);
+    this.name = "ForbiddenError";
+  }
+}
+
+/** Thrown when a listing id does not exist — the router maps it to a 404. */
+export class NotFoundError extends ValidationError {
+  constructor() {
+    super("No listing with that id.", ["listing_id"]);
+    this.name = "NotFoundError";
   }
 }
 
@@ -56,7 +80,9 @@ export function suggestPrice(crop, commodities = []) {
   if (!match || !Array.isArray(match.quotes) || match.quotes.length === 0)
     return { crop: str(crop), found: false, fair_price_per_kg: null, markets: [] };
 
-  const quotes = match.quotes.filter((q) => isNum(q.price));
+  const quotes = match.quotes.filter((q) => q && isNum(q.price));
+  if (quotes.length === 0)
+    return { crop: str(crop), found: false, fair_price_per_kg: null, markets: [] };
   const avg = quotes.reduce((s, q) => s + q.price, 0) / quotes.length;
   const best = quotes.reduce((a, b) => (b.price > a.price ? b : a));
   return {
@@ -82,17 +108,19 @@ export function createListing(input = {}, commodities = []) {
   const ask_per_kg = Number(input.ask_per_kg);
 
   const bad = [];
-  if (!farmer_name) bad.push("farmer_name");
-  if (!crop) bad.push("crop");
-  if (!county) bad.push("county");
+  if (!farmer_name || farmer_name.length > 80) bad.push("farmer_name");
+  if (!crop || crop.length > 40) bad.push("crop");
+  if (!county || county.length > 40) bad.push("county");
   if (!isNum(qty_kg) || qty_kg <= 0 || qty_kg > 100000) bad.push("qty_kg");
   if (!isNum(ask_per_kg) || ask_per_kg <= 0 || ask_per_kg > 100000) bad.push("ask_per_kg");
   if (bad.length)
     throw new ValidationError("A listing needs farmer_name, crop, county, a positive qty_kg and ask_per_kg.", bad);
 
   const price = suggestPrice(crop, commodities);
+  const owner_token = randomUUID();
   const listing = {
     id: randomUUID(),
+    owner_token,
     farmer_name,
     crop,
     county,
@@ -107,22 +135,42 @@ export function createListing(input = {}, commodities = []) {
   const db = read();
   db.listings.unshift(listing);
   write(db);
-  return listing;
+  return listing; // includes owner_token — the ONLY time it is returned
 }
 
+/** Strip the private owner token before a listing leaves the store. */
+export const publicListing = (l) => {
+  if (!l) return l;
+  const { owner_token, ...rest } = l;
+  return rest;
+};
+
 /** List listings, newest first, optionally filtered by status/crop/county. */
-export function listListings({ status, crop, county } = {}) {
+export function listListings({ status, crop, county, limit } = {}) {
   const db = read();
-  return db.listings.filter((l) => {
+  const rows = db.listings.map(publicListing).filter((l) => {
     if (status && l.status !== str(status).toLowerCase()) return false;
     if (crop && str(l.crop).toLowerCase() !== str(crop).toLowerCase()) return false;
     if (county && str(l.county).toLowerCase() !== str(county).toLowerCase()) return false;
     return true;
   });
+  const n = Number(limit);
+  return Number.isFinite(n) && n > 0 ? rows.slice(0, Math.min(n, 500)) : rows.slice(0, 500);
+}
+
+/** Counts by status — a cheap traction metric for the dashboard / pitch. */
+export function stats() {
+  const db = read();
+  const out = { total: db.listings.length, open: 0, claimed: 0, delivered: 0, cancelled: 0, claims: db.claims.length, kg_listed: 0 };
+  for (const l of db.listings) {
+    if (Object.hasOwn(out, l.status) && typeof out[l.status] === "number") out[l.status]++;
+    out.kg_listed += Number(l.qty_kg) || 0;
+  }
+  return out;
 }
 
 export function getListing(id) {
-  return read().listings.find((l) => l.id === id) ?? null;
+  return publicListing(read().listings.find((l) => l.id === id)) ?? null;
 }
 
 /**
@@ -131,7 +179,7 @@ export function getListing(id) {
  * listing, or one already taken.
  */
 export function claimListing(id, input = {}) {
-  const claimer = str(input.claimer);
+  const claimer = str(input.claimer).slice(0, 80);
   const role = str(input.role).toLowerCase();
   const bad = [];
   if (!claimer) bad.push("claimer");
@@ -141,7 +189,7 @@ export function claimListing(id, input = {}) {
 
   const db = read();
   const listing = db.listings.find((l) => l.id === id);
-  if (!listing) throw new ValidationError("No listing with that id.", ["listing_id"]);
+  if (!listing) throw new NotFoundError();
   if (listing.status !== "open")
     throw new ValidationError(`Listing is already ${listing.status}.`, ["status"]);
 
@@ -155,7 +203,7 @@ export function claimListing(id, input = {}) {
   };
   db.claims.unshift(claim);
   write(db);
-  return { listing, claim };
+  return { listing: publicListing(listing), claim };
 }
 
 /**
@@ -165,7 +213,7 @@ export function claimListing(id, input = {}) {
 export function deliverListing(id) {
   const db = read();
   const listing = db.listings.find((l) => l.id === id);
-  if (!listing) throw new ValidationError("No listing with that id.", ["listing_id"]);
+  if (!listing) throw new NotFoundError();
   if (listing.status === "delivered")
     throw new ValidationError("Listing is already delivered.", ["status"]);
   if (listing.status !== "claimed")
@@ -174,7 +222,26 @@ export function deliverListing(id) {
   listing.status = "delivered";
   listing.delivered_at = new Date().toISOString();
   write(db);
-  return listing;
+  return publicListing(listing);
+}
+
+/**
+ * Cancel an open listing (farmer withdraws it). Claimed or delivered runs
+ * cannot be cancelled from here — that needs the rider to release the claim.
+ */
+export function cancelListing(id, input = {}) {
+  const db = read();
+  const listing = db.listings.find((l) => l.id === id);
+  if (!listing) throw new NotFoundError();
+  // Only the farmer who created the listing (holder of its owner_token) may withdraw it.
+  if (!listing.owner_token || str(input.owner_token) !== listing.owner_token)
+    throw new ForbiddenError("Only the listing owner can cancel it (owner_token required).");
+  if (listing.status !== "open")
+    throw new ValidationError(`Only an open listing can be cancelled (this one is ${listing.status}).`, ["status"]);
+  listing.status = "cancelled";
+  listing.cancelled_at = new Date().toISOString();
+  write(db);
+  return publicListing(listing);
 }
 
 /** Test/maintenance helper — wipe the store. */

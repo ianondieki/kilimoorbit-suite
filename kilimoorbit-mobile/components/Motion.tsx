@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from "react";
-import { Platform, Pressable, View, ViewStyle, StyleProp, Text, TextStyle } from "react-native";
+import {
+  Platform, Pressable, View, ViewStyle, StyleProp, Text, TextStyle,
+  type AccessibilityState, type AccessibilityRole,
+} from "react-native";
 import Animated, {
   FadeInDown, FadeInUp, useSharedValue, useAnimatedStyle,
-  withSpring, withRepeat, withTiming, Easing,
+  withSpring, withRepeat, withTiming, Easing, useReducedMotion, cancelAnimation, ReduceMotion,
 } from "react-native-reanimated";
+import { focusRing } from "../lib/ui";
 
 /* ── Staggered spring entrance (your F1-app signature) ── */
 export function Enter({
@@ -12,6 +16,9 @@ export function Enter({
   children: React.ReactNode; index?: number;
   from?: "down" | "up"; style?: StyleProp<ViewStyle>;
 }) {
+  // Reduced motion: render in place, no entering animation at all.
+  const reduce = useReducedMotion();
+  if (reduce) return <View style={style}>{children}</View>;
   const anim = (from === "down" ? FadeInDown : FadeInUp)
     .delay(index * 90)
     .springify()
@@ -27,21 +34,40 @@ export function Enter({
 /* ── Press micro-interaction: spring scale ── */
 export function PressScale({
   children, onPress, disabled, style, scaleTo = 0.96, accessibilityLabel,
+  accessibilityState, accessibilityHint, accessibilityRole = "button", focusColor, hoverOpacity,
+  pressableRef, outerStyle,
 }: {
   children: React.ReactNode; onPress?: () => void; disabled?: boolean;
   style?: StyleProp<ViewStyle>; scaleTo?: number; accessibilityLabel?: string;
+  accessibilityState?: AccessibilityState; accessibilityHint?: string;
+  accessibilityRole?: AccessibilityRole;
+  /** Web: visible keyboard-focus outline colour. */
+  focusColor?: string;
+  /** Web: opacity while hovered. */
+  hoverOpacity?: number;
+  pressableRef?: React.Ref<View>;
+  outerStyle?: StyleProp<ViewStyle>;
 }) {
   const s = useSharedValue(1);
   const a = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
+  const web = Platform.OS === "web";
   return (
     <Pressable
+      ref={pressableRef}
       onPress={onPress}
       disabled={disabled}
-      accessibilityRole="button"
+      accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel}
-      style={Platform.OS === "web" ? { cursor: "pointer" } : undefined}
-      onPressIn={() => { s.value = withSpring(scaleTo, { damping: 18, stiffness: 320 }); }}
-      onPressOut={() => { s.value = withSpring(1, { damping: 14, stiffness: 220 }); }}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={accessibilityState}
+      style={(state: { pressed: boolean; hovered?: boolean; focused?: boolean }) => [
+        web && ({ cursor: "pointer" } as any),
+        web && focusColor ? focusRing(state.focused, focusColor) : null,
+        web && hoverOpacity != null && state.hovered && { opacity: hoverOpacity },
+        outerStyle,
+      ]}
+      onPressIn={() => { s.value = withSpring(scaleTo, { damping: 18, stiffness: 320, reduceMotion: ReduceMotion.System }); }}
+      onPressOut={() => { s.value = withSpring(1, { damping: 14, stiffness: 220, reduceMotion: ReduceMotion.System }); }}
     >
       <Animated.View style={[style, a]}>{children}</Animated.View>
     </Pressable>
@@ -82,13 +108,17 @@ export function Skeleton({
   height?: number; width?: ViewStyle["width"]; radius?: number; color?: string;
   style?: StyleProp<ViewStyle>;
 }) {
-  const o = useSharedValue(0.35);
+  const reduce = useReducedMotion();
+  const o = useSharedValue(reduce ? 0.6 : 0.35);
   useEffect(() => {
+    // Reduced motion: a static block instead of a looping shimmer.
+    if (reduce) { o.value = 0.6; return; }
     o.value = withRepeat(
       withTiming(0.9, { duration: 750, easing: Easing.inOut(Easing.quad) }),
       -1, true
     );
-  }, []);
+    return () => cancelAnimation(o);
+  }, [reduce]);
   const a = useAnimatedStyle(() => ({ opacity: o.value }));
   return (
     <Animated.View

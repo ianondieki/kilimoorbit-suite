@@ -4,6 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>KilimoOrbit Sentinel · Mission Control</title>
+<meta name="description" content="Mission Control for the APEX v2.0 agri-logistics decision engine — market arbitrage, climate risk, e-boda routing and farmer alerts for Kenyan smallholders." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23101B12'/%3E%3Ccircle cx='32' cy='32' r='11' fill='%236FBF73'/%3E%3Cellipse cx='32' cy='32' rx='27' ry='9' fill='none' stroke='%23E9B44C' stroke-width='3' transform='rotate(-25 32 32)'/%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <style>
@@ -76,9 +78,9 @@ header{border-bottom:1px solid var(--line);padding:0 28px;position:relative}
 /* ── LAYOUT ──────────────────────────────────────────────── */
 main{max-width:1320px;margin:0 auto;padding:24px 28px 60px;display:grid;gap:22px;
   grid-template-columns:235px 1fr 1fr;grid-template-areas:
-  "routes editor decision" "auto auto auto" "suite suite suite"}
-@media(max-width:1080px){main{grid-template-columns:1fr 1fr;grid-template-areas:"routes editor" "decision decision" "auto auto" "suite suite"}}
-@media(max-width:720px){main{grid-template-columns:1fr;grid-template-areas:"routes" "editor" "decision" "auto" "suite";padding:16px 14px 50px}}
+  "routes editor decision" "pilot pilot pilot" "suite suite suite"}
+@media(max-width:1080px){main{grid-template-columns:1fr 1fr;grid-template-areas:"routes editor" "decision decision" "pilot pilot" "suite suite"}}
+@media(max-width:720px){main{grid-template-columns:1fr;grid-template-areas:"routes" "editor" "decision" "pilot" "suite";padding:16px 14px 50px}}
 .panel{background:linear-gradient(180deg,color-mix(in srgb,var(--panel) 88%,var(--ink) 4%),var(--panel) 55%);
   border:1px solid var(--line);border-radius:14px;padding:20px 18px;
   box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 9%,transparent), 0 8px 24px -18px rgba(0,0,0,.8)}
@@ -100,7 +102,7 @@ main{max-width:1320px;margin:0 auto;padding:24px 28px 60px;display:grid;gap:22px
 #editor{grid-area:editor;display:flex;flex-direction:column}
 #payload{flex:1;min-height:320px;width:100%;resize:vertical;background:var(--field);color:var(--field-ink);
   border:1px solid var(--line);border-radius:10px;font-family:var(--mono);font-size:12.5px;line-height:1.55;padding:14px;tab-size:2}
-#payload:focus{border-color:var(--accent);outline:none}
+#payload:focus{border-color:var(--accent)}
 .editor-foot{display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap}
 .btn{border:1px solid var(--line);background:var(--raised);color:var(--ink);border-radius:9px;padding:10px 16px;
   font-size:13px;font-weight:600;transition:border-color .15s,transform .1s}
@@ -147,7 +149,7 @@ main{max-width:1320px;margin:0 auto;padding:24px 28px 60px;display:grid;gap:22px
 .voicebar{display:flex;gap:8px;margin-top:14px;align-items:center}
 .voicebar input{flex:1;background:var(--field);color:var(--field-ink);border:1px solid var(--line);border-radius:9px;
   padding:10px 12px;font-size:13.5px;font-family:inherit}
-.voicebar input:focus{border-color:var(--accent);outline:none}
+.voicebar input:focus{border-color:var(--accent)}
 .mic{width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:var(--raised);font-size:17px;flex:none}
 .mic.rec{border-color:var(--alert);color:var(--alert);animation:pulse 1.2s ease infinite}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--alert) 40%,transparent)}50%{box-shadow:0 0 0 9px transparent}}
@@ -190,7 +192,8 @@ pre.rawjson{margin-top:8px;background:var(--field);border:1px solid var(--line);
   font-family:var(--mono);font-size:11.5px;overflow:auto;max-height:280px;color:var(--field-ink)}
 
 /* ── AUTOPILOT ───────────────────────────────────────────── */
-#auto{grid-area:auto}
+#auto{grid-area:pilot}
+main>*{min-width:0}
 .auto-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}
 .timeline{display:flex;flex-direction:column;gap:0}
 .tstep{display:grid;grid-template-columns:26px 1fr;gap:14px;position:relative;padding-bottom:18px}
@@ -231,6 +234,21 @@ pre.rawjson{margin-top:8px;background:var(--field);border:1px solid var(--line);
 footer{max-width:1320px;margin:0 auto;padding:0 28px 30px;display:flex;gap:20px;flex-wrap:wrap;
   font-family:var(--mono);font-size:12px;color:var(--dim)}
 footer b{color:var(--ink)}
+.nav-link{font-family:var(--mono);font-size:11px;letter-spacing:.1em;border:1px solid var(--line);border-radius:999px;
+  padding:6px 14px;color:var(--ink);text-decoration:none;background:var(--panel);transition:border-color .15s}
+.nav-link:hover{border-color:var(--accent)}
+.kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--dim)}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(20px);opacity:0;pointer-events:none;
+  background:var(--raised);border:1px solid var(--alert);color:var(--ink);border-radius:10px;padding:10px 16px;font-size:13px;
+  max-width:min(92vw,560px);box-shadow:0 12px 30px -12px rgba(0,0,0,.7);transition:opacity .2s,transform .2s;z-index:50}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
+.toast.ok{border-color:var(--ok)}
+.tgroup{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:var(--dim);text-transform:uppercase}
+.guard{margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--accent);border:1px dashed var(--accent);border-radius:8px;padding:8px 10px}
+.suite-filter{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-family:var(--mono);font-size:10.5px;border:1px solid var(--line);border-radius:999px;padding:4px 10px;background:none;color:var(--dim)}
+.chip.on{border-color:var(--accent);color:var(--accent)}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 </style>
 </head>
 <body>
@@ -247,7 +265,8 @@ footer b{color:var(--ink)}
       <button class="theme-dot" data-t="nyota" title="Nyota (satellite night)" aria-label="Nyota theme"></button>
       <button class="theme-dot" data-t="savanna" title="Savanna (daylight)" aria-label="Savanna theme"></button>
     </div>
-    <div class="engine-badge" id="engineBadge"><span class="dot"></span><span id="engineLabel">CONNECTING…</span></div>
+    <a class="nav-link" href="/pitch" title="Investor one-pager">PITCH ↗</a>
+    <div class="engine-badge" id="engineBadge" role="status" aria-live="polite"><span class="dot"></span><span id="engineLabel">CONNECTING…</span></div>
   </div>
   <div class="orbit" aria-hidden="true"></div>
 </header>
@@ -265,7 +284,9 @@ footer b{color:var(--ink)}
     <div class="editor-foot">
       <button class="btn btn-primary" id="runBtn">Transmit to APEX</button>
       <button class="btn" id="fmtBtn">Format JSON</button>
-      <span class="json-status" id="jsonStatus">valid JSON</span>
+      <button class="btn" id="copyBtn" title="Copy the decision JSON">Copy result</button>
+      <span class="json-status" id="jsonStatus" role="status" aria-live="polite">valid JSON</span>
+      <span class="json-status"><span class="kbd">Ctrl</span>+<span class="kbd">↵</span> transmits · <span class="kbd">Alt</span>+<span class="kbd">A–E</span> stations</span>
     </div>
   </section>
 
@@ -274,7 +295,7 @@ footer b{color:var(--ink)}
     <div class="decision-meta" id="decisionMeta" hidden>
       <span>latency <b id="latVal">—</b></span><span>engine <b id="engVal">—</b></span><span>mode <b id="modeVal">—</b></span>
     </div>
-    <div id="card"><div class="empty"><div><span class="glyph">🛰</span>Select a ground station, review the payload, and transmit.<br/>APEX returns a structured decision here.</div></div></div>
+    <div id="card" aria-live="polite" aria-atomic="true"><div class="empty"><div><span class="glyph">🛰</span>Select a ground station, review the payload, and transmit.<br/>APEX returns a structured decision here.</div></div></div>
   </section>
 
   <section id="auto" class="panel" aria-label="Sentinel Autopilot">
@@ -290,7 +311,9 @@ footer b{color:var(--ink)}
     <div class="suite-head">
       <h2 style="margin:0">Verification Suite</h2>
       <button class="btn" id="suiteBtn">Run all checks</button>
-      <span class="suite-score" id="suiteScore"></span>
+      <span class="suite-score" id="suiteScore" role="status" aria-live="polite"></span>
+      <span class="spacer"></span>
+      <div class="suite-filter" id="suiteFilter" role="group" aria-label="Filter checks"></div>
     </div>
     <div class="tests" id="tests"></div>
   </section>
@@ -299,8 +322,10 @@ footer b{color:var(--ink)}
 <footer>
   <span>requests this session: <b id="reqCount">0</b></span>
   <span>avg latency: <b id="avgLat">—</b></span>
-  <span>model: <b>gemini-2.5-flash</b> · temperature 0 · Apex v2.0 JSON contract</span>
+  <span>model: <b id="modelName">—</b> · temperature 0 · Apex v2.0 JSON contract</span>
+  <span>build <b id="buildVer">—</b></span>
 </footer>
+<div class="toast" id="toast" role="alert"></div>
 
 <script>
 const ROUTES = [
@@ -312,16 +337,25 @@ const ROUTES = [
   { key:"∅", id:"cold",       name:"Cold-Start Probe",   sub:"{} → UNKNOWN_ROUTE", probe:true },
   { key:"!", id:"corrupt",    name:"Integrity Probe",    sub:"battery 150 → DATA_ERROR", probe:true },
 ];
-const TEST_NAMES = ["Cold start","Integrity guard","Route A · arbitrage","Route B · chat","Route C · alert","Route D · onboarding","Route E · replan"];
 const $ = (id)=>document.getElementById(id);
-let payloads = {}, reqCount = 0, latSum = 0, ttsOn = true, currentStation = "arbitrage";
-const fmtKES = (n)=> n==null ? "— (suppressed)" : "KES "+Number(n).toLocaleString("en-KE");
+let payloads = {}, reqCount = 0, latSum = 0, currentStation = "arbitrage";
+let ttsOn = false; try{ ttsOn = localStorage.getItem("ko-tts")==="1"; }catch{}
+let catalogue = [], lastResults = null, lastResult = null, suiteFilter = "all";
+const SEASON_OF = (m)=>{ const i = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"].indexOf(String(m||"").slice(0,3).toLowerCase());
+  return i>=2&&i<=4 ? {k:"LONG_RAINS",t:"LONG RAINS ACTIVE — MURRAM CORRIDORS SOFT"} : i>=9 ? {k:"SHORT_RAINS",t:"SHORT RAINS — ERRATIC ONSET, STAGGER PLANTING"} : i>=5 ? {k:"COLD_DRY",t:"COLD DRY SEASON — FROST WATCH ABOVE 1800M"} : {k:"HOT_DRY",t:"HOT DRY SEASON — FALL ARMYWORM PRESSURE"}; };
+let toastTimer;
+function toast(msg, ok=false){
+  const t = $("toast"); t.textContent = msg; t.classList.toggle("ok", ok); t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.classList.remove("show"), ok?2600:5200);
+}
+const fmtKES = (n)=> n==null ? "— (suppressed)" : Number.isFinite(Number(n)) ? "KES "+Number(n).toLocaleString("en-KE") : "—";
+const num = (n)=> Number.isFinite(Number(n)) ? Number(n).toLocaleString("en-KE") : "—";
 const esc = (s)=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
 /* ── themes ── */
 document.querySelectorAll(".theme-dot").forEach(b=>b.onclick=()=>{
   document.documentElement.dataset.theme = b.dataset.t;
-  document.querySelectorAll(".theme-dot").forEach(x=>x.classList.toggle("on",x===b));
+  document.querySelectorAll(".theme-dot").forEach(x=>{ x.classList.toggle("on",x===b); x.setAttribute("aria-pressed", String(x===b)); });
   try{ localStorage.setItem("ko-theme", b.dataset.t); }catch{}
 });
 try{
@@ -331,30 +365,41 @@ try{
 
 /* ── boot ── */
 init();
+let modelName = "gemini";
 async function init(){
-  renderRouteButtons(); renderTestGrid();
+  renderRouteButtons();
   try{
-    const meta = await (await fetch("/api/meta")).json();
+    const [meta, cat] = await Promise.all([
+      fetch("/api/meta").then(r=>r.json()),
+      fetch("/api/suite").then(r=>r.json()).catch(()=>({tests:[]})),
+    ]);
     payloads = meta.payloads;
     commodityFeed = meta.commodity_feed ?? null;
+    modelName = meta.model || modelName;
+    $("modelName").textContent = modelName;
+    $("buildVer").textContent = "v"+(meta.version||"?");
+    catalogue = cat.tests || [];
+    renderSuiteFilters(); renderTestGrid();
     setEngine(meta.engine);
-    buildTicker();
+    try{ buildTicker(); }catch(err){ console.warn("ticker", err); }
     selectRoute("arbitrage");
-  }catch{ $("engineLabel").textContent = "SERVER OFFLINE"; }
+  }catch(e){ $("engineLabel").textContent = "SERVER OFFLINE"; toast("Mission Control cannot reach the server — is `npm start` running?"); renderTestGrid(); }
 }
 function setEngine(mode){
-  $("engineLabel").textContent = mode==="LIVE" ? "LIVE · GEMINI 2.5 FLASH" : "OFFLINE MOCK ENGINE";
+  $("engineLabel").textContent = mode==="LIVE" ? "LIVE · "+modelName.toUpperCase() : "OFFLINE MOCK ENGINE";
   $("engineBadge").classList.toggle("live", mode==="LIVE");
 }
 let commodityFeed = null;
 function buildTicker(){
   const items = [];
   for(const c of commodityFeed?.commodities ?? []){
-    const best = [...c.quotes].sort((a,b)=>b.price-a.price)[0];
-    const up = best.delta >= 0;
-    items.push(`${c.emoji} <b>${esc(c.crop.toUpperCase())}</b> ${esc(best.market)} KES ${best.price}/kg <span class="${up?"":"warn"}">${up?"▲":"▼"}${Math.abs(best.delta)}</span>`);
+    const quotes = (Array.isArray(c?.quotes)?c.quotes:[]).filter(q=>Number.isFinite(Number(q?.price)));
+    if(!quotes.length) continue;
+    const best = [...quotes].sort((a,b)=>b.price-a.price)[0];
+    const delta = Number(best.delta)||0, up = delta >= 0;
+    items.push(`${esc(c.emoji||"")} <b>${esc(String(c.crop||"").toUpperCase())}</b> ${esc(best.market)} KES ${num(best.price)}/kg <span class="${up?"":"warn"}">${up?"▲":"▼"}${Math.abs(delta)}</span>`);
   }
-  items.push(`<span class="warn">⚠ LONG RAINS ACTIVE — MURRAM CORRIDORS SOFT</span>`);
+  items.push(`<span class="warn">⚠ ${esc(SEASON_OF(payloads.arbitrage?.current_month).t)}</span>`);
   items.push(`E-BODA ${esc(payloads.arbitrage?.vehicle_telemetry?.vehicle_id??"")} BATTERY ${payloads.arbitrage?.vehicle_telemetry?.battery_level??"—"}%`);
   items.push(`SOIL MOISTURE ${payloads.arbitrage?.iot_telemetry?.soil_moisture??"—"}% · RAIN 24H ${payloads.arbitrage?.iot_telemetry?.rainfall_mm_last_24h??"—"}mm`);
   const half = items.map(i=>`<span>${i}</span>`).join("");
@@ -367,7 +412,7 @@ function renderRouteButtons(){
   for(const r of ROUTES){
     const b = document.createElement("button");
     b.className = "route-btn"+(r.probe?" probe":"");
-    b.dataset.id = r.id;
+    b.dataset.id = r.id; b.setAttribute("aria-pressed", "false");
     b.innerHTML = `<span class="route-key">${r.key}</span><span><span class="route-name">${r.name}</span><br/><span class="route-sub">${r.sub}</span></span>`;
     b.onclick = ()=>selectRoute(r.id);
     wrap.appendChild(b);
@@ -375,7 +420,7 @@ function renderRouteButtons(){
 }
 function selectRoute(id){
   currentStation = id;
-  document.querySelectorAll(".route-btn").forEach(b=>b.classList.toggle("selected", b.dataset.id===id));
+  document.querySelectorAll(".route-btn").forEach(b=>{ const on = b.dataset.id===id; b.classList.toggle("selected", on); b.setAttribute("aria-pressed", String(on)); });
   let p;
   if(id==="cold") p = {};
   else if(id==="corrupt"){
@@ -397,23 +442,38 @@ function validateJson(){
 
 /* ── transmit ── */
 $("runBtn").onclick = ()=>transmit();
+$("payload").addEventListener("keydown", e=>{ if((e.ctrlKey||e.metaKey) && e.key==="Enter"){ e.preventDefault(); transmit(); } });
+document.addEventListener("keydown", e=>{
+  if(!e.altKey || e.ctrlKey || e.metaKey || e.target?.matches?.("input,textarea")) return;
+  const k = e.key.toUpperCase(); const r = ROUTES.find(r=>r.key===k);
+  if(r){ e.preventDefault(); selectRoute(r.id); }
+});
+$("copyBtn").onclick = async ()=>{
+  if(!lastResult) return toast("Nothing to copy yet — transmit a payload first.");
+  try{ await navigator.clipboard.writeText(JSON.stringify(lastResult,null,2)); toast("Decision JSON copied.", true); }
+  catch{ toast("Clipboard blocked by the browser — use the RAW JSON block instead."); }
+};
 async function transmit(){
   if(!validateJson()) return;
   const btn = $("runBtn");
   btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Transmitting…';
   try{
     const res = await (await fetch("/api/apex",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({payload:JSON.parse($("payload").value)})})).json();
-    reqCount++; latSum += res.latency_ms;
+      body:JSON.stringify({payload:JSON.parse($("payload").value)})})).json().catch(()=>({error:"server returned non-JSON"}));
+    if(res.error) throw new Error(res.error);
+    if(Number.isFinite(res.latency_ms)){ reqCount++; latSum += res.latency_ms; }
     $("reqCount").textContent = reqCount;
-    $("avgLat").textContent = Math.round(latSum/reqCount)+" ms";
+    $("avgLat").textContent = reqCount ? Math.round(latSum/reqCount)+" ms" : "—";
     $("decisionMeta").hidden = false;
-    $("latVal").textContent = res.latency_ms+" ms";
-    $("engVal").textContent = res.engine;
+    $("latVal").textContent = (res.latency_ms ?? "—")+" ms";
+    $("engVal").textContent = res.result?.engine_fallback ? "LIVE → MOCK fallback" : String(res.engine ?? "—");
+    if(res.result?.engine_fallback) toast("Gemini unavailable ("+(res.result.engine_fallback.status||"network")+") — answered by the offline engine.");
     $("modeVal").textContent = res.result?.execution_mode || "—";
     setEngine(res.engine);
+    lastResult = res.result;
     renderDecision(res.result);
   }catch(e){
+    toast("Transmit failed: "+e.message);
     $("card").innerHTML = `<div class="empty"><div><span class="glyph">⚠</span>Request failed: ${esc(e.message)}</div></div>`;
   }finally{ btn.disabled = false; btn.textContent = "Transmit to APEX"; }
 }
@@ -432,7 +492,10 @@ function renderDecision(r){
     case "logistics_replan":  html = replanCard(r); break;
     default: html = errorCard(r);
   }
-  card.innerHTML = html + rawJson(r);
+  const fb = r.engine_fallback ? `<div class="guard">⚙ OFFLINE ENGINE ANSWERED · Gemini ${esc(r.engine_fallback.status||"unreachable")} — ${esc(r.engine_fallback.reason||"")}</div>` : "";
+  const guard = Array.isArray(r.guardrail_notes) && r.guardrail_notes.length
+    ? `<div class="guard" title="${esc(r.guardrail_notes.join(" · "))}">🛡 VERIFIED AGAINST SOURCE DATA · ${r.guardrail_notes.length} contract check${r.guardrail_notes.length>1?"s":""} applied</div>` : "";
+  card.innerHTML = html + fb + guard + rawJson(r);
   runCountUps(card);
   wireChatExtras(r);
 }
@@ -464,9 +527,9 @@ function errorCard(r){
   <div class="dcard-body">
     <div class="err-type">${esc(r.error_type||"UNKNOWN")}</div>
     <div>${esc(r.error_message||"")}</div>
-    ${r.failed_fields?.length?`<div class="err-fields">failed_fields: ${esc(r.failed_fields.join(", "))}</div>`:""}
-    ${r.out_of_bounds_fields?.length?`<div class="err-fields">out_of_bounds: ${esc(r.out_of_bounds_fields.join(", "))}</div>`:""}
-    ${r.valid_routes?`<div class="err-fields">valid routes: ${esc(r.valid_routes.join(" · "))}</div>`:""}
+    ${Array.isArray(r.failed_fields)&&r.failed_fields.length?`<div class="err-fields">failed_fields: ${esc(r.failed_fields.join(", "))}</div>`:""}
+    ${Array.isArray(r.out_of_bounds_fields)&&r.out_of_bounds_fields.length?`<div class="err-fields">out_of_bounds: ${esc(r.out_of_bounds_fields.join(", "))}</div>`:""}
+    ${Array.isArray(r.valid_routes)?`<div class="err-fields">valid routes: ${esc(r.valid_routes.join(" · "))}</div>`:""}
     ${r.recovery_suggestion?`<div class="insight" style="margin-top:10px">↻ ${esc(r.recovery_suggestion)}</div>`:""}
   </div></div>`;
 }
@@ -493,16 +556,17 @@ function arbitrageCard(r){
     <span><span class="pill ${esc(r.price_status)}">${esc(r.price_status)}</span> <span class="pill ${esc(r.data_confidence)}">${esc(r.data_confidence)}</span> <span class="pill ${esc(c.logistics_risk_flag)}">${esc(c.logistics_risk_flag)}</span></span></div>
   <div class="dcard-body">
     <div class="kes-label">PROJECTED NET · ${esc(c.optimal_market_destination)} · ${esc(c.crop_type)}</div>
-    <div class="kes-big" data-countup="${c.net_profit_projection_kes ?? ""}">${fmtKES(c.net_profit_projection_kes)}</div>
+    <div class="kes-big" data-countup="${Number.isFinite(Number(c.net_profit_projection_kes)) ? Number(c.net_profit_projection_kes) : ""}">${fmtKES(c.net_profit_projection_kes)}</div>
     <div class="statgrid">
-      <div class="stat"><b>${c.estimated_yield_kg?.toLocaleString("en-KE")??"—"} kg</b><span>EST. YIELD</span></div>
-      <div class="stat"><b>${c.live_market_wholesale_price_per_kg??"—"}/kg</b><span>LIVE PRICE KES</span></div>
-      <div class="stat"><b>${fmtKES(c.transit_cost_kes)}</b><span>TRANSIT · ${c.distance_km??"—"} KM</span></div>
+      <div class="stat"><b>${num(c.estimated_yield_kg)} kg</b><span>EST. YIELD${c.yield_basis==="assumed_from_field_area"?" · ASSUMED":""}</span></div>
+      <div class="stat"><b>${num(c.live_market_wholesale_price_per_kg)}/kg</b><span>LIVE PRICE KES</span></div>
+      <div class="stat"><b>${fmtKES(c.transit_cost_kes)}</b><span>TRANSIT · ${num(c.distance_km)} KM</span></div>
     </div>
     ${sentinelBlock(r.climate_risk_sentinel)}
     <div class="insight" style="margin-top:12px">📈 ${esc(w.market_price_summary)}</div>
     <div class="insight">🛣 ${esc(w.routing_profit_summary)}</div>
     ${w.data_quality_notice?`<div class="insight">ℹ ${esc(w.data_quality_notice)}</div>`:""}
+    ${r.stale_data_warning?`<div class="caution" style="margin-top:10px">⏱ ${esc(r.stale_data_warning.stale_data_message)} (feed age ${esc(r.stale_data_warning.market_data_age_minutes)} min)</div>`:""}
   </div></div>`;
 }
 function chatCard(r){
@@ -512,14 +576,14 @@ function chatCard(r){
   <div class="dcard-body">
     ${userMsg?`<div class="bubble user">${esc(userMsg)}</div>`:""}
     <div class="bubble">${esc(r.chat_response)}
-      <div class="bubble-meta">APEX · ${String(r.chat_response||"").trim().split(/\s+/).length} words · screen ${esc(r.current_screen||"—")}
+      <div class="bubble-meta">APEX · ${String(r.chat_response||"").trim().split(/\s+/).filter(Boolean).length} words · screen ${esc(r.current_screen||"—")}
         <button class="speak-btn" id="speakBtn" title="Read aloud">🔊 speak</button></div>
     </div>
     <div class="voicebar">
       <button class="mic" id="micBtn" title="Hold to talk (voice assistant)" aria-label="Voice input">🎙</button>
       <input id="chatInput" placeholder="Uliza Apex… ask about prices, weather, routes" aria-label="Ask Apex" />
       <button class="btn btn-primary" id="sendBtn">Send</button>
-      <label class="tts-toggle"><input type="checkbox" id="ttsChk" checked /> voice replies</label>
+      <label class="tts-toggle"><input type="checkbox" id="ttsChk" /> voice replies</label>
     </div>
   </div></div>`;
 }
@@ -529,21 +593,21 @@ function alertCard(r){
   <div class="dcard-body">
     <div class="phone"><div class="phone-top"><span>Safaricom</span><span>09:14</span></div>
       <div class="sms"><div class="sms-from">KILIMOORBIT · ${esc(r.alert_type)}</div>${esc(r.farmer_push_message)}
-      <div class="sms-count">${String(r.farmer_push_message||"").trim().split(/\s+/).length} words · id ${esc((r.alert_id||"").slice(0,8))}</div></div></div>
+      <div class="sms-count">${String(r.farmer_push_message||"").trim().split(/\s+/).filter(Boolean).length} words · id ${esc(String(r.alert_id||"").slice(0,8))}</div></div></div>
     <div class="opmsg"><b>OPERATOR TECHNICAL VIEW</b>${esc(r.operator_technical_message||"")}</div>
     ${r.recommended_action?`<div class="driver">▶ ${esc(r.recommended_action)}</div>`:""}
     <div class="flagrow">
       <span class="pill ${r.requires_immediate_action?"CRITICAL":"CLEAR"}">IMMEDIATE ACTION: ${r.requires_immediate_action?"YES":"NO"}</span>
       <span class="pill ${r.auto_escalate_to_cooperative?"WARNING":"CLEAR"}">CO-OP ESCALATION: ${r.auto_escalate_to_cooperative?"YES":"NO"}</span>
-      <span class="pill MEDIUM">${(r.affected_farmer_ids||[]).length} FARMERS</span>
+      <span class="pill MEDIUM">${Array.isArray(r.affected_farmer_ids)?r.affected_farmer_ids.length:0} FARMERS</span>
     </div>
   </div></div>`;
 }
 function onboardCard(r){
   const total = 5, now = Math.min(r.onboarding_step||1,total);
   const steps = Array.from({length:total},(_,i)=>`<div class="step ${i+1<now?"done":i+1===now?"now":""}"></div>`).join("");
-  const got = (r.fields_collected_so_far||[]).map(f=>`<span class="ftag got">✓ ${esc(f)}</span>`).join("");
-  const need = (r.fields_still_needed||[]).map(f=>`<span class="ftag need">○ ${esc(f)}</span>`).join("");
+  const got = (Array.isArray(r.fields_collected_so_far)?r.fields_collected_so_far:[]).map(f=>`<span class="ftag got">✓ ${esc(f)}</span>`).join("");
+  const need = (Array.isArray(r.fields_still_needed)?r.fields_still_needed:[]).map(f=>`<span class="ftag need">○ ${esc(f)}</span>`).join("");
   return `<div class="dcard"><div class="dcard-head"><span>ROUTE D · ONBOARDING</span><span>STEP ${now}/${total}</span></div>
   <div class="dcard-body">
     <div class="stepper">${steps}</div>
@@ -565,7 +629,7 @@ function replanCard(r){
     </div>
     <div class="statgrid">
       <div class="stat"><b>${fmtKES(a.revised_net_profit_kes)}</b><span>REVISED NET</span></div>
-      <div class="stat"><b>+${a.added_time_minutes??"—"} min</b><span>ADDED TIME · +${fmtKES(a.added_cost_kes)}</span></div>
+      <div class="stat"><b>+${num(a.added_time_minutes)} min</b><span>ADDED TIME · +${fmtKES(a.added_cost_kes)}</span></div>
       <div class="stat"><b class="pill ${esc(a.cargo_spoilage_risk)}" style="font-size:11px">${esc(a.cargo_spoilage_risk||"—")}</b><span>SPOILAGE RISK</span></div>
     </div>
     <div class="insight">🧭 ${esc(w.replan_summary||"")}</div>
@@ -592,7 +656,7 @@ function speak(text){
 }
 function wireChatExtras(r){
   const sb = $("speakBtn"); if(sb) sb.onclick = ()=>{ ttsOn=true; $("ttsChk")&&($("ttsChk").checked=true); speak(r.chat_response); };
-  const chk = $("ttsChk"); if(chk){ chk.checked = ttsOn; chk.onchange = ()=>{ ttsOn = chk.checked; if(!ttsOn) speechSynthesis?.cancel(); }; }
+  const chk = $("ttsChk"); if(chk){ chk.checked = ttsOn; chk.onchange = ()=>{ ttsOn = chk.checked; try{ localStorage.setItem("ko-tts", ttsOn?"1":"0"); }catch{} if(!ttsOn) speechSynthesis?.cancel(); }; }
   const send = $("sendBtn"), input = $("chatInput");
   const fire = ()=>{
     const msg = input.value.trim(); if(!msg) return;
@@ -612,8 +676,8 @@ function wireChatExtras(r){
       mic.classList.add("rec"); mic.textContent = "●";
       rec.onresult = (e)=>{ input.value = e.results[0][0].transcript; };
       rec.onend = ()=>{ mic.classList.remove("rec"); mic.textContent = "🎙"; if(input.value.trim()) fire(); };
-      rec.onerror = ()=>{ mic.classList.remove("rec"); mic.textContent = "🎙"; };
-      rec.start();
+      rec.onerror = (ev)=>{ mic.classList.remove("rec"); mic.textContent = "🎙"; if(ev?.error && ev.error!=="no-speech") toast("Voice input: "+ev.error); };
+      try{ rec.start(); }catch(err){ mic.classList.remove("rec"); mic.textContent = "🎙"; toast("Voice input unavailable: "+err.message); }
     };
   }
   if(r?.execution_mode === "user_chat" && r.chat_response) speak(r.chat_response);
@@ -626,6 +690,8 @@ $("autoBtn").onclick = async ()=>{
   btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Autopilot running…';
   try{
     const data = await (await fetch("/api/autopilot",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"})).json();
+    if(data.error) throw new Error(data.error);
+    const brief = data.brief ?? data.steps.at(-1)?.output ?? {};
     const tl = data.steps.map((s,i)=>`
       <div class="tstep" style="animation-delay:${i*120}ms">
         <div class="tnode">${i+1}</div>
@@ -637,9 +703,11 @@ $("autoBtn").onclick = async ()=>{
         </div>
       </div>`).join("");
     $("autoBody").innerHTML = `<div class="timeline">${tl}</div>
-      <div class="brief"><b>MISSION BRIEF · CONFIDENCE ${esc(data.brief?.output?.confidence??data.steps.at(-1)?.output?.confidence??"—")}</b>
-      ${esc(data.steps.at(-1)?.output?.headline??"")}<div class="insight">${esc(data.steps.at(-1)?.output?.next_review??"")}</div></div>`;
+      <div class="brief${data.aborted?" err":""}"><b>MISSION BRIEF · CONFIDENCE ${esc(brief.confidence??"—")}${brief.broadcast?` · BROADCAST ${esc(brief.broadcast)}`:""}</b>
+      ${esc(brief.headline??"")}<div class="insight">${esc(brief.next_review??"")}</div></div>`;
+    if(data.aborted) toast("Autopilot aborted: "+(brief.headline||"arbitrage failed"));
   }catch(e){
+    toast("Autopilot failed: "+e.message);
     $("autoBody").innerHTML = `<div class="empty"><div>Autopilot failed: ${esc(e.message)}</div></div>`;
   }finally{ btn.disabled=false; btn.textContent="Engage Autopilot"; }
 };
@@ -652,14 +720,24 @@ function summarize(o){
 }
 
 /* ── suite ── */
+function renderSuiteFilters(){
+  const groups = ["all", ...new Set(catalogue.map(t=>t.group))];
+  $("suiteFilter").innerHTML = groups.map(g=>`<button class="chip ${g===suiteFilter?"on":""}" data-g="${esc(g)}" aria-pressed="${g===suiteFilter}">${esc(g)}</button>`).join("");
+  $("suiteFilter").querySelectorAll(".chip").forEach(b=>b.onclick=()=>{ suiteFilter=b.dataset.g; renderSuiteFilters(); renderTestGrid(lastResults); });
+}
 function renderTestGrid(results){
-  $("tests").innerHTML = TEST_NAMES.map((n,i)=>{
-    const r = results?.[i];
+  lastResults = results ?? lastResults;
+  const rows = catalogue.length ? catalogue : [{id:1,name:"(catalogue unavailable — server offline)",group:"all"}];
+  const byId = new Map((lastResults||[]).map(r=>[r.id,r]));
+  const shown = rows.filter(t=>suiteFilter==="all"||t.group===suiteFilter);
+  $("suiteBtn").textContent = `Run all ${rows.length} checks`;
+  $("tests").innerHTML = shown.map((t,i)=>{
+    const r = byId.get(t.id);
     const cls = r ? (r.pass?"pass":"fail") : "pending";
-    return `<div class="test ${cls}" style="animation-delay:${i*70}ms">
-      <div class="t-head"><span>${i+1} · ${n}</span><span class="verdict">${r?(r.pass?"PASS":"FAIL"):"—"}</span></div>
-      <div class="t-detail">${esc(r?.detail|| "awaiting run — press ▶ Run all 7 checks above")}</div>
-      <div class="t-ms">${r?r.latency_ms+" ms":""}</div>
+    return `<div class="test ${cls}" style="animation-delay:${Math.min(i,12)*60}ms">
+      <div class="t-head"><span>${t.id} · ${esc(t.name)}</span><span class="verdict">${r?(r.pass?"PASS":"FAIL"):"—"}</span></div>
+      <div class="t-detail" title="${esc(r?.detail||"")}">${esc(r?.detail|| `awaiting run — press ▶ Run all ${rows.length} checks above`)}</div>
+      <div class="t-ms"><span class="tgroup">${esc(t.group||"")}</span>${r?" · "+r.latency_ms+" ms":""}</div>
     </div>`;
   }).join("");
 }
@@ -669,10 +747,13 @@ $("suiteBtn").onclick = async ()=>{
   $("suiteScore").textContent = "";
   try{
     const data = await (await fetch("/api/suite",{method:"POST"})).json();
+    if(data.error) throw new Error(data.error);
     renderTestGrid(data.results);
-    $("suiteScore").innerHTML = `<b>${data.passed}/${data.total}</b> checks passed · engine ${data.engine}`;
-  }catch(e){ $("suiteScore").textContent = "suite failed: "+e.message; }
-  finally{ btn.disabled=false; btn.textContent="Run all 7 checks"; }
+    const allGreen = data.passed===data.total;
+    $("suiteScore").innerHTML = `<b style="color:${allGreen?"var(--ok)":"var(--alert)"}">${data.passed}/${data.total}</b> checks passed · engine ${esc(data.engine)}`;
+    toast(allGreen ? `All ${data.total} contract checks passed on the ${data.engine} engine.` : `${data.total-data.passed} check(s) failed — see the red cards.`, allGreen);
+  }catch(e){ $("suiteScore").textContent = "suite failed: "+e.message; toast("Suite failed: "+e.message); }
+  finally{ btn.disabled=false; renderTestGrid(lastResults); }
 };
 </script>
 </body>
