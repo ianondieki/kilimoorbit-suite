@@ -1,0 +1,396 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//KilimoOrbit Sentinel//Funding Roadmap//EN
+CALSCALE:GREGORIAN
+X-WR-CALNAME:KilimoOrbit funding deadlines
+BEGIN:VEVENT
+UID:kilimoorbit-funding-0@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20261001
+DTEND;VALUE=DATE:20261002
+SUMMARY:Apply: cloud/AI startup credits (AWS Activate, NVIDIA Inception, MS for Startups, Google Cloud)
+DESCRIPTION:Rolling - offsets Gemini spend. https://aws.amazon.com/activate/ (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-1@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20261005
+DTEND;VALUE=DATE:20261006
+SUMMARY:Outreach: Catalyst Fund (pre-seed, climate adaptation, rolling)
+DESCRIPTION:https://www.thecatalystfund.com/ (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-2@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20261008
+DTEND;VALUE=DATE:20261009
+SUMMARY:Verify: IFC Agritech Modernization Grant deadline (unverified 10 Oct)
+DESCRIPTION:https://www.globalsouthopportunities.com/2026/06/18/grant-24/ (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-3@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20261012
+DTEND;VALUE=DATE:20261013
+SUMMARY:Apply: UNDP timbuktoo GreenTech Launchpad, Konza (deadline unverified)
+DESCRIPTION:https://www.undp.org/kenya/news/call-applications-join-timbuktoo-launchpad-greentech-startups (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-4@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20261102
+DTEND;VALUE=DATE:20261103
+SUMMARY:Check: UNDP timbuktoo AgriTech Hub quarterly cohort intake
+DESCRIPTION:https://www.undp.org/ghana/press-releases/call-applications-join-pan-african-incubation-programme-agritech-startups (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-5@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20261110
+DTEND;VALUE=DATE:20261111
+SUMMARY:Check: Norrsken Impact Accelerator applications (typical Q4)
+DESCRIPTION:http://accelerator.norrsken.org/ (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-6@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20261116
+DTEND;VALUE=DATE:20261117
+SUMMARY:Enquire: KCIC incubation intake
+DESCRIPTION:https://www.kenyacic.org/ (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-7@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20261201
+DTEND;VALUE=DATE:20261202
+SUMMARY:Prep month: traction metrics, financial model, 2-min demo video, LOIs
+DESCRIPTION: (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-8@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20270101
+DTEND;VALUE=DATE:20270102
+SUMMARY:OPENS: Tony Elumelu Foundation Entrepreneurship Programme ($5k)
+DESCRIPTION:https://www.tonyelumelufoundation.org/ (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-9@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20270115
+DTEND;VALUE=DATE:20270116
+SUMMARY:Check: AYuTe Africa Challenge Kenya opening (typical Q1)
+DESCRIPTION:https://ayute.africa/ (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-10@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20270120
+DTEND;VALUE=DATE:20270121
+SUMMARY:Check: Google for Startups Accelerator Africa Class 11 (typical Jan-Mar)
+DESCRIPTION:https://startup.google.com/programs/accelerator/africa/ (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-11@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20270201
+DTEND;VALUE=DATE:20270202
+SUMMARY:Check: GSMA Innovation Fund round opening (typical Feb)
+DESCRIPTION:https://www.gsma.com/solutions-and-impact/connectivity-for-good/mobile-for-development/gsma-innovation-fund/ (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-12@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20270208
+DTEND;VALUE=DATE:20270209
+SUMMARY:Check: Katapult Africa Cohort 4 applications
+DESCRIPTION:https://katapult.vc/africa/ (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-13@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20270215
+DTEND;VALUE=DATE:20270216
+SUMMARY:Check: MIT Solve 2027 Global Challenges
+DESCRIPTION:https://solve.mit.edu/challenges (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-14@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20270301
+DTEND;VALUE=DATE:20270302
+SUMMARY:DEADLINE (typical): Tony Elumelu Foundation programme closes
+DESCRIPTION:https://www.tonyelumelufoundation.org/ (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-15@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20270312
+DTEND;VALUE=DATE:20270313
+SUMMARY:DEADLINE (typical): AYuTe Kenya ~mid-March
+DESCRIPTION:https://ayute.africa/ (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-16@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20270315
+DTEND;VALUE=DATE:20270316
+SUMMARY:DEADLINE (typical): Google for Startups Accelerator Africa
+DESCRIPTION:https://startup.google.com/programs/accelerator/africa/ (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-17@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20270401
+DTEND;VALUE=DATE:20270402
+SUMMARY:OPENS (typical): Safaricom Spark Accelerator
+DESCRIPTION:https://www.safaricom.co.ke/sparkaccelerator (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-18@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20270405
+DTEND;VALUE=DATE:20270406
+SUMMARY:DEADLINE (typical): GSMA Innovation Fund
+DESCRIPTION:https://www.gsma.com/ (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-19@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20270415
+DTEND;VALUE=DATE:20270416
+SUMMARY:DEADLINE (typical): MIT Solve challenges
+DESCRIPTION:https://solve.mit.edu/challenges (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-20@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20270423
+DTEND;VALUE=DATE:20270424
+SUMMARY:DEADLINE (typical): Katapult Africa Cohort 4
+DESCRIPTION:https://katapult.vc/africa/ (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-21@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20270514
+DTEND;VALUE=DATE:20270515
+SUMMARY:DEADLINE (typical): Safaricom Spark Accelerator
+DESCRIPTION:https://www.safaricom.co.ke/sparkaccelerator (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-22@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20270517
+DTEND;VALUE=DATE:20270518
+SUMMARY:OPENS (typical): develoPPP Ventures (needs first revenue) + GoGettaz
+DESCRIPTION:https://www.degimpulse.de/en/program/developpp-ventures (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-23@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20270618
+DTEND;VALUE=DATE:20270619
+SUMMARY:DEADLINE (typical): Antler Nairobi residency applications
+DESCRIPTION:https://www.antler.co/cohort-start-dates (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-24@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20270627
+DTEND;VALUE=DATE:20270628
+SUMMARY:DEADLINE (typical): GoGettaz Agripreneur Prize
+DESCRIPTION:https://gogettaz.africa/ (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-25@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20270629
+DTEND;VALUE=DATE:20270630
+SUMMARY:DEADLINE (typical): develoPPP Ventures
+DESCRIPTION:https://www.degimpulse.de/en/program/developpp-ventures (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-26@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20270712
+DTEND;VALUE=DATE:20270713
+SUMMARY:OPENS (typical): Africa Prize for Engineering Innovation Cycle 14 + KCIC Cleantech Competition
+DESCRIPTION:https://africaprize.raeng.org.uk/ (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-27@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20270809
+DTEND;VALUE=DATE:20270810
+SUMMARY:DEADLINE (typical): KCIC Cleantech Competition
+DESCRIPTION:https://www.kenyacic.org/ (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-28@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20270830
+DTEND;VALUE=DATE:20270831
+SUMMARY:DEADLINE (typical): Smart Africa / FAO Innovate Africa Challenge
+DESCRIPTION:https://www.fao.org/e-agriculture/ (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:kilimoorbit-funding-29@kilimoorbit
+DTSTAMP:20260915T090000Z
+DTSTART;VALUE=DATE:20270907
+DTEND;VALUE=DATE:20270908
+SUMMARY:DEADLINE (typical): Africa Prize Stage 1
+DESCRIPTION:https://africaprize.raeng.org.uk/ (dates marked typical are inferred from the prior cycle - verify)
+BEGIN:VALARM
+TRIGGER:-P7D
+ACTION:DISPLAY
+DESCRIPTION:Funding deadline in 7 days
+END:VALARM
+END:VEVENT
+END:VCALENDAR

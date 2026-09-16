@@ -1,10 +1,10 @@
 # KilimoOrbit Sentinel
 
-An AI agri-logistics decision engine for Kenyan smallholder farmers, powered by Google Gemini (APEX core). It routes JSON payloads through five execution modes — market arbitrage, farmer chat, alert broadcast, onboarding, and logistics replanning — and ships with a Mission Control web dashboard plus an 11-test verification suite.
+An AI agri-logistics decision engine for Kenyan smallholder farmers, powered by Google Gemini (APEX core). It routes JSON payloads through five execution modes — market arbitrage, farmer chat, alert broadcast, onboarding, and logistics replanning — and ships with a Mission Control web dashboard, an investor one-pager at `/pitch`, and three verification suites (30 APEX contract checks, 12 Soko store checks, 27 HTTP integration checks).
 
 ## Prerequisites
 
-- **Node.js 18+**
+- **Node.js 20+** (the `@google/genai` SDK requires it)
 - **Google AI Studio free API key** (no credit card) → get one here: **https://aistudio.google.com/apikey**
 
 ## Setup
@@ -12,11 +12,21 @@ An AI agri-logistics decision engine for Kenyan smallholder farmers, powered by 
 ```bash
 npm install
 cp .env.example .env       # then paste your GEMINI_API_KEY into .env
-npm test                   # runs the 11-test verification suite
+npm test                   # APEX (30) + Soko (12) + HTTP (27) suites
 npm start                  # launches Mission Control → http://localhost:4517
+npm run dev                # same, with auto-restart on file changes
 ```
 
-> **No key yet?** The engine automatically falls back to a deterministic **offline mock** that implements the exact same route contracts, so `npm test` passes 11/11 and the dashboard is fully demoable without any API key. Set `APEX_MOCK=1` to force it; add a valid `GEMINI_API_KEY` to go live on `gemini-2.5-flash`.
+> **No key yet?** The engine automatically falls back to a deterministic **offline mock** that implements the exact same route contracts, so `npm test` is all green and the dashboard is fully demoable without any API key. Set `APEX_MOCK=1` to force it; add a valid `GEMINI_API_KEY` to go live on `gemini-2.5-flash` (override with `APEX_MODEL`; `APEX_TIMEOUT_MS` defaults to 45000).
+
+### Deploy
+
+```bash
+docker build -t kilimoorbit-sentinel .
+docker run --rm -p 4517:4517 --env-file .env -v sentinel-data:/app/data kilimoorbit-sentinel
+```
+
+Set `TRUST_PROXY=1` behind Render/Fly/nginx so rate limits key on the real client IP. `SOKO_STORE_PATH` relocates the marketplace file (e.g. onto a mounted volume). CI (`.github/workflows/ci.yml`) runs the four suites on Node 20/22 and builds the image.
 
 ## Route reference
 
@@ -28,21 +38,36 @@ npm start                  # launches Mission Control → http://localhost:4517
 | D     | `onboarding_intake`  | Drive step-by-step farmer profile completion with the next question     |
 | E     | `logistics_replan`   | Re-route an active delivery after a disruption, preserving net profit   |
 
-Invalid or missing `execution_mode` → structured `UNKNOWN_ROUTE` error. Out-of-bounds telemetry (e.g. `battery_level: 150`) → structured `DATA_ERROR` listing every offending field.
+Invalid or missing `execution_mode` → structured `UNKNOWN_ROUTE` error. Out-of-bounds telemetry (e.g. `battery_level: 150`), a non-array route list, an onboarding step of 9, an unknown month, or a market quote without a price → structured `DATA_ERROR` listing every offending field (market quotes are indexed, e.g. `market_data.available_markets[1].wholesale_price_per_kg`). Malformed input never reaches (or gets billed by) Gemini. Month names are accepted in English or Kiswahili (`April` / `Aprili`).
+
+The yield behind Route A's headline number is never invented: pass `estimated_yield_kg` and it is used verbatim (`yield_basis: "payload"`); omit it and the engine derives it from `field_area_acres` at a conservative regional rate and says so (`yield_basis: "assumed_from_field_area"` plus a `data_quality_notice`). If both are absent the route returns `DATA_ERROR`.
+
+### LIVE → MOCK fallback
+
+If Gemini answers 429 (quota), 503 (overload), times out, or the network drops, `callApex` returns the deterministic engine's answer for the same payload, tagged `engine_fallback: { from: "LIVE", to: "MOCK", reason, status }` — a farmer never sees a `CLIENT_FAILURE` because Google is busy. Authentication errors (401/403) are never masked. `APEX_FALLBACK=0` disables it; `npm run test:fallback` exercises it.
+
+### LIVE-output guardrails
+
+Every Gemini response passes through `harden()` before it leaves the server. It re-enforces the deterministic parts of the contract a model can drift on: stale feeds (>120 min) always suppress profit projections, `live_market_wholesale_price_per_kg` is re-sourced from the payload (§1.3 — never inferred), a destination that isn't in `market_data` is recomputed deterministically, farmer-facing strings are clamped under 25 words (keeping the single emoji), `alert_id` is always a real UUID, and an elliptical follow-up keeps its conversation thread's intent. When it intervenes the result carries a `guardrail_notes` array (shown as a 🛡 banner in Mission Control).
 
 ## Project layout
 
 ```
 kilimoorbit-sentinel/
 ├── src/
-│   ├── apex_client.js        # Gemini caller + APEX XML system prompt + offline engine
-│   ├── server.js             # Mission Control API (Express)
+│   ├── apex_client.js        # Gemini caller + offline engine + LIVE guardrails (harden)
+│   ├── apex_system_prompt.md # Apex v2.0 system prompt, loaded verbatim
+│   ├── suite.js              # the 30-case contract catalogue (CLI + dashboard share it)
+│   ├── server.js             # Mission Control API (Express) — exports createApp()
 │   ├── routes/               # one runnable script per route (npm run route:*)
 │   ├── soko/                 # Soko marketplace: flat-file store + API router
-│   └── tests/                # run_all_tests.js (APEX) + soko_tests.js (marketplace)
-├── payloads/                 # the five canonical test payloads
+│   └── tests/                # run_all_tests.js · soko_tests.js · server_tests.js
+├── payloads/                 # the five canonical test payloads + commodity feed
+├── docs/                     # FUNDING_ROADMAP.md + funding_deadlines.ics
 ├── data/                     # Soko runtime store (gitignored, created on first listing)
-└── public/index.html         # Mission Control dashboard (vanilla JS, zero build)
+├── public/index.html         # Mission Control dashboard (vanilla JS, zero build)
+├── public/pitch.html         # investor one-pager, served at /pitch
+└── Dockerfile                # node:22-alpine image with healthcheck
 ```
 
 ## Soko — community produce marketplace
@@ -58,10 +83,18 @@ Persistence is a single gitignored flat file (`data/soko_store.json`) — no DB.
 | `POST` | `/api/soko/listings` | Create a listing `{ farmer_name, crop, county, qty_kg, ask_per_kg }`; fair price auto-seeded |
 | `POST` | `/api/soko/listings/:id/claim` | Claim a run `{ claimer, role: "buyer"\|"rider" }` |
 | `POST` | `/api/soko/listings/:id/deliver` | Mark a claimed run delivered (claimed → delivered) |
+| `POST` | `/api/soko/listings/:id/cancel` | `{ owner_token }` — farmer withdraws an open listing (open → cancelled) |
+| `GET`  | `/api/soko/listings/:id` | One listing |
+| `GET`  | `/api/soko/stats` | Counts by status + kg listed — traction metrics for the pitch |
 | `POST` | `/api/soko/price-suggest` | `{ crop }` → fair price + per-market comparison from the feed |
 
-Listings move through **open → claimed → delivered**. Run the marketplace suite
-with `npm run test:soko` (12/12, no LLM, no server).
+Listings move through **open → claimed → delivered** (or **open → cancelled**). The `owner_token` is returned once, in the `POST /listings` response, and is never exposed on reads — keep it client-side to allow cancellation. Unknown ids return 404, a missing/wrong token 403, validation failures 400 with a `fields` array. Writes are atomic (write-then-rename) and a corrupt store file is quarantined rather than overwritten. Run the marketplace suite with `npm run test:soko` (12/12, no LLM, no server).
+
+## API hardening
+
+- Per-IP rate limits (dependency-free): APEX 60/min, Autopilot 20/min, suite 6/min, marketplace 120/min, sign-in 5/hour (the sign-in endpoint sends email, so it is capped hardest). `429` responses carry `Retry-After`. Set `RATE_LIMIT_DISABLED=1` for load tests.
+- Malformed JSON bodies → `400 {"error_type":"BAD_JSON"}`; unknown `/api/*` routes → `404` JSON; bodies over 256 KB → `413`.
+- `GET /api/health` reports engine, model, version and uptime for uptime monitors and the Docker healthcheck.
 
 ## The Apex v2.0 system prompt
 
@@ -73,14 +106,19 @@ The governing prompt is loaded verbatim from **`src/apex_system_prompt.md`** (yo
 - **Voice assistant** — the Farmer Chat card has a 🎙 mic (Web Speech API, free, in-browser) and spoken replies (TTS, Swahili/English aware, toggleable). Works best in Chrome/Edge.
 - **Live marquee ticker** (per Apex §4.1) — commodity prices, e-boda battery, soil moisture, and weather alerts scroll under the header.
 - **Three handcrafted themes** — Loam (night field), Nyota (satellite night), Savanna (daylight); persisted across sessions.
+- **Keyboard-first console** — `Ctrl+Enter` transmits, `Alt+A`–`Alt+E` jump between ground stations, one-click copy of the decision JSON, toast notifications for every failure path, `aria-live` decision region.
+- **Investor one-pager** at `/pitch` (print-ready) and a 12-month funding calendar in `docs/` with an importable `.ics`.
 - **Climate Sentinel cards** — frost/drought/flood pills, seed-variety guidance, and the seasonal caution rendered on every arbitrage and step-5 onboarding result.
 
 ## Scripts
 
 | Command                  | What it does                                  |
 |--------------------------|-----------------------------------------------|
-| `npm test`               | Cold start + integrity + all 5 routes + regressions (11/11)   |
+| `npm test`               | All three suites: APEX contract (30) + Soko store (12) + HTTP (27) |
+| `npm run test:apex`      | Cold start + integrity + all 5 routes + climate + guardrails (30/30) |
 | `npm run test:soko`      | Soko marketplace store + fair-price suite (12/12)             |
-| `npm start`              | Mission Control dashboard on port 4517        |
+| `npm run test:server`    | Boots the real server on a random port, hits every endpoint (27/27) |
+| `npm run check`          | Syntax-check every module (fast CI gate)      |
+| `npm start` / `npm run dev` | Mission Control dashboard on port 4517 (dev = auto-restart) |
+| `npm run docker:build`   | Build the production image                    |
 | `npm run route:arbitrage`| Fire Route A alone (likewise `route:chat`, `route:alert`, `route:onboarding`, `route:replan`) |
-"# kilimoorbit" 

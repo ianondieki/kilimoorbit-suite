@@ -2,16 +2,19 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View, Text, ScrollView, RefreshControl, StyleSheet, Pressable,
 } from "react-native";
+import { webLang } from "../../lib/ui";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Header from "../../components/Header";
 import Ticker from "../../components/Ticker";
-import Sidebar from "../../components/Sidebar";
 import FAB from "../../components/FAB";
 import Pill from "../../components/Pill";
-import { Enter, PressScale, CountUp, Skeleton, LevelBar } from "../../components/Motion";
+import { Bounded } from "../../components/Bounded";
+import { Enter, PressScale, CountUp, Skeleton, LevelBar, Thinking } from "../../components/Motion";
 import { useTheme } from "../../lib/theme-context";
+import { SAFE_EMOJI } from "../../lib/prices";
+import { CropCoin } from "../../components/ShambaPanel";
 import {
   getMeta, callApex, fmtKES, type Meta, type ArbitrageResult, type ApexError,
 } from "../../lib/api";
@@ -28,7 +31,6 @@ export default function Dashboard() {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [menu, setMenu] = useState(false);
 
   const load = useCallback(async () => {
     setErr(null);
@@ -77,7 +79,8 @@ export default function Dashboard() {
     const items: string[] = [];
     for (const cF of meta?.commodity_feed?.commodities ?? []) {
       const best = [...cF.quotes].sort((a, b) => b.price - a.price)[0];
-      items.push(`${cF.emoji} ${cF.crop.toUpperCase()} ${best.market} KES ${best.price}/kg ${best.delta >= 0 ? "▲" : "▼"}${Math.abs(best.delta)}`);
+      // Only emoji every phone can draw (the feed's newer ones, e.g. beans, show as boxes).
+      items.push(`${SAFE_EMOJI[cF.crop] ? SAFE_EMOJI[cF.crop] + " " : ""}${cF.crop.toUpperCase()} ${best.market} KES ${best.price}/kg ${best.delta >= 0 ? "▲" : "▼"}${Math.abs(best.delta)}`);
     }
     if (arb?.cargo_optimized_route.logistics_risk_flag !== "CLEAR" && arb)
       items.push(`⚠ ${arb.cargo_optimized_route.logistics_risk_flag} ON OPTIMAL CORRIDOR`);
@@ -92,16 +95,26 @@ export default function Dashboard() {
     lvl === "Low" ? "ok" : lvl === "Medium" ? "warn" : "bad";
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]}>
-      <Header engine={engine} onMenu={() => setMenu(true)} />
+    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]} {...webLang("en")}>
+      <Header engine={engine} />
       <Ticker items={ticker} />
       <ScrollView
-        contentContainerStyle={st.body}
+        contentContainerStyle={st.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={t.accent} />}
       >
+        <Bounded style={st.body}>
         {loading && (
           <View style={[st.card, { backgroundColor: t.panel, borderColor: t.line }]}>
-            <Skeleton height={10} width={120} color={t.raised} />
+            <Thinking
+              color={t.accent}
+              messages={[
+                "Reading masoko prices…",
+                "Checking the weather window…",
+                "Comparing market routes…",
+                "Projecting your net profit…",
+              ]}
+            />
+            <Skeleton height={10} width={120} color={t.raised} style={{ marginTop: 14 }} />
             <Skeleton height={36} width={210} color={t.raised} style={{ marginTop: 14 }} />
             <View style={[st.statRow, { marginTop: 16 }]}>
               <Skeleton height={52} width={"31%"} color={t.raised} radius={10} />
@@ -116,7 +129,7 @@ export default function Dashboard() {
           <View style={[st.card, { backgroundColor: t.panel, borderColor: t.alert }]}>
             <Text style={[st.cardHead, { color: t.alert }]}>CONNECTION</Text>
             <Text style={{ color: t.ink }}>{err}</Text>
-            <PressScale onPress={load} style={[st.btn, { backgroundColor: t.accent, marginTop: 12 }]}>
+            <PressScale onPress={load} accessibilityLabel="Retry connection" style={[st.btn, { backgroundColor: t.accent, marginTop: 12 }]}>
               <Text style={{ color: t.bg, fontWeight: "700" }}>Retry</Text>
             </PressScale>
           </View>
@@ -146,6 +159,7 @@ export default function Dashboard() {
               <Pill
                 label={c.logistics_risk_flag}
                 tone={c.logistics_risk_flag === "CLEAR" ? "ok" : c.logistics_risk_flag === "WEATHER_DELAY" ? "warn" : "bad"}
+                pulse={c.logistics_risk_flag !== "CLEAR"}
               />
             </View>
             <Text style={[st.insight, { color: t.dim }]}>🛣 {arb!.widget_insights.routing_profit_summary}</Text>
@@ -162,10 +176,10 @@ export default function Dashboard() {
               {s9.current_kenyan_season} · {s9.farm_altitude_zone}
             </Text>
             <View style={st.pillRow}>
-              <Pill label={`FROST ${s9.frost_risk ? "RISK" : "OK"}`} tone={s9.frost_risk ? "bad" : "ok"} />
-              <Pill label={`DROUGHT ${s9.drought_risk ? "RISK" : "OK"}`} tone={s9.drought_risk ? "bad" : "ok"} />
-              <Pill label={`FLOOD ${s9.flood_risk ? "RISK" : "OK"}`} tone={s9.flood_risk ? "bad" : "ok"} />
-              <Pill label={`${s9.pre_farming_risk_level.toUpperCase()} RISK`} tone={riskTone(s9.pre_farming_risk_level)} />
+              <Pill label={`FROST ${s9.frost_risk ? "RISK" : "OK"}`} tone={s9.frost_risk ? "bad" : "ok"} pulse={s9.frost_risk} />
+              <Pill label={`DROUGHT ${s9.drought_risk ? "RISK" : "OK"}`} tone={s9.drought_risk ? "bad" : "ok"} pulse={s9.drought_risk} />
+              <Pill label={`FLOOD ${s9.flood_risk ? "RISK" : "OK"}`} tone={s9.flood_risk ? "bad" : "ok"} pulse={s9.flood_risk} />
+              <Pill label={`${s9.pre_farming_risk_level.toUpperCase()} RISK`} tone={riskTone(s9.pre_farming_risk_level)} pulse={s9.pre_farming_risk_level === "High" || s9.pre_farming_risk_level === "Critical"} />
             </View>
             <View style={[st.caution, { borderLeftColor: t.alert, backgroundColor: t.raised }]}>
               <Text style={{ color: t.ink, fontSize: 13 }}>⚠ {s9.climate_caution_alert}</Text>
@@ -219,7 +233,7 @@ export default function Dashboard() {
                   const up = best.delta >= 0;
                   return (
                     <View key={cm.crop} style={[st.marketRow, { borderBottomColor: t.line }]}>
-                      <Text style={{ fontSize: 17, marginRight: 8 }}>{cm.emoji}</Text>
+                      <CropCoin cropKey={cm.crop} size={28} letters={cm.crop.slice(0, 2).toUpperCase()} />
                       <View style={{ flex: 1 }}>
                         <Text style={{ color: t.ink, fontWeight: "600", textTransform: "capitalize" }}>{cm.crop}</Text>
                         <Text style={{ color: t.dim, fontSize: 11, fontFamily: "monospace" }}>
@@ -259,12 +273,13 @@ export default function Dashboard() {
               </View>
               <Pill label="IN TRANSIT" tone="warn" />
             </View>
-            <PressScale onPress={() => router.push("/autopilot")} style={[st.btn, { borderColor: t.accent, borderWidth: 1, marginTop: 12 }]}>
+            <PressScale onPress={() => router.push("/autopilot")} accessibilityLabel="Open Autopilot for disruption replanning" style={[st.btn, { borderColor: t.accent, borderWidth: 1, marginTop: 12 }]}>
               <Text style={{ color: t.accent, fontWeight: "700" }}>Open Autopilot for disruption replanning</Text>
             </PressScale>
           </View>
           </Enter>
         )}
+        </Bounded>
       </ScrollView>
 
       <FAB
@@ -274,7 +289,6 @@ export default function Dashboard() {
           { label: "🔄  Refresh telemetry", onPress: load },
         ]}
       />
-      <Sidebar open={menu} onClose={() => setMenu(false)} />
     </SafeAreaView>
   );
 }
@@ -290,6 +304,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 const st = StyleSheet.create({
+  scroll: { flexGrow: 1 },
   body: { padding: 14, gap: 14 },
   card: { borderWidth: 1, borderRadius: 14, padding: 16 },
   cardHead: { fontFamily: "monospace", fontSize: 11, fontWeight: "700", letterSpacing: 2, marginBottom: 10 },

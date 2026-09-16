@@ -1,8 +1,11 @@
 import React, { useState } from "react";
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator } from "react-native";
+import { webLang } from "../../lib/ui";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { MenuButton } from "../../components/Header";
 import Pill from "../../components/Pill";
 import { Enter, PressScale } from "../../components/Motion";
+import { Bounded } from "../../components/Bounded";
 import { useTheme } from "../../lib/theme-context";
 import { runAutopilot, type AutopilotStep } from "../../lib/api";
 
@@ -27,16 +30,20 @@ export default function Autopilot() {
   const brief = steps?.find((s) => s.agent === "MISSION-BRIEF")?.output;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]} {...webLang("en")}>
       <View style={[s.top, { borderBottomColor: t.line }]}>
-        <Text style={[s.title, { color: t.ink }]}>SENTINEL <Text style={{ color: t.accent }}>AUTOPILOT</Text></Text>
-        <PressScale onPress={engage} disabled={busy} style={[s.engage, { backgroundColor: t.accent, opacity: busy ? 0.5 : 1 }]}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+          <MenuButton style={{ marginLeft: -12, marginVertical: -8 }} />
+          <Text style={[s.title, { color: t.ink }]}>SENTINEL <Text style={{ color: t.accent }}>AUTOPILOT</Text></Text>
+        </View>
+        <PressScale onPress={engage} disabled={busy} accessibilityLabel={busy ? "Autopilot running" : "Engage autopilot"} style={[s.engage, { backgroundColor: t.accent, opacity: busy ? 0.5 : 1 }]}>
           <Text style={{ color: t.bg, fontWeight: "800" }}>{busy ? "Running…" : "Engage"}</Text>
         </PressScale>
       </View>
       <Text style={[s.sub, { color: t.dim }]}>sense → arbitrage → weather gate → broadcast → brief</Text>
 
-      <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 40 }}>
+      <ScrollView contentContainerStyle={s.scroll}>
+        <Bounded style={s.body}>
         {busy && <ActivityIndicator color={t.accent} style={{ marginTop: 30 }} />}
         {err && <Text style={{ color: t.alert, marginTop: 20 }}>{err}</Text>}
         {!steps && !busy && !err && (
@@ -83,6 +90,7 @@ export default function Autopilot() {
           </View>
           </Enter>
         )}
+        </Bounded>
       </ScrollView>
     </SafeAreaView>
   );
@@ -122,7 +130,9 @@ function StepSummary({ step }: { step: AutopilotStep }) {
 }
 
 const s = StyleSheet.create({
-  top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
+  scroll: { flexGrow: 1 },
+  body: { padding: 14, paddingBottom: 40 },
+  top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 8, minHeight: 56, borderBottomWidth: 1 },
   title: { fontSize: 14, fontWeight: "800", letterSpacing: 2 },
   engage: { borderRadius: 10, paddingHorizontal: 18, paddingVertical: 9 },
   sub: { fontFamily: "monospace", fontSize: 10, paddingHorizontal: 16, paddingTop: 8, letterSpacing: 0.5 },

@@ -3,7 +3,7 @@ import { View, Text, ScrollView, RefreshControl, Pressable, StyleSheet } from "r
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
 import { useTheme } from "../../lib/theme-context";
-import { Header, Card, Button, Empty } from "../../components/ui";
+import { Header, Card, Button, Empty, Bounded, webPointer, type PressState } from "../../components/ui";
 import { ListingCard } from "../../components/ListingCard";
 import { getListings, deliverListing, type Listing, type ListingStatus } from "../../lib/api";
 
@@ -49,17 +49,28 @@ export default function Market() {
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]}>
       <Header title="Soko" subtitle="Community produce marketplace" />
 
-      <View style={st.filters}>
+      <Bounded style={st.filters}>
         {FILTERS.map((f) => {
           const active = filter === f;
           return (
             <Pressable
               key={f}
               onPress={() => setFilter(f)}
-              style={[
-                st.chip,
-                { borderColor: active ? t.accent : t.line, backgroundColor: active ? t.raised : "transparent" },
-              ]}
+              accessibilityRole="button"
+              accessibilityLabel={f === "all" ? "Show all listings" : `Show ${f} listings`}
+              accessibilityState={{ selected: active }}
+              hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
+              style={(state) => {
+                const { hovered } = state as PressState;
+                return [
+                  st.chip,
+                  {
+                    borderColor: active || hovered ? t.accent : t.line,
+                    backgroundColor: active || hovered ? t.raised : "transparent",
+                  },
+                  webPointer,
+                ];
+              }}
             >
               <Text style={{ color: active ? t.accent : t.dim, fontSize: 12, fontWeight: "700", textTransform: "capitalize" }}>
                 {f}
@@ -67,15 +78,16 @@ export default function Market() {
             </Pressable>
           );
         })}
-      </View>
+      </Bounded>
 
       <ScrollView
-        contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+        contentContainerStyle={st.scroll}
         refreshControl={
           <RefreshControl refreshing={refreshing} tintColor={t.accent}
             onRefresh={() => { setRefreshing(true); load(filter); }} />
         }
       >
+        <Bounded style={st.body}>
         {err && (
           <Card style={{ borderColor: t.alert }}>
             <Text style={{ color: t.alert, fontWeight: "700", marginBottom: 6 }}>CONNECTION</Text>
@@ -88,7 +100,8 @@ export default function Market() {
           <Empty text={`No ${filter === "all" ? "" : filter + " "}listings yet.\nPost surplus produce from the Sell tab.`} />
         )}
 
-        {listings.map((l) => <ListingCard key={l.id} listing={l} onDeliver={markDelivered} />)}
+        {listings.map((l, i) => <ListingCard key={l.id} index={i} listing={l} onDeliver={markDelivered} />)}
+        </Bounded>
       </ScrollView>
     </SafeAreaView>
   );
@@ -97,4 +110,6 @@ export default function Market() {
 const st = StyleSheet.create({
   filters: { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingVertical: 10 },
   chip: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6 },
+  scroll: { flexGrow: 1 },
+  body: { padding: 16, paddingBottom: 32 },
 });

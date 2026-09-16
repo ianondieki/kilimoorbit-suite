@@ -9,6 +9,7 @@
   },
   "crop_type": "tomato",
   "field_area_acres": 2.5,
+  "estimated_yield_kg": 10000,
   "market_data": {
     "available_markets": [
       {

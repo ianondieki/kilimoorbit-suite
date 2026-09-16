@@ -1,12 +1,17 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View, Text, TextInput, Pressable, FlatList, StyleSheet, KeyboardAvoidingView, Platform, Switch,
 } from "react-native";
+import { webLang } from "../../lib/ui";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from "expo-router";
+import { refreshVoicePref, useVoicePref } from "../../lib/voice";
+import { MenuButton } from "../../components/Header";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Speech from "expo-speech";
 import Pill from "../../components/Pill";
 import { Enter, PressScale } from "../../components/Motion";
+import { Bounded, CONTENT_MAX_W } from "../../components/Bounded";
 import { useTheme } from "../../lib/theme-context";
 import { callApex, getMeta, type ChatResult, type ApexError } from "../../lib/api";
 
@@ -30,12 +35,17 @@ const QUICK = [
   "How do I change my notification settings?",
 ];
 
+// RN core types only expose `pressed`; react-native-web also provides `hovered`.
+type PressState = { pressed: boolean; hovered?: boolean };
+const webCursor = Platform.OS === "web" ? ({ cursor: "pointer" } as const) : null;
+
 export default function Chat() {
   const t = useTheme();
   const [msgs, setMsgs] = useState<Msg[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [voice, setVoice] = useState(true);
+  // Shared with the sidebar switch (lib/voice.ts): one value, always in sync.
+  const [voice, setVoicePref] = useVoicePref();
   const list = useRef<FlatList>(null);
   const market = useRef<any>(null);
   const hydrated = useRef(false);
@@ -56,9 +66,6 @@ export default function Chat() {
       })
       .catch(() => {})
       .finally(() => { hydrated.current = true; });
-    AsyncStorage.getItem("ko-voice")
-      .then((v) => { if (v != null) setVoice(v === "1"); })
-      .catch(() => {});
     getMeta()
       .then((m) => {
         market.current =
@@ -67,17 +74,20 @@ export default function Chat() {
       .catch(() => {});
   }, []);
 
+  // Re-read the stored voice preference on every focus (the shared store
+  // already keeps the sidebar and this screen in sync while mounted).
+  useFocusEffect(useCallback(() => { refreshVoicePref(); }, []));
+
+  // Turning read-aloud off anywhere (e.g. from the sidebar) stops speech now.
+  useEffect(() => { if (!voice) Speech.stop(); }, [voice]);
+
   // Persist the conversation so it survives app restarts (capped at 50 turns).
   useEffect(() => {
     if (!hydrated.current) return;
     AsyncStorage.setItem(CHAT_LOG_KEY, JSON.stringify(msgs.slice(-50))).catch(() => {});
   }, [msgs]);
 
-  const toggleVoice = (v: boolean) => {
-    setVoice(v);
-    if (!v) Speech.stop();
-    AsyncStorage.setItem("ko-voice", v ? "1" : "0").catch(() => {});
-  };
+  const toggleVoice = (v: boolean) => setVoicePref(v);
 
   const clearChat = () => {
     Speech.stop();
@@ -132,17 +142,30 @@ export default function Chat() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]} {...webLang("en")}>
       <View style={[s.top, { borderBottomColor: t.line }]}>
-        <Text style={[s.title, { color: t.ink }]}>APEX <Text style={{ color: t.accent }}>CHAT</Text></Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+          <MenuButton style={{ marginLeft: -12, marginVertical: -8 }} />
+          <Text style={[s.title, { color: t.ink }]}>APEX <Text style={{ color: t.accent }}>CHAT</Text></Text>
+        </View>
         <View style={s.voiceRow}>
-          <Pressable onPress={clearChat} hitSlop={10} accessibilityLabel="Clear conversation">
+          <Pressable
+            onPress={clearChat}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Clear conversation"
+            style={({ pressed, hovered }: PressState) => [
+              webCursor,
+              (hovered || pressed) && { opacity: 0.7 },
+            ]}
+          >
             <Text style={{ color: t.dim, fontSize: 17 }}>↺</Text>
           </Pressable>
           <Text style={{ color: t.dim, fontFamily: "monospace", fontSize: 10 }}>VOICE</Text>
           <Switch
             value={voice}
             onValueChange={toggleVoice}
+            accessibilityLabel="Read replies aloud"
             trackColor={{ true: t.accent, false: t.line }}
             thumbColor={t.panel}
           />
@@ -154,7 +177,7 @@ export default function Chat() {
           ref={list}
           data={msgs}
           keyExtractor={(m) => m.id}
-          contentContainerStyle={{ padding: 14, gap: 10 }}
+          contentContainerStyle={s.chatContent}
           renderItem={({ item }) => (
             <Enter from={item.from === "user" ? "up" : "down"}>
             <View
@@ -169,7 +192,16 @@ export default function Chat() {
               {item.from === "apex" && (
                 <View style={s.metaRow}>
                   {item.intent ? <Pill label={item.intent.toUpperCase()} tone="warn" /> : null}
-                  <Pressable onPress={() => speak(item.text)} hitSlop={8}>
+                  <Pressable
+                    onPress={() => speak(item.text)}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel="Speak this reply aloud"
+                    style={({ pressed, hovered }: PressState) => [
+                      webCursor,
+                      (hovered || pressed) && { opacity: 0.7 },
+                    ]}
+                  >
                     <Text style={{ color: t.dim, fontSize: 12 }}>🔊 speak</Text>
                   </Pressable>
                 </View>
@@ -186,15 +218,27 @@ export default function Chat() {
           }
         />
 
-        <View style={s.quickRow}>
+        <Bounded style={s.quickRow}>
           {QUICK.map((q) => (
-            <Pressable key={q} onPress={() => send(q)} style={[s.quick, { borderColor: t.line }]}>
+            <Pressable
+              key={q}
+              onPress={() => send(q)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={`Ask: ${q}`}
+              style={({ pressed, hovered }: PressState) => [
+                s.quick,
+                { borderColor: hovered ? t.accent : t.line, opacity: pressed ? 0.6 : 1 },
+                webCursor,
+              ]}
+            >
               <Text style={{ color: t.dim, fontSize: 11 }} numberOfLines={1}>{q}</Text>
             </Pressable>
           ))}
-        </View>
+        </Bounded>
 
         <View style={[s.inputRow, { borderTopColor: t.line, backgroundColor: t.panel }]}>
+          <Bounded style={s.inputInner}>
           <TextInput
             style={[s.input, { color: t.ink, backgroundColor: t.field, borderColor: t.line }]}
             placeholder="Uliza Apex…"
@@ -205,10 +249,11 @@ export default function Chat() {
             returnKeyType="send"
             editable={!busy}
           />
-          <PressScale onPress={() => send()} disabled={busy}
+          <PressScale onPress={() => send()} disabled={busy} accessibilityLabel="Send message"
             style={[s.send, { backgroundColor: t.accent, opacity: busy ? 0.5 : 1 }]}>
             <Text style={{ color: t.bg, fontWeight: "800" }}>{busy ? "…" : "Send"}</Text>
           </PressScale>
+          </Bounded>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -216,14 +261,17 @@ export default function Chat() {
 }
 
 const s = StyleSheet.create({
-  top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
+  // minHeight 56 matches the dashboard Header and the docked sidebar head row.
+  top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 8, minHeight: 56, borderBottomWidth: 1 },
   title: { fontSize: 14, fontWeight: "800", letterSpacing: 2 },
   voiceRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  chatContent: { padding: 14, gap: 10, width: "100%", maxWidth: CONTENT_MAX_W, alignSelf: "center" },
   bubble: { maxWidth: "86%", borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11 },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 7 },
   quickRow: { flexDirection: "row", gap: 6, paddingHorizontal: 12, paddingBottom: 8 },
   quick: { flexShrink: 1, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
-  inputRow: { flexDirection: "row", gap: 10, padding: 12, borderTopWidth: 1 },
+  inputRow: { padding: 12, borderTopWidth: 1 },
+  inputInner: { flexDirection: "row", gap: 10 },
   input: { flex: 1, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15 },
   send: { borderRadius: 12, paddingHorizontal: 18, justifyContent: "center" },
 });

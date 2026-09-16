@@ -42,16 +42,57 @@ export type Meta = {
   commodity_feed?: CommodityFeed;
 };
 
+/** A non-OK HTTP answer from the server. Network failures and timeouts stay plain Errors. */
+export class ApiError extends Error {
+  status: number;
+  errorType?: string;
+  fields?: string[];
+  /** The server's own `error` text, when it sent one (e.g. a rate-limit hint). */
+  serverMessage?: string;
+  constructor(message: string, status: number, errorType?: string, fields?: string[], serverMessage?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.errorType = errorType;
+    this.fields = fields;
+    this.serverMessage = serverMessage;
+  }
+}
+
+/**
+ * The request was sent but no answer came back in time. Unlike a request that
+ * never left the phone, the server may still have acted on it (e.g. sent the
+ * welcome email), so callers must not claim that nothing happened.
+ * The message is unchanged from the plain Error thrown before.
+ */
+export class TimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TimeoutError";
+  }
+}
+
 /** Fetch with a hard timeout — an unreachable LAN IP otherwise hangs the UI indefinitely. */
 async function request<T>(path: string, init?: RequestInit, timeoutMs = 15000): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${API_BASE}${path}`, { ...init, signal: controller.signal });
-    if (!res.ok) throw new Error(`Sentinel server ${res.status}`);
+    if (!res.ok) {
+      // The message stays exactly as before (existing callers print it); the
+      // server's JSON details ride along on the ApiError.
+      const b = (await res.json().catch(() => null)) as any;
+      throw new ApiError(
+        `Sentinel server ${res.status}`,
+        res.status,
+        typeof b?.error_type === "string" ? b.error_type : undefined,
+        Array.isArray(b?.fields) ? b.fields : undefined,
+        typeof b?.error === "string" ? b.error : undefined
+      );
+    }
     return res.json();
   } catch (e: any) {
-    throw e?.name === "AbortError" ? new Error(`Sentinel server timed out after ${timeoutMs / 1000}s`) : e;
+    throw e?.name === "AbortError" ? new TimeoutError(`Sentinel server timed out after ${timeoutMs / 1000}s`) : e;
   } finally {
     clearTimeout(timer);
   }
@@ -64,16 +105,31 @@ const post = <T,>(path: string, body: unknown, timeoutMs?: number) =>
     body: JSON.stringify(body),
   }, timeoutMs);
 
-export const getMeta = () => request<Meta>("/api/meta");
-export const callApex = <T = any>(payload: unknown) =>
-  post<{ result: T; latency_ms: number; engine: string }>("/api/apex", { payload });
+export const getMeta = (timeoutMs = 15000) => request<Meta>("/api/meta", undefined, timeoutMs);
+// A LIVE Gemini apex call (esp. the structured arbitrage compile) can take
+// 20s+, and the server's own cap is 30s — so the client must wait longer than
+// that. MOCK returns instantly, so this only matters live.
+export const callApex = <T = any>(payload: unknown, timeoutMs = 45000) =>
+  post<{ result: T; latency_ms: number; engine: string }>("/api/apex", { payload }, timeoutMs);
 export const runAutopilot = () =>
   // LIVE mode chains several Gemini calls, so give Autopilot a longer window.
   post<{ engine: string; steps: AutopilotStep[]; brief?: any }>("/api/autopilot", {}, 60000);
 
-export type SignInResult = { status: "SENT" | "SIMULATED"; email: string; message: string };
-export const signIn = (name: string, email: string) =>
-  post<SignInResult>("/api/signin", { name, email });
+export type SignInResult = {
+  status: "SENT" | "SIMULATED";
+  channel: "email" | "phone";
+  email?: string;
+  phone?: string;
+  message: string;
+};
+/**
+ * Phone-first device sign-in. The server stores nothing; see server.js POST /api/signin.
+ * 8s for phone-only (the server answers at once). With an email the server
+ * waits on the SMTP handshake, which on rural data can pass 8s, so that path
+ * gets 20s: fewer "may not arrive" answers for an email that was in fact sent.
+ */
+export const signIn = (input: { name: string; phone?: string; email?: string }) =>
+  post<SignInResult>("/api/signin", input, input.email ? 20000 : 8000);
 
 export const fmtKES = (n: number | null | undefined) =>
   n == null ? "— suppressed" : `KES ${Number(n).toLocaleString("en-KE")}`;

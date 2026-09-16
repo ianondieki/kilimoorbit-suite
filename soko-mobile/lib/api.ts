@@ -1,7 +1,7 @@
 import { API_BASE } from "./config";
 
 /* ── Soko marketplace types (mirror the /api/soko/* server contracts) ── */
-export type ListingStatus = "open" | "claimed" | "delivered";
+export type ListingStatus = "open" | "claimed" | "delivered" | "cancelled";
 
 export type Listing = {
   id: string;

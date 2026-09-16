@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inside KilimoOrbit Sentinel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Savanna (light) is the base; Loam (dark) mirrors Sentinel's own dashboard themes. */
+:root{
+  --bg:#EFE6D3; --panel:#F8F2E4; --raised:#FFFBEF; --line:#D6C9A8;
+  --ink:#241F12; --dim:#5E5540; --accent:#9A5B22; --ok:#3E7A3E; --alert:#B8391D;
+  --code-bg:#FFF9EA; --mark:rgba(154,91,34,.10);
+  --sans:'Archivo',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#101B12; --panel:#162419; --raised:#1E3122; --line:#35503A;
+    --ink:#EFEADB; --dim:#ADB7A0; --accent:#E9B44C; --ok:#7CC680; --alert:#EE6A48;
+    --code-bg:#0C150E; --mark:rgba(233,180,76,.10);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101B12; --panel:#162419; --raised:#1E3122; --line:#35503A;
+  --ink:#EFEADB; --dim:#ADB7A0; --accent:#E9B44C; --ok:#7CC680; --alert:#EE6A48;
+  --code-bg:#0C150E; --mark:rgba(233,180,76,.10);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16.5px;line-height:1.62;
+  padding-inline:20px;padding-block:0 80px}
+a{color:var(--accent);text-underline-offset:3px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
+code,.mono{font-family:var(--mono);font-size:.86em}
+p code,li code,td code,dd code{background:var(--mark);padding:1px 5px;border-radius:4px}
+
+.page{max-width:1040px;margin:0 auto}
+.read{max-width:68ch}
+
+/* masthead */
+.mast{padding-block:56px 34px;border-bottom:1px solid var(--line)}
+.kicker{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin:0 0 14px}
+h1{font-variation-settings:'wdth' 116,'wght' 780;font-size:clamp(34px,5.4vw,58px);line-height:1.02;letter-spacing:-.01em;margin:0 0 20px;text-wrap:balance}
+.lede{font-size:19px;color:var(--dim);margin:0;max-width:60ch}
+.facts{display:flex;flex-wrap:wrap;gap:10px 26px;margin-top:26px;font-family:var(--mono);font-size:13px;color:var(--dim)}
+.facts b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+
+nav.toc{display:flex;flex-wrap:wrap;gap:6px 18px;padding-block:16px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:12.5px}
+nav.toc a{color:var(--dim);text-decoration:none}
+nav.toc a:hover{color:var(--accent)}
+
+section{padding-block:52px 8px}
+h2{font-variation-settings:'wdth' 108,'wght' 740;font-size:clamp(25px,3.2vw,33px);line-height:1.12;margin:0 0 8px;text-wrap:balance}
+.sec-label{font-family:var(--mono);font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);margin:0 0 10px}
+h3{font-variation-settings:'wdth' 104,'wght' 680;font-size:20px;line-height:1.25;margin:0 0 10px;text-wrap:balance}
+p{margin:0 0 14px}
+
+/* goals: plain definition list, no cards */
+.goals{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(360px,100%),1fr));gap:22px 40px;margin:26px 0 0}
+.goals div{border-top:2px solid var(--ink);padding-top:12px}
+.goals dt{font-variation-settings:'wdth' 106,'wght' 700;font-size:17px;margin-bottom:4px}
+.goals dd{margin:0;color:var(--dim);font-size:15.5px}
+
+/* figures */
+figure{margin:30px 0 8px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 18px 14px}
+.fig-scroll{overflow-x:auto}
+figure svg{display:block;width:100%;height:auto;min-width:760px;color:var(--ink);font-family:var(--mono)}
+figcaption{font-size:14.5px;color:var(--dim);margin-top:12px;max-width:80ch}
+figcaption b{color:var(--ink);font-weight:600}
+.d-box{fill:var(--raised);stroke:var(--line);stroke-width:1.2}
+.d-group{fill:none;stroke:var(--line);stroke-width:1.2;stroke-dasharray:0}
+.d-hot{fill:var(--mark);stroke:var(--accent);stroke-width:1.6}
+.d-err{fill:var(--raised);stroke:var(--alert);stroke-width:1.2}
+.d-good{fill:var(--raised);stroke:var(--ok);stroke-width:1.4}
+.d-line{fill:none;stroke:currentColor;stroke-width:1.3;opacity:.75}
+.d-acc{fill:none;stroke:var(--accent);stroke-width:2}
+.d-alert{fill:none;stroke:var(--alert);stroke-width:1.4}
+.d-okline{fill:none;stroke:var(--ok);stroke-width:1.6}
+.d-dash{stroke-dasharray:5 4}
+.t{fill:var(--ink);font-size:13px}
+.t-b{fill:var(--ink);font-size:13.5px;font-weight:600;font-family:var(--sans)}
+.t-s{fill:var(--dim);font-size:11px}
+.t-h{fill:var(--dim);font-size:11px;letter-spacing:.14em}
+.t-acc{fill:var(--accent);font-size:11.5px}
+.t-alert{fill:var(--alert);font-size:11.5px}
+.t-ok{fill:var(--ok);font-size:11.5px}
+.mk-ink{fill:currentColor}
+.mk-acc{fill:var(--accent)}
+.mk-alert{fill:var(--alert)}
+.mk-ok{fill:var(--ok)}
+
+/* decision log */
+.log{margin-top:26px;border-top:1px solid var(--line)}
+.entry{display:grid;grid-template-columns:minmax(0,230px) minmax(0,1fr);gap:8px 40px;padding-block:28px;border-bottom:1px solid var(--line)}
+.entry-head .ref{font-family:var(--mono);font-size:11.5px;color:var(--dim);letter-spacing:.06em;display:block;margin-top:8px;word-break:break-word}
+.rows{display:grid;gap:12px}
+.row{display:grid;grid-template-columns:92px minmax(0,1fr);gap:14px}
+.row .k{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;padding-top:4px}
+.row .k.broke{color:var(--alert)} .row .k.fix{color:var(--ok)} .row .k.lesson{color:var(--accent)}
+.row p{margin:0}
+.row.lesson p{font-weight:560;font-variation-settings:'wght' 560}
+
+pre{background:var(--code-bg);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto;
+  font-family:var(--mono);font-size:13px;line-height:1.55;margin:14px 0}
+pre .c{color:var(--dim)}
+pre .h{color:var(--accent)}
+
+/* tables */
+.table-wrap{overflow-x:auto;margin:22px 0}
+table{border-collapse:collapse;width:100%;min-width:620px;font-size:15px}
+th{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);text-align:left;font-weight:500;padding:8px 14px 8px 0;border-bottom:1.5px solid var(--ink)}
+td{padding:11px 14px 11px 0;border-bottom:1px solid var(--line);vertical-align:top}
+td.n{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* process timeline: a real sequence */
+ol.steps{list-style:none;padding:0;margin:24px 0 0;counter-reset:s}
+ol.steps li{counter-increment:s;display:grid;grid-template-columns:44px minmax(0,1fr);gap:14px;padding-block:14px;border-bottom:1px dashed var(--line)}
+ol.steps li::before{content:counter(s);font-family:var(--mono);font-size:13px;width:30px;height:30px;border:1.5px solid var(--accent);color:var(--accent);border-radius:50%;display:grid;place-items:center}
+ol.steps b{font-weight:650}
+ol.steps p{margin:2px 0 0;color:var(--dim);font-size:15.5px}
+
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:18px 44px;margin-top:18px}
+.limit{padding-left:14px;border-left:3px solid var(--alert)}
+.limit h3{font-size:17px;margin-bottom:4px}
+.limit p{color:var(--dim);font-size:15.5px;margin:0}
+
+dl.gloss{display:grid;grid-template-columns:minmax(0,190px) minmax(0,1fr);gap:10px 28px;margin:22px 0 0}
+dl.gloss dt{font-family:var(--mono);font-size:13.5px;font-weight:600;padding-top:2px}
+dl.gloss dd{margin:0;color:var(--dim);font-size:15.5px}
+
+footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);font-family:var(--mono);font-size:12.5px;color:var(--dim)}
+
+@media (max-width:760px){
+  .entry{grid-template-columns:1fr;gap:12px}
+  .row{grid-template-columns:1fr;gap:2px}
+  dl.gloss{grid-template-columns:1fr;gap:2px 0}
+  dl.gloss dd{margin-bottom:10px}
+  body{font-size:16px}
+}
+@media (prefers-reduced-motion: reduce){ *{scroll-behavior:auto} }
+/* print: fit diagrams to the page, keep entries together */
+@media print{
+  body{padding-inline:0;font-size:12.5px}
+  figure svg{min-width:0}
+  .fig-scroll,.table-wrap{overflow:visible}
+  table{min-width:0}
+  nav.toc{display:none}
+  figure,.entry,.limit,ol.steps li,pre{break-inside:avoid}
+  h2,h3{break-after:avoid}
+  section{padding-block:28px 4px}
+}
+@page{size:A4;margin:14mm}
+</style>
+</head>
+<body>
+
+<div class="page">
+
+<header class="mast">
+  <p class="kicker">KilimoOrbit Sentinel · engineering guide · September 2026</p>
+  <h1>Inside KilimoOrbit Sentinel</h1>
+  <p class="lede">What changed during the hardening pass, why each change was made, and how the whole system fits together. It's written so you can defend every decision in front of an investor or a senior engineer.</p>
+  <div class="facts">
+    <span>files changed <b>21</b></span>
+    <span>automated checks <b>76</b>, all passing</span>
+    <span>review loops <b>3</b></span>
+    <span>bugs fixed <b>~35</b></span>
+  </div>
+</header>
+
+<nav class="toc" aria-label="Sections">
+  <a href="#why">Why</a>
+  <a href="#map">System map</a>
+  <a href="#request">A request's journey</a>
+  <a href="#decisions">Decision log</a>
+  <a href="#tests">Testing</a>
+  <a href="#process">How the loops ran</a>
+  <a href="#limits">Honest limits</a>
+  <a href="#learn">Learn it yourself</a>
+  <a href="#glossary">Glossary</a>
+</nav>
+
+<!-- ─────────────────────────── WHY ─────────────────────────── -->
+<section id="why">
+  <p class="sec-label">The brief</p>
+  <h2>What "world class" meant for this product</h2>
+  <div class="read">
+    <p>You asked for a world-class application that is ready for marketing and funding. For a tool that tells a farmer where to sell a harvest, that has a concrete meaning. Good looks were never the bar. The bar is five promises the system must keep, and every change in this pass serves one of them.</p>
+  </div>
+  <dl class="goals">
+    <div><dt>Never wrong in front of a farmer</dt><dd>A made-up price or a Long Rains warning in January costs someone real money. Bad input must be rejected, and model mistakes must be caught before they reach a phone.</dd></div>
+    <div><dt>Never down during a demo</dt><dd>Gemini's free tier runs out and sometimes overloads. That happened during this very session. The product has to keep answering anyway.</dd></div>
+    <div><dt>Provable, not claimed</dt><dd>"It works" is a claim. Seventy-six checks that anyone can run with one command are proof, and investors and accelerator reviewers ask for exactly that.</dd></div>
+    <div><dt>Safe to put on the internet</dt><dd>An open email endpoint without limits becomes a spam relay. A marketplace where anyone can cancel anyone's listing can be emptied by one script.</dd></div>
+    <div><dt>Deployable and presentable</dt><dd>A Docker image, a CI pipeline, a health endpoint, an investor page and a funding calendar. That's the gap between a prototype and a pilot.</dd></div>
+  </dl>
+</section>
+
+<!-- ─────────────────────────── MAP ─────────────────────────── -->
+<section id="map">
+  <p class="sec-label">System design</p>
+  <h2>The system map</h2>
+  <div class="read">
+    <p>Sentinel is one Node.js process. Three clients talk to it over HTTP with JSON. Inside, requests pass through an ordered stack of middleware before they reach a route. The APEX routes hand the payload to the engine, which picks one of two brains: a deterministic rule engine that runs anywhere, or Gemini. The marketplace and sign-in routes talk to a JSON file and an email server instead.</p>
+  </div>
+
+  <figure>
+    <div class="fig-scroll">
+    <svg viewBox="0 0 980 460" role="img" aria-label="Three clients send JSON to one Express server. Requests pass through four ordered middleware layers, then routes. APEX routes call the engine, which validates the payload and then uses either the MOCK rule engine or Gemini LIVE followed by harden guardrails, falling back to MOCK when Gemini fails. Marketplace routes write to a JSON file store and sign-in sends email over SMTP.">
+      <defs>
+        <marker id="m1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-ink"/></marker>
+        <marker id="m1a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-acc"/></marker>
+      </defs>
+
+      <!-- clients -->
+      <text x="110" y="30" text-anchor="middle" class="t-h">CLIENTS</text>
+      <rect x="20" y="60" width="180" height="60" rx="7" class="d-box"/>
+      <text x="110" y="86" text-anchor="middle" class="t-b">Mission Control</text>
+      <text x="110" y="104" text-anchor="middle" class="t-s">browser dashboard</text>
+      <rect x="20" y="170" width="180" height="60" rx="7" class="d-box"/>
+      <text x="110" y="196" text-anchor="middle" class="t-b">KilimoOrbit app</text>
+      <text x="110" y="214" text-anchor="middle" class="t-s">Expo · farmers</text>
+      <rect x="20" y="280" width="180" height="60" rx="7" class="d-box"/>
+      <text x="110" y="306" text-anchor="middle" class="t-b">Soko app</text>
+      <text x="110" y="324" text-anchor="middle" class="t-s">Expo · marketplace</text>
+
+      <line x1="200" y1="90" x2="268" y2="90" class="d-line" marker-end="url(#m1)"/>
+      <line x1="200" y1="200" x2="268" y2="200" class="d-line" marker-end="url(#m1)"/>
+      <line x1="200" y1="310" x2="268" y2="310" class="d-line" marker-end="url(#m1)"/>
+      <text x="235" y="80" text-anchor="middle" class="t-s">JSON</text>
+
+      <!-- server -->
+      <rect x="270" y="40" width="300" height="400" rx="10" class="d-group"/>
+      <text x="420" y="64" text-anchor="middle" class="t-h">EXPRESS SERVER · server.js</text>
+      <rect x="290" y="80" width="260" height="34" rx="5" class="d-hot"/>
+      <text x="304" y="102" class="t">1  CORS + security headers</text>
+      <rect x="290" y="122" width="260" height="34" rx="5" class="d-box"/>
+      <text x="304" y="144" class="t">2  JSON body parser · 256 KB</text>
+      <rect x="290" y="164" width="260" height="34" rx="5" class="d-box"/>
+      <text x="304" y="186" class="t">3  static pages · dashboard, pitch</text>
+      <rect x="290" y="206" width="260" height="34" rx="5" class="d-box"/>
+      <text x="304" y="228" class="t">4  per-IP rate limiter</text>
+
+      <text x="420" y="268" text-anchor="middle" class="t-h">ROUTES</text>
+      <rect x="290" y="280" width="260" height="32" rx="5" class="d-hot"/>
+      <text x="304" y="301" class="t">/api/apex · /api/autopilot</text>
+      <rect x="290" y="318" width="260" height="32" rx="5" class="d-box"/>
+      <text x="304" y="339" class="t">/api/suite · /api/meta</text>
+      <rect x="290" y="356" width="260" height="32" rx="5" class="d-box"/>
+      <text x="304" y="377" class="t">/api/soko/*</text>
+      <rect x="290" y="394" width="260" height="32" rx="5" class="d-box"/>
+      <text x="304" y="415" class="t">/api/signin</text>
+
+      <!-- engine -->
+      <rect x="640" y="40" width="320" height="250" rx="10" class="d-group"/>
+      <text x="800" y="64" text-anchor="middle" class="t-h">APEX ENGINE · apex_client.js</text>
+      <rect x="660" y="80" width="280" height="40" rx="5" class="d-hot"/>
+      <text x="800" y="105" text-anchor="middle" class="t">validatePayload() · §1 rules</text>
+
+      <rect x="660" y="160" width="125" height="50" rx="5" class="d-box"/>
+      <text x="722" y="182" text-anchor="middle" class="t-b">MOCK</text>
+      <text x="722" y="199" text-anchor="middle" class="t-s">rule engine</text>
+      <rect x="815" y="160" width="125" height="50" rx="5" class="d-box"/>
+      <text x="877" y="182" text-anchor="middle" class="t-b">LIVE</text>
+      <text x="877" y="199" text-anchor="middle" class="t-s">Gemini 2.5 Flash</text>
+      <rect x="815" y="232" width="125" height="44" rx="5" class="d-hot"/>
+      <text x="877" y="252" text-anchor="middle" class="t-b">harden()</text>
+      <text x="877" y="268" text-anchor="middle" class="t-s">guardrails</text>
+
+      <line x1="722" y1="120" x2="722" y2="158" class="d-line" marker-end="url(#m1)"/>
+      <text x="714" y="144" text-anchor="end" class="t-s">no key</text>
+      <line x1="877" y1="120" x2="877" y2="158" class="d-line" marker-end="url(#m1)"/>
+      <text x="885" y="144" text-anchor="start" class="t-s">key set</text>
+      <line x1="877" y1="210" x2="877" y2="230" class="d-line" marker-end="url(#m1)"/>
+      <line x1="815" y1="185" x2="787" y2="185" class="d-acc d-dash" marker-end="url(#m1a)"/>
+      <text x="800" y="150" text-anchor="middle" class="t-acc">fallback</text>
+
+      <polyline points="550,296 600,296 600,100 658,100" class="d-acc" marker-end="url(#m1a)"/>
+
+      <!-- stores -->
+      <rect x="640" y="322" width="150" height="50" rx="5" class="d-box"/>
+      <text x="715" y="344" text-anchor="middle" class="t-b">Soko store</text>
+      <text x="715" y="361" text-anchor="middle" class="t-s">soko_store.json</text>
+      <rect x="810" y="322" width="150" height="50" rx="5" class="d-box"/>
+      <text x="885" y="344" text-anchor="middle" class="t-b">SMTP email</text>
+      <text x="885" y="361" text-anchor="middle" class="t-s">nodemailer</text>
+
+      <polyline points="550,372 612,372 612,347 638,347" class="d-line" marker-end="url(#m1)"/>
+      <text x="625" y="392" text-anchor="middle" class="t-s">reads/writes</text>
+      <polyline points="550,420 885,420 885,374" class="d-line" marker-end="url(#m1)"/>
+      <text x="720" y="440" text-anchor="middle" class="t-s">sends welcome email</text>
+    </svg>
+    </div>
+    <figcaption><b>The highlighted path is the one that matters most.</b> An APEX request crosses the middleware in order 1 → 4, then reaches validation. Only after validation does it touch an engine, and a Gemini answer always passes through <code>harden()</code>. Middleware order is highlighted too, because getting it wrong caused a real bug (see the decision log).</figcaption>
+  </figure>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Part</th><th>File</th><th>Job, in one sentence</th></tr></thead>
+      <tbody>
+        <tr><td>System prompt</td><td><code>src/apex_system_prompt.md</code></td><td>The contract: the rules, the five output shapes, the Kenyan climate calendar. Gemini reads it verbatim.</td></tr>
+        <tr><td>Engine</td><td><code>src/apex_client.js</code></td><td>Validates input, runs MOCK or LIVE, hardens LIVE answers, falls back when Gemini fails.</td></tr>
+        <tr><td>Server</td><td><code>src/server.js</code></td><td>HTTP layer: middleware, rate limits, routes, the Autopilot chain, the telemetry simulator.</td></tr>
+        <tr><td>Check catalogue</td><td><code>src/suite.js</code></td><td>The 30 contract checks, shared by the command line and the dashboard so they can never disagree.</td></tr>
+        <tr><td>Marketplace</td><td><code>src/soko/</code></td><td>Listings, claims, deliveries and fair prices, stored in one JSON file.</td></tr>
+        <tr><td>Dashboard</td><td><code>public/index.html</code></td><td>Mission Control. One file with no build step.</td></tr>
+        <tr><td>Investor page</td><td><code>public/pitch.html</code></td><td>The one-pager served at <code>/pitch</code>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ─────────────────────────── REQUEST ─────────────────────────── -->
+<section id="request">
+  <p class="sec-label">System design</p>
+  <h2>One request, start to finish</h2>
+  <div class="read">
+    <p>The best way to understand a backend is to follow one request. Here is a farmer's arbitrage question, <code>POST /api/apex</code>. It passes seven gates, and each gate has exactly one way to leave early. The cheap checks come first, so a bad request is turned away before it costs anything.</p>
+  </div>
+
+  <figure>
+    <div class="fig-scroll">
+    <svg viewBox="0 0 1000 262" role="img" aria-label="A request passes eight stages left to right: request, parse JSON, rate limit, route known, validate, engine, harden, response. Parse JSON can exit with 400 BAD_JSON, rate limit with 429, route check with UNKNOWN_ROUTE, validate with DATA_ERROR, and the engine with a MOCK fallback for 429 or 503 errors or a CLIENT_FAILURE for 401.">
+      <defs>
+        <marker id="m2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" class="mk-ink"/></marker>
+        <marker id="m2e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" class="mk-alert"/></marker>
+        <marker id="m2a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" class="mk-acc"/></marker>
+      </defs>
+
+      <!-- main row -->
+      <rect x="10" y="40" width="100" height="56" rx="6" class="d-box"/>
+      <text x="60" y="64" text-anchor="middle" class="t-b">Request</text>
+      <text x="60" y="81" text-anchor="middle" class="t-s">POST /api/apex</text>
+
+      <rect x="134" y="40" width="100" height="56" rx="6" class="d-box"/>
+      <text x="184" y="64" text-anchor="middle" class="t-b">Parse JSON</text>
+      <text x="184" y="81" text-anchor="middle" class="t-s">≤ 256 KB</text>
+
+      <rect x="258" y="40" width="100" height="56" rx="6" class="d-box"/>
+      <text x="308" y="64" text-anchor="middle" class="t-b">Rate limit</text>
+      <text x="308" y="81" text-anchor="middle" class="t-s">60 per minute</text>
+
+      <rect x="382" y="40" width="100" height="56" rx="6" class="d-box"/>
+      <text x="432" y="64" text-anchor="middle" class="t-b">Route known?</text>
+      <text x="432" y="81" text-anchor="middle" class="t-s">execution_mode</text>
+
+      <rect x="506" y="40" width="100" height="56" rx="6" class="d-hot"/>
+      <text x="556" y="64" text-anchor="middle" class="t-b">Validate</text>
+      <text x="556" y="81" text-anchor="middle" class="t-s">§1 rules</text>
+
+      <rect x="630" y="40" width="100" height="56" rx="6" class="d-box"/>
+      <text x="680" y="64" text-anchor="middle" class="t-b">Engine</text>
+      <text x="680" y="81" text-anchor="middle" class="t-s">MOCK or LIVE</text>
+
+      <rect x="754" y="40" width="100" height="56" rx="6" class="d-hot"/>
+      <text x="804" y="64" text-anchor="middle" class="t-b">harden()</text>
+      <text x="804" y="81" text-anchor="middle" class="t-s">LIVE only</text>
+
+      <rect x="878" y="40" width="110" height="56" rx="6" class="d-good"/>
+      <text x="933" y="64" text-anchor="middle" class="t-b">200 OK</text>
+      <text x="933" y="81" text-anchor="middle" class="t-s">decision JSON</text>
+
+      <line x1="110" y1="68" x2="132" y2="68" class="d-line" marker-end="url(#m2)"/>
+      <line x1="234" y1="68" x2="256" y2="68" class="d-line" marker-end="url(#m2)"/>
+      <line x1="358" y1="68" x2="380" y2="68" class="d-line" marker-end="url(#m2)"/>
+      <line x1="482" y1="68" x2="504" y2="68" class="d-line" marker-end="url(#m2)"/>
+      <line x1="606" y1="68" x2="628" y2="68" class="d-line" marker-end="url(#m2)"/>
+      <line x1="730" y1="68" x2="752" y2="68" class="d-line" marker-end="url(#m2)"/>
+      <line x1="854" y1="68" x2="876" y2="68" class="d-line" marker-end="url(#m2)"/>
+
+      <!-- exits -->
+      <line x1="184" y1="96" x2="184" y2="148" class="d-alert" marker-end="url(#m2e)"/>
+      <text x="190" y="126" class="t-alert">bad body</text>
+      <rect x="134" y="150" width="100" height="52" rx="6" class="d-err"/>
+      <text x="184" y="172" text-anchor="middle" class="t-b">400</text>
+      <text x="184" y="190" text-anchor="middle" class="t-s">BAD_JSON</text>
+
+      <line x1="308" y1="96" x2="308" y2="148" class="d-alert" marker-end="url(#m2e)"/>
+      <text x="314" y="126" class="t-alert">too many</text>
+      <rect x="258" y="150" width="100" height="52" rx="6" class="d-err"/>
+      <text x="308" y="172" text-anchor="middle" class="t-b">429</text>
+      <text x="308" y="190" text-anchor="middle" class="t-s">Retry-After</text>
+
+      <line x1="432" y1="96" x2="432" y2="148" class="d-alert" marker-end="url(#m2e)"/>
+      <text x="438" y="126" class="t-alert">unknown</text>
+      <rect x="382" y="150" width="100" height="52" rx="6" class="d-err"/>
+      <text x="432" y="172" text-anchor="middle" class="t-b">200 · error</text>
+      <text x="432" y="190" text-anchor="middle" class="t-s">UNKNOWN_ROUTE</text>
+
+      <line x1="556" y1="96" x2="556" y2="148" class="d-alert" marker-end="url(#m2e)"/>
+      <text x="562" y="126" class="t-alert">invalid</text>
+      <rect x="506" y="150" width="100" height="52" rx="6" class="d-err"/>
+      <text x="556" y="172" text-anchor="middle" class="t-b">200 · error</text>
+      <text x="556" y="190" text-anchor="middle" class="t-s">DATA_ERROR</text>
+
+      <line x1="680" y1="96" x2="680" y2="148" class="d-alert" marker-end="url(#m2e)"/>
+      <text x="686" y="126" class="t-alert">Gemini fails</text>
+      <rect x="630" y="150" width="124" height="66" rx="6" class="d-err"/>
+      <text x="692" y="171" text-anchor="middle" class="t-acc">429/503 → MOCK</text>
+      <text x="692" y="189" text-anchor="middle" class="t-s">answer, tagged</text>
+      <text x="692" y="207" text-anchor="middle" class="t-alert">401 → FAILURE</text>
+      <polyline points="754,172 933,172 933,98" class="d-acc d-dash" marker-end="url(#m2a)"/>
+      <text x="846" y="164" text-anchor="middle" class="t-acc">still a valid answer</text>
+
+      <text x="10" y="248" class="t-s">Red exits end the request early. The dashed amber path is the fallback: the farmer still gets an answer.</text>
+    </svg>
+    </div>
+    <figcaption><b>Notice that <code>UNKNOWN_ROUTE</code> and <code>DATA_ERROR</code> return HTTP 200.</b> The request reached the engine and the engine answered correctly: "this payload breaks rule §1". That's a business answer, so it travels as a normal response with <code>execution_mode: "error"</code>. HTTP error codes are kept for transport problems, meaning a broken body, too many requests, or a missing route.</figcaption>
+  </figure>
+
+  <div class="read">
+    <p>This is the core of <code>callApex</code>, trimmed to its shape. Read it as the diagram written in code:</p>
+  </div>
+<pre><span class="c">// src/apex_client.js — callApex, simplified</span>
+<span class="h">if</span> (!VALID_ROUTES.includes(mode)) <span class="h">return</span> unknownRoute(mode);     <span class="c">// gate 4</span>
+<span class="h">const</span> { failed, oob } = validatePayload(p, mode);               <span class="c">// gate 5</span>
+<span class="h">if</span> (failed.length || oob.length) <span class="h">return</span> dataError(failed, oob);
+
+<span class="h">if</span> (engineMode() === <span class="h">"MOCK"</span>) <span class="h">return</span> mockEngine(p);             <span class="c">// no key: rules only</span>
+<span class="h">try</span> {
+  <span class="h">return</span> harden(<span class="h">await</span> gemini(p), p);                          <span class="c">// gates 6 + 7</span>
+} <span class="h">catch</span> (err) {
+  <span class="h">if</span> (retryable(err))                                           <span class="c">// 429, 5xx, timeout, network</span>
+    <span class="h">return</span> { ...mockEngine(p), engine_fallback: { from: <span class="h">"LIVE"</span>, to: <span class="h">"MOCK"</span> } };
+  <span class="h">throw</span> err;                                                    <span class="c">// 401 bad key: never hide it</span>
+}</pre>
+</section>
+
+<!-- ─────────────────────────── DECISIONS ─────────────────────────── -->
+<section id="decisions">
+  <p class="sec-label">Why each change</p>
+  <h2>Decision log</h2>
+  <div class="read">
+    <p>Engineering teams record important choices as short entries: what was broken, what changed, and the general lesson. These are the ten decisions that matter most. The lesson line in each entry is the part to remember, because it applies to every future project.</p>
+  </div>
+
+  <div class="log">
+
+    <article class="entry">
+      <div class="entry-head"><h3>Validate in code, not in the prompt</h3><span class="ref">apex_client.js · validatePayload()</span></div>
+      <div class="rows">
+        <div class="row"><span class="k broke">Broken</span><p>Validation only checked that keys existed. A route list sent as a string, onboarding step 9, or a market with no price crashed the engine or produced <code>NaN</code> shillings. In LIVE mode those payloads would also be sent to Gemini and billed.</p></div>
+        <div class="row"><span class="k fix">Changed</span><p>The engine now checks structure before any engine runs: types, allowed values, array shapes, month names in English or Kiswahili. Each failure names the exact field, down to <code>available_markets[1].wholesale_price_per_kg</code>.</p></div>
+        <div class="row lesson"><span class="k lesson">Lesson</span><p>Anything that can be checked with an if-statement should never be left to a language model. Code is free, instant and always gives the same answer.</p></div>
+      </div>
+    </article>
+
+    <article class="entry">
+      <div class="entry-head"><h3>Check the model's answer before a farmer sees it</h3><span class="ref">apex_client.js · harden()</span></div>
+      <div class="rows">
+        <div class="row"><span class="k broke">Broken</span><p>Gemini output went straight to the client. The prompt forbids inventing prices and requires messages under 25 words, but a model can still slip. In LIVE testing it asked for a yield figure the rules say it should have derived.</p></div>
+        <div class="row"><span class="k fix">Changed</span><p><code>harden()</code> re-applies the rules that code can check. It hides profit when prices are stale, re-reads the price from the payload, and recomputes when a market name isn't in the data. It also shortens long messages while keeping the emoji, and replaces fake alert IDs. Each intervention is recorded in <code>guardrail_notes</code>.</p></div>
+        <div class="row lesson"><span class="k lesson">Lesson</span><p>Treat model output as untrusted input. Let the model do what only it can do, the language, and let code verify the facts.</p></div>
+      </div>
+    </article>
+
+    <article class="entry">
+      <div class="entry-head"><h3>Keep answering when Gemini is down</h3><span class="ref">apex_client.js · callApex() · retryable()</span></div>
+      <div class="rows">
+        <div class="row"><span class="k broke">Broken</span><p>A quota error or an overloaded model returned <code>CLIENT_FAILURE</code>. Both happened during this session's LIVE test run. In a demo, that's a dead screen.</p></div>
+        <div class="row"><span class="k fix">Changed</span><p>Temporary failures (429, 5xx, timeouts, network drops) now fall back to the rule engine, and the answer is tagged <code>engine_fallback</code> so operators can see what happened. Permanent failures like a wrong API key are deliberately not hidden. The retry delay is also longer after a 429.</p></div>
+        <div class="row lesson"><span class="k lesson">Lesson</span><p>Degrade gracefully, but only for errors that fix themselves. Hiding a configuration error just moves the outage to a moment when you can't see it.</p></div>
+      </div>
+    </article>
+
+    <article class="entry">
+      <div class="entry-head"><h3>One list of checks, used everywhere</h3><span class="ref">suite.js · GET /api/suite</span></div>
+      <div class="rows">
+        <div class="row"><span class="k broke">Broken</span><p>The same tests were written three times: in the command-line runner, in the server, and as seven hardcoded names in the dashboard. The server ran 11, so the dashboard silently hid four results.</p></div>
+        <div class="row"><span class="k fix">Changed</span><p>All 30 checks now live in one module. The command line imports it, the server runs it, and the dashboard fetches the list from <code>GET /api/suite</code> and draws whatever it receives.</p></div>
+        <div class="row lesson"><span class="k lesson">Lesson</span><p>Keep one source of truth. When the same fact is written in two places, the copies eventually disagree, and nobody notices which one is wrong.</p></div>
+      </div>
+    </article>
+
+    <article class="entry">
+      <div class="entry-head"><h3>Never invent the headline number</h3><span class="ref">apex_client.js · Route A · yield_basis</span></div>
+      <div class="rows">
+        <div class="row"><span class="k broke">Broken</span><p>Profit is price × yield − transport. The yield came from a hardcoded table, and a missing farm size silently defaulted to one acre. The biggest number on the demo was partly a guess labelled "HIGH confidence".</p></div>
+        <div class="row"><span class="k fix">Changed</span><p>If the payload includes <code>estimated_yield_kg</code>, it's used exactly as given. Otherwise the yield is derived from the farm size and marked <code>assumed_from_field_area</code>, with a plain-language note. With neither, the request is rejected.</p></div>
+        <div class="row lesson"><span class="k lesson">Lesson</span><p>Every number you show should be able to say where it came from. Trust with farmers and investors is lost the first time an assumption turns out to be dressed up as data.</p></div>
+      </div>
+    </article>
+
+    <article class="entry">
+      <div class="entry-head"><h3>Middleware order is behaviour</h3><span class="ref">server.js · createApp()</span></div>
+      <div class="rows">
+        <div class="row"><span class="k broke">Broken</span><p>The regression review caught this one. The JSON parser ran before the CORS middleware. When a body was malformed, Express jumped straight to the error handler and skipped CORS, so the error response had no <code>Access-Control-Allow-Origin</code> header. The browser then hid the real message behind "Failed to fetch".</p></div>
+        <div class="row"><span class="k fix">Changed</span><p>CORS now runs first, and a test asserts that the header is present on a 400 response. See the diagram below.</p></div>
+        <div class="row lesson"><span class="k lesson">Lesson</span><p>In Express, the order of <code>app.use</code> calls is the program. Headers that every response needs belong at the top, before anything that can fail.</p></div>
+      </div>
+    </article>
+
+    <article class="entry">
+      <div class="entry-head"><h3>Rate-limit anything that costs money or sends email</h3><span class="ref">server.js · rateLimit()</span></div>
+      <div class="rows">
+        <div class="row"><span class="k broke">Broken</span><p>The server allows requests from any website. With no limits, any page on the internet could make it send unlimited email or burn the Gemini quota.</p></div>
+        <div class="row"><span class="k fix">Changed</span><p>A small per-IP limiter with no new dependencies. Sign-in allows 5 per hour, APEX 60 per minute, Autopilot 20, the suite 6 and the marketplace 120. Over the limit, clients get a 429 with a <code>Retry-After</code> header. <code>TRUST_PROXY=1</code> makes it see real client IPs behind a hosting proxy.</p></div>
+        <div class="row lesson"><span class="k lesson">Lesson</span><p>Put the tightest limit on the most expensive action. Behind a proxy, check that the limiter sees each user's real IP, or it will lock everyone out together.</p></div>
+      </div>
+    </article>
+
+    <article class="entry">
+      <div class="entry-head"><h3>Only the owner can withdraw a listing</h3><span class="ref">soko/store.js · owner_token</span></div>
+      <div class="rows">
+        <div class="row"><span class="k broke">Broken</span><p>Any visitor could cancel any farmer's listing. All errors were 400, so the apps couldn't distinguish "doesn't exist" from "not allowed".</p></div>
+        <div class="row"><span class="k fix">Changed</span><p>Creating a listing returns a secret <code>owner_token</code> once, and it is removed from every later read. Cancelling requires it, and the check denies by default. Status codes now mean something: 404 for not found, 403 for not yours, 400 for bad input.</p></div>
+        <div class="row lesson"><span class="k lesson">Lesson</span><p>Security checks should deny by default. The first version skipped the check for listings with no token, and the reviewer spotted that every older listing was still open.</p></div>
+      </div>
+    </article>
+
+    <article class="entry">
+      <div class="entry-head"><h3>A crash mid-write must not destroy the data</h3><span class="ref">soko/store.js · write() · read()</span></div>
+      <div class="rows">
+        <div class="row"><span class="k broke">Broken</span><p>Writing straight to the store file meant a crash halfway through could leave half a file. The next read would find broken JSON, start empty, and overwrite every listing.</p></div>
+        <div class="row"><span class="k fix">Changed</span><p>Each write goes to a temporary file first, then an atomic rename swaps it in. A file that can't be parsed is moved aside and logged, never silently replaced.</p></div>
+        <div class="row lesson"><span class="k lesson">Lesson</span><p>Write, then rename, is the standard way to update a file safely. A rename either happens completely or not at all.</p></div>
+      </div>
+    </article>
+
+    <article class="entry">
+      <div class="entry-head"><h3>User text can reach JavaScript internals</h3><span class="ref">apex_client.js · has()</span></div>
+      <div class="rows">
+        <div class="row"><span class="k broke">Broken</span><p>Looking up <code>YIELD_TABLE[crop]</code> with the crop <code>"constructor"</code> returned a built-in JavaScript function instead of a number. That leaked <code>NaN</code> into a farmer-facing sentence. The same trick leaked text into fields that should only hold fixed values.</p></div>
+        <div class="row"><span class="k fix">Changed</span><p>Every lookup keyed by user input now uses <code>Object.hasOwn()</code>, and fields with fixed allowed values are checked against an allow-list.</p></div>
+        <div class="row lesson"><span class="k lesson">Lesson</span><p>A plain JavaScript object isn't a safe dictionary for untrusted keys. Use <code>Object.hasOwn</code> or a <code>Map</code>.</p></div>
+      </div>
+    </article>
+  </div>
+
+  <figure>
+    <div class="fig-scroll">
+    <svg viewBox="0 0 920 252" role="img" aria-label="Before: the browser request hits the JSON parser before CORS. On a bad body the error handler replies without a CORS header, so the browser blocks the response. After: CORS runs first, so the error response carries the header and the client can read the error message.">
+      <defs>
+        <marker id="m3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" class="mk-ink"/></marker>
+        <marker id="m3e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" class="mk-alert"/></marker>
+        <marker id="m3o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" class="mk-ok"/></marker>
+      </defs>
+      <text x="20" y="28" class="t-h">BEFORE</text>
+      <rect x="30" y="60" width="100" height="44" rx="6" class="d-box"/>
+      <text x="80" y="87" text-anchor="middle" class="t-b">Browser</text>
+      <rect x="170" y="60" width="100" height="44" rx="6" class="d-box"/>
+      <text x="220" y="87" text-anchor="middle" class="t">JSON parser</text>
+      <rect x="310" y="60" width="100" height="44" rx="6" class="d-box"/>
+      <text x="360" y="87" text-anchor="middle" class="t">CORS</text>
+      <line x1="130" y1="82" x2="168" y2="82" class="d-line" marker-end="url(#m3)"/>
+      <line x1="270" y1="82" x2="308" y2="82" class="d-line d-dash" marker-end="url(#m3)"/>
+      <text x="290" y="54" text-anchor="middle" class="t-s">never reached</text>
+      <line x1="220" y1="104" x2="220" y2="168" class="d-alert" marker-end="url(#m3e)"/>
+      <text x="228" y="140" class="t-alert">bad body</text>
+      <rect x="170" y="170" width="100" height="44" rx="6" class="d-err"/>
+      <text x="220" y="197" text-anchor="middle" class="t">error handler</text>
+      <polyline points="170,192 80,192 80,106" class="d-alert" marker-end="url(#m3e)"/>
+      <text x="175" y="240" text-anchor="middle" class="t-alert">400 without CORS header · browser: "Failed to fetch"</text>
+
+      <line x1="460" y1="20" x2="460" y2="232" class="d-line" opacity=".35"/>
+
+      <text x="480" y="28" class="t-h">AFTER</text>
+      <rect x="490" y="60" width="100" height="44" rx="6" class="d-box"/>
+      <text x="540" y="87" text-anchor="middle" class="t-b">Browser</text>
+      <rect x="630" y="60" width="100" height="44" rx="6" class="d-good"/>
+      <text x="680" y="87" text-anchor="middle" class="t">CORS</text>
+      <rect x="770" y="60" width="100" height="44" rx="6" class="d-box"/>
+      <text x="820" y="87" text-anchor="middle" class="t">JSON parser</text>
+      <line x1="590" y1="82" x2="628" y2="82" class="d-line" marker-end="url(#m3)"/>
+      <line x1="730" y1="82" x2="768" y2="82" class="d-line" marker-end="url(#m3)"/>
+      <text x="750" y="54" text-anchor="middle" class="t-ok">header set</text>
+      <line x1="820" y1="104" x2="820" y2="168" class="d-alert" marker-end="url(#m3e)"/>
+      <text x="828" y="140" class="t-alert">bad body</text>
+      <rect x="770" y="170" width="100" height="44" rx="6" class="d-err"/>
+      <text x="820" y="197" text-anchor="middle" class="t">error handler</text>
+      <polyline points="770,192 540,192 540,106" class="d-okline" marker-end="url(#m3o)"/>
+      <text x="680" y="240" text-anchor="middle" class="t-ok">400 with CORS header · app shows the real message</text>
+    </svg>
+    </div>
+    <figcaption><b>Two lines swapped, one bug gone.</b> The fix changed no logic. It only moved CORS above the body parser. Errors that skip middleware are easy to miss because the happy path works perfectly, which is why the HTTP test now sends a deliberately broken body.</figcaption>
+  </figure>
+</section>
+
+<!-- ─────────────────────────── TESTS ─────────────────────────── -->
+<section id="tests">
+  <p class="sec-label">Proof</p>
+  <h2>Four suites, four kinds of confidence</h2>
+  <div class="read">
+    <p>Each suite answers a different question, and none of them can replace another. The rule-engine suite proves the rules are right. The HTTP suite proves the wiring is right, which the rule suite can't see: the CORS bug above passed every rule check. <code>npm test</code> runs all four, and CI runs them on every push.</p>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Suite</th><th>Checks</th><th>Question it answers</th><th>How it runs</th></tr></thead>
+      <tbody>
+        <tr><td>APEX contract</td><td class="n">30</td><td>Does the engine follow every rule in the system prompt, including the odd cases?</td><td>Calls <code>callApex</code> directly. Works against MOCK or LIVE.</td></tr>
+        <tr><td>Soko store</td><td class="n">12</td><td>Do listings move correctly through open → claimed → delivered, with fair prices?</td><td>Calls store functions directly. No server, no model.</td></tr>
+        <tr><td>HTTP integration</td><td class="n">27</td><td>Do real requests get the right status codes, headers, limits and response shapes?</td><td>Starts the real server on a random port with a temporary data file.</td></tr>
+        <tr><td>Fallback</td><td class="n">7</td><td>When Gemini fails, does the right thing happen for each kind of error?</td><td>Uses <code>APEX_SIMULATE_LIVE_ERROR</code> to fake 429, 503, timeout and 401.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="read">
+    <p>Every bug in the decision log has a check that fails if it comes back. Case 28 feeds the crop <code>"constructor"</code>, and case 27 feeds the month <code>"Bananas"</code>. That's how a fix becomes permanent instead of something someone has to remember.</p>
+  </div>
+</section>
+
+<!-- ─────────────────────────── PROCESS ─────────────────────────── -->
+<section id="process">
+  <p class="sec-label">Method</p>
+  <h2>How the review loops ran</h2>
+  <div class="read">
+    <p>You asked for repeated loops. The point of a loop is that each pass uses a fresh reader who didn't write the code, because authors are blind to their own assumptions. This was the real sequence:</p>
+  </div>
+  <ol class="steps">
+    <li><div><b>Read everything, run the baseline</b><p>All source files, the 392-line system prompt and both mobile clients. 11/11 and 12/12 tests passed, which showed the tests weren't looking hard enough.</p></div></li>
+    <li><div><b>First rewrite</b><p>Engine, server, shared checks, marketplace, dashboard. The check count grew from 11 to 25.</p></div></li>
+    <li><div><b>Independent bug hunt by a separate Opus agent</b><p>It was given read-only access and a list of known issues to skip. It confirmed 22 findings by actually running attack inputs, such as prototype keys, Kiswahili months and huge messages.</p></div></li>
+    <li><div><b>LIVE test against real Gemini</b><p>21 of 25 passed before the quota ran out. The failures showed where the model drifts, which led to the yield rule, the intent guardrail and the fallback.</p></div></li>
+    <li><div><b>Second rewrite</b><p>Fixed the confirmed findings and added a regression check for each. Checks grew to 30, plus the fallback suite.</p></div></li>
+    <li><div><b>Regression review by a third reader</b><p>It reviewed only the diff and asked what the changes broke. It found the CORS ordering bug, the owner-token bypass and the Node 18 incompatibility.</p></div></li>
+    <li><div><b>Third fix pass, screenshots, typechecks</b><p>Headless browser screenshots at desktop, tablet and phone widths caught a layout bug that no test could see. Both Expo apps typecheck cleanly.</p></div></li>
+  </ol>
+</section>
+
+<!-- ─────────────────────────── LIMITS ─────────────────────────── -->
+<section id="limits">
+  <p class="sec-label">Honest limits</p>
+  <h2>What this design doesn't handle yet</h2>
+  <div class="read">
+    <p>Knowing a system's limits is part of understanding it. An investor who asks "what breaks at scale?" should hear these from you first.</p>
+  </div>
+  <div class="two">
+    <div class="limit"><h3>One server process only</h3><p>The store reads, changes and writes the file with synchronous calls, so within one Node process two requests can never interleave. Run two copies of the server and they would overwrite each other. The rate limiter also lives in memory. Move to SQLite or Postgres before scaling out.</p></div>
+    <div class="limit"><h3>LIVE isn't fully verified</h3><p>Gemini passed 21 of 25 before the free quota ran out. The fixes for the failures are covered by rule checks, but the full 30 haven't been run against the live model. Use a paid key or spread the checks out.</p></div>
+    <div class="limit"><h3>The data is simulated</h3><p>Prices and sensor readings come from a random walk over sample files. The next real milestone is a live price feed (for example KAMIS) and actual sensors.</p></div>
+    <div class="limit"><h3>No user accounts</h3><p>The owner token is a lightweight secret, not a login. Anyone holding it can cancel that listing. Real accounts, with phone-number sign-in for example, come before handling money.</p></div>
+    <div class="limit"><h3>Yields are regional estimates</h3><p>When a farm doesn't report its yield, the engine uses conservative averages and says so. Pilot data should replace them.</p></div>
+    <div class="limit"><h3>The Soko app can't cancel yet</h3><p>The API supports cancelling. The mobile app doesn't store the owner token or show a cancel button.</p></div>
+  </div>
+</section>
+
+<!-- ─────────────────────────── LEARN ─────────────────────────── -->
+<section id="learn">
+  <p class="sec-label">Hands on</p>
+  <h2>Learn it by breaking it</h2>
+  <div class="read">
+    <p>Reading teaches the shape of a system. Breaking it on purpose teaches how it actually works. Run these in Git Bash from <code>kilimoorbit-sentinel/</code>.</p>
+  </div>
+
+  <h3 style="margin-top:28px">Suggested reading order</h3>
+  <ol class="steps">
+    <li><div><b><code>payloads/arbitrage_payload.json</code></b><p>What a real request looks like. Everything else is about this object.</p></div></li>
+    <li><div><b><code>src/apex_system_prompt.md</code>, sections 1 and 3</b><p>The rules. The code exists to enforce them.</p></div></li>
+    <li><div><b><code>callApex</code> at the bottom of <code>src/apex_client.js</code></b><p>The request journey in about 40 lines. Then <code>validatePayload</code>, Route A in <code>mockEngine</code>, and <code>harden</code>.</p></div></li>
+    <li><div><b><code>createApp</code> in <code>src/server.js</code></b><p>Read the middleware from top to bottom and match it to the system map.</p></div></li>
+    <li><div><b><code>src/tests/server_tests.js</code></b><p>Every endpoint, called the way the apps call it.</p></div></li>
+  </ol>
+
+  <h3 style="margin-top:34px">Five experiments</h3>
+<pre><span class="c"># 1 · See all four suites pass</span>
+APEX_MOCK=1 npm test
+
+<span class="c"># 2 · Reproduce the CORS bug: move the express.json line in src/server.js</span>
+<span class="c">#     above the CORS block, then watch exactly one check fail</span>
+npm run test:server
+
+<span class="c"># 3 · Pretend Gemini is overloaded, and look for "engine_fallback" in the output</span>
+GEMINI_API_KEY=fake APEX_SIMULATE_LIVE_ERROR=503 npm run route:arbitrage
+
+<span class="c"># 4 · Pretend the key is wrong: this should FAIL loudly, not fall back</span>
+GEMINI_API_KEY=fake APEX_SIMULATE_LIVE_ERROR=401 npm run route:arbitrage
+
+<span class="c"># 5 · Hit the sign-in limit (start the server first with: npm start)</span>
+for i in 1 2 3 4 5 6; do
+  curl -s -X POST localhost:4517/api/signin -H 'Content-Type: application/json' \
+       -d '{"name":"Test","email":"t@example.com"}'; echo
+done</pre>
+  <div class="read">
+    <p>For a sixth experiment, write your own rule. Add a check to <code>harden()</code> for Route E: the revised profit should never be larger than the original. Then add a matching case to <code>src/suite.js</code>. Doing that once teaches you the full cycle of rule, guardrail and proof.</p>
+  </div>
+</section>
+
+<!-- ─────────────────────────── GLOSSARY ─────────────────────────── -->
+<section id="glossary">
+  <p class="sec-label">Terms</p>
+  <h2>Glossary</h2>
+  <dl class="gloss">
+    <dt>Contract</dt><dd>The agreed shape of inputs and outputs. Here, the system prompt defines it and the checks prove it.</dd>
+    <dt>Deterministic</dt><dd>Same input, same output, every time. The rule engine is deterministic. A language model isn't, even at temperature 0.</dd>
+    <dt>Guardrail</dt><dd>Code that inspects a model's answer and corrects or blocks what breaks the rules.</dd>
+    <dt>Graceful degradation</dt><dd>Keep working at reduced quality when a dependency fails, instead of failing completely.</dd>
+    <dt>Middleware</dt><dd>A function every request passes through in order before reaching its route. Order changes behaviour.</dd>
+    <dt>CORS</dt><dd>Browser rules on which websites may read a server's responses. The server permits it with response headers.</dd>
+    <dt>Rate limiting</dt><dd>Capping requests per client per time window, to protect cost and stop abuse.</dd>
+    <dt>Atomic write</dt><dd>An update that either happens completely or not at all. Here: write a temporary file, then rename it.</dd>
+    <dt>Prototype pollution</dt><dd>When user-supplied keys like <code>constructor</code> reach JavaScript's built-in object properties.</dd>
+    <dt>Regression check</dt><dd>A test written for a fixed bug, so that bug can't quietly return.</dd>
+    <dt>Fixture</dt><dd>A saved sample input, like the files in <code>payloads/</code>, used to make tests repeatable.</dd>
+  </dl>
+</section>
+
+<footer>
+  KilimoOrbit Sentinel v1.1.0 · branch fix/web-support-and-connectivity · written for Ian Ondieki · Kenya
+</footer>
+
+</div>
+</body>
+</html>

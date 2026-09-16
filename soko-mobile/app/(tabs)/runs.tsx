@@ -3,7 +3,7 @@ import { View, Text, ScrollView, RefreshControl, Pressable, StyleSheet, Modal } 
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
 import { useTheme } from "../../lib/theme-context";
-import { Header, Card, Button, Field, Empty } from "../../components/ui";
+import { Header, Card, Button, Field, Empty, Bounded, webPointer, type PressState } from "../../components/ui";
 import { ListingCard } from "../../components/ListingCard";
 import { getListings, claimListing, type Listing } from "../../lib/api";
 
@@ -53,12 +53,13 @@ export default function Runs() {
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]}>
       <Header title="Runs" subtitle="Open delivery runs to claim" />
       <ScrollView
-        contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+        contentContainerStyle={st.scroll}
         refreshControl={
           <RefreshControl refreshing={refreshing} tintColor={t.accent}
             onRefresh={() => { setRefreshing(true); load(); }} />
         }
       >
+        <Bounded style={st.body}>
         {err && (
           <Card style={{ borderColor: t.alert }}>
             <Text style={{ color: t.alert, fontWeight: "700", marginBottom: 6 }}>CONNECTION</Text>
@@ -69,9 +70,10 @@ export default function Runs() {
         {!err && !loading && open.length === 0 && (
           <Empty text={"No open runs right now.\nPull to refresh."} />
         )}
-        {open.map((l) => (
-          <ListingCard key={l.id} listing={l} onClaim={(x) => { setTarget(x); setModalErr(null); }} />
+        {open.map((l, i) => (
+          <ListingCard key={l.id} index={i} listing={l} onClaim={(x) => { setTarget(x); setModalErr(null); }} />
         ))}
+        </Bounded>
       </ScrollView>
 
       <Modal visible={!!target} transparent animationType="slide" onRequestClose={() => setTarget(null)}>
@@ -89,7 +91,20 @@ export default function Runs() {
                 const active = role === r;
                 return (
                   <Pressable key={r} onPress={() => setRole(r)}
-                    style={[st.roleChip, { borderColor: active ? t.accent : t.line, backgroundColor: active ? t.raised : "transparent" }]}>
+                    accessibilityRole="button"
+                    accessibilityLabel={r === "rider" ? "Claim this run as a rider" : "Claim this run as a buyer"}
+                    accessibilityState={{ selected: active }}
+                    style={(state) => {
+                      const { hovered } = state as PressState;
+                      return [
+                        st.roleChip,
+                        {
+                          borderColor: active || hovered ? t.accent : t.line,
+                          backgroundColor: active || hovered ? t.raised : "transparent",
+                        },
+                        webPointer,
+                      ];
+                    }}>
                     <Text style={{ color: active ? t.accent : t.dim, fontWeight: "700", textTransform: "capitalize" }}>
                       {r === "rider" ? "🛵 Rider" : "🧺 Buyer"}
                     </Text>
@@ -119,8 +134,10 @@ export default function Runs() {
 }
 
 const st = StyleSheet.create({
+  scroll: { flexGrow: 1 },
+  body: { padding: 16, paddingBottom: 32 },
   backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.5)" },
-  sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, padding: 20, paddingBottom: 36 },
+  sheet: { width: "100%", maxWidth: 520, alignSelf: "center", borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, padding: 20, paddingBottom: 36 },
   sheetTitle: { fontSize: 18, fontWeight: "800", textTransform: "capitalize" },
   roleRow: { flexDirection: "row", gap: 10, marginBottom: 14 },
   roleChip: { flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 12, alignItems: "center" },
