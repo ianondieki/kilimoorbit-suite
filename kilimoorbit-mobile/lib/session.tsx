@@ -9,6 +9,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { tr, type Key, type Lang, type Vars } from "./i18n";
 import { FARM_KEY, clearFarmMemory } from "./farm";
 import { SOKO_KEY, clearSokoMemory } from "./soko";
+import { HERD_KEY, clearHerdMemory } from "./herd";
+import { ALERTS_KEY, clearAlertsMemory } from "./alerts";
 
 export type Profile = {
   v: 2;
@@ -69,8 +71,18 @@ function readProfile(raw: string | null | undefined, lang: Lang): [Profile | nul
     } else return [null, false];
   }
   const name = typeof p.name === "string" ? p.name.trim() : "";
-  if (!name || !(p.phone || p.email)) return [null, false];
-  return [p as Profile, migrated];
+  // Only strings reach the UI (a hand-edited or corrupted store must not crash the sidebar).
+  const phone = typeof p.phone === "string" && p.phone ? p.phone : undefined;
+  const email = typeof p.email === "string" && p.email ? p.email : undefined;
+  if (!name || !(phone || email)) return [null, false];
+  return [{
+    v: 2, name: name.slice(0, 80), phone, email,
+    method: phone ? (p.method === "email" && email ? "email" : "phone") : "email",
+    lang: p.lang === "en" ? "en" : p.lang === "sw" ? "sw" : lang,
+    signedInAt: typeof p.signedInAt === "string" ? p.signedInAt : new Date().toISOString(),
+    serverAck: p.serverAck === true,
+    ...(p.delivery === "SENT" || p.delivery === "SIMULATED" ? { delivery: p.delivery } : null),
+  }, migrated];
 }
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
@@ -133,10 +145,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     try {
       await AsyncStorage.setItem(K.profile, JSON.stringify(p));
       await AsyncStorage.removeItem(K.guest);
-      if (replaceLast) await AsyncStorage.multiRemove([K.last, "ko-chat-log", FARM_KEY, SOKO_KEY]);
+      if (replaceLast) await AsyncStorage.multiRemove([K.last, "ko-chat-log", FARM_KEY, SOKO_KEY, HERD_KEY, ALERTS_KEY]);
     } catch {}
     setGuest(false);
-    if (replaceLast) { setLastProfile(null); clearFarmMemory(); clearSokoMemory(); }
+    if (replaceLast) { setLastProfile(null); clearFarmMemory(); clearSokoMemory(); clearHerdMemory(); clearAlertsMemory(); }
     setProfile(p);
   }, []);
 
@@ -151,12 +163,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     const current = profile;
     try {
       await AsyncStorage.removeItem(K.profile);
-      if (forget) await AsyncStorage.multiRemove([K.last, "ko-chat-log", "ko-dash-cache", "ko-weather-cache", FARM_KEY, SOKO_KEY, K.guest]);
+      if (forget) await AsyncStorage.multiRemove([K.last, "ko-chat-log", "ko-dash-cache", "ko-weather-cache", FARM_KEY, SOKO_KEY, HERD_KEY, ALERTS_KEY, K.guest]);
       else if (current) await AsyncStorage.setItem(K.last, JSON.stringify(current));
       // ko-theme, ko-lang and ko-voice are kept.
     } catch {}
     setProfile(null);
-    if (forget) { setLastProfile(null); setGuest(false); clearFarmMemory(); clearSokoMemory(); }
+    if (forget) { setLastProfile(null); setGuest(false); clearFarmMemory(); clearSokoMemory(); clearHerdMemory(); clearAlertsMemory(); }
     else if (current) setLastProfile(current);
   }, [profile]);
 
@@ -169,10 +181,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     touched.current = true;
     // "Ondoa kwenye simu hii": the remembered farmer's chat and farm go with
     // them, as with sign-out's "forget" box, so the next person never inherits them.
-    try { await AsyncStorage.multiRemove([K.last, "ko-chat-log", FARM_KEY, SOKO_KEY]); } catch {}
+    try { await AsyncStorage.multiRemove([K.last, "ko-chat-log", FARM_KEY, SOKO_KEY, HERD_KEY, ALERTS_KEY]); } catch {}
     setLastProfile(null);
     clearFarmMemory();
     clearSokoMemory();
+    clearHerdMemory();
+    clearAlertsMemory();
   }, []);
 
   const status: SessionStatus = !hydrated ? "loading" : profile ? "signedIn" : guest ? "guest" : "signedOut";

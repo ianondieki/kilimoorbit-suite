@@ -15,8 +15,10 @@ export const FARM_KEY = "ko-farm";
 
 export type Planting = { id: string; crop: CropKey; acres: number; plantedOn: string };
 
-export type ExpenseCat = "seed" | "fertilizer" | "chemicals" | "labour" | "transport" | "other";
-export type IncomeCat = "sale" | "other";
+export type ExpenseCat = "seed" | "fertilizer" | "chemicals" | "labour" | "transport" | "feed" | "vet" | "other";
+export type IncomeCat = "sale" | "milk" | "eggs" | "animals" | "other";
+export const EXPENSE_CATS: ExpenseCat[] = ["seed", "fertilizer", "chemicals", "labour", "transport", "feed", "vet", "other"];
+export const INCOME_CATS: IncomeCat[] = ["sale", "milk", "eggs", "animals", "other"];
 export type Entry = {
   id: string;
   kind: "income" | "expense";
@@ -55,14 +57,23 @@ function sanitize(raw: any): Farm {
   const day = (d: unknown) => (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null);
   return {
     v: 1,
-    county: typeof raw.county === "string" ? raw.county : null,
+    county: typeof raw.county === "string" ? raw.county.slice(0, 40) : null,
     acres: num(raw.acres),
     plantings: (Array.isArray(raw.plantings) ? raw.plantings : [])
-      .filter((p: any) => p && typeof p.id === "string" && isCrop(p.crop) && num(p.acres) && day(p.plantedOn)),
-    done: raw.done && typeof raw.done === "object" ? raw.done : {},
+      .filter((p: any) => p && typeof p.id === "string" && isCrop(p.crop) && num(p.acres) && day(p.plantedOn))
+      .map((p: any): Planting => ({ id: p.id, crop: p.crop, acres: Math.min(p.acres, 10000), plantedOn: p.plantedOn }))
+      .slice(0, 100),
+    done: raw.done && typeof raw.done === "object" && !Array.isArray(raw.done) ? raw.done : {},
     entries: (Array.isArray(raw.entries) ? raw.entries : [])
       .filter((e: any) => e && typeof e.id === "string" && (e.kind === "income" || e.kind === "expense") && num(e.amount) && day(e.date))
-      .map((e: any) => ({ ...e, crop: isCrop(e.crop) ? e.crop : undefined, kg: num(e.kg) ?? undefined })),
+      .map((e: any): Entry => ({
+        id: e.id, kind: e.kind, amount: e.amount, date: e.date,
+        category: (e.kind === "income" ? INCOME_CATS : EXPENSE_CATS).includes(e.category) ? e.category : "other",
+        crop: isCrop(e.crop) ? e.crop : undefined,
+        kg: num(e.kg) ?? undefined,
+        note: typeof e.note === "string" ? e.note.slice(0, 80) : undefined,
+      }))
+      .slice(0, 2000),
   };
 }
 

@@ -1,9 +1,24 @@
 /**
  * Farmer flows end to end: Today (weather windows, tasks), Shamba (calendar,
- * records), Masoko (price comparison), Daktari (diagnosis → Apex), offline,
- * and Kiswahili. Each test starts signed in on a fresh phone (empty storage).
+ * livestock, records), Masoko (prices, Soko, alerts), Daktari (diagnosis →
+ * Apex), offline, Kiswahili, and crash resistance (corrupted storage, a
+ * server answering garbage). Each test starts signed in on a fresh phone.
+ *
+ * Every test also fails on any uncaught page error, a crashed card (Guard)
+ * or a crashed screen (ErrorBoundary): "it rendered" is not enough.
  */
-import { test, expect, type Page } from "@playwright/test";
+import { test as base, expect, type Page } from "@playwright/test";
+
+const test = base.extend<{ noCrash: void }>({
+  noCrash: [async ({ page }, use) => {
+    const problems: string[] = [];
+    page.on("pageerror", (e) => problems.push(`page error: ${e.message}`));
+    page.on("console", (m) => { if (m.text().includes("[Guard")) problems.push(`card crashed: ${m.text()}`); });
+    await use();
+    expect(problems, "uncaught errors or crashed cards").toEqual([]);
+    await expect(page.getByTestId("screen-error")).toHaveCount(0);
+  }, { auto: true }],
+});
 
 /** A planting `daysAgo` days back, in the app's local-date format. */
 const planted = (crop: string, daysAgo: number, acres = 1) => ({ crop, daysAgo, acres });
@@ -199,4 +214,121 @@ test("Crop doctor: problems common in the current season are flagged first", asy
   await page.getByTestId("dr-crop-tomato").click();
   // Tomato has an in-season problem in every Kenyan season.
   await expect(page.getByText("Common this season").first()).toBeVisible();
+});
+
+test("Livestock: a cow served 6 months ago is in calf; milk is recorded; Today groups the deworming", async ({ page }) => {
+  await start(page, "/shamba?tab=livestock", "en", { county: "Nyeri" });
+  await page.getByTestId("herd-add").first().click();
+  await page.getByTestId("animal-name").fill("Neema");
+  await page.getByTestId("served-180").click();
+  await page.getByTestId("animal-save").click();
+  await expect(page.getByText(/^Pregnant · due /)).toBeVisible();
+  await expect(page.getByText("Day 180 of 283")).toBeVisible();
+
+  await page.getByTestId("herd-add").first().click();
+  await page.getByTestId("animal-name").fill("Bella");
+  await page.getByTestId("animal-save").click();
+
+  await page.getByTestId("milk-add").click();
+  for (let i = 0; i < 16; i++) await page.getByRole("button", { name: "Litres that day +0.5 L" }).click();
+  await page.getByTestId("milk-price").fill("50");
+  await page.getByTestId("milk-save").click();
+  await expect(page.getByTestId("milk-week")).toHaveText("This week: 8 L · ≈ KES 400");
+
+  await page.goto("/");
+  const deworm = page.getByTestId("herd-task-deworm");
+  await expect(deworm).toContainText("Deworm: Neema, Bella");
+  await deworm.click();
+  await expect(deworm).toHaveAttribute("aria-checked", "true");
+  await deworm.click(); // undo removes the two records again
+  await expect(deworm).toHaveAttribute("aria-checked", "false");
+});
+
+test("Livestock: a young flock shows its vaccine schedule", async ({ page }) => {
+  await start(page, "/shamba?tab=livestock", "en", { county: "Kiambu" });
+  await page.getByTestId("herd-add").first().click();
+  await page.getByTestId("sp-chicken").click();
+  await page.getByTestId("animal-count").fill("200");
+  await page.getByRole("radio", { name: "1 week ago" }).click();
+  await page.getByTestId("animal-save").click();
+  await expect(page.getByText("200 birds · 1 weeks old")).toBeVisible();
+  await expect(page.getByText(/Newcastle \+ IB vaccine/)).toBeVisible();
+});
+
+test("Price alert: a target below today's best price shows on Today", async ({ page }) => {
+  await start(page, "/masoko");
+  await page.getByTestId("mk-crop-maize").click();
+  await page.getByTestId("alert-open").click();
+  for (let i = 0; i < 12; i++) await page.getByRole("button", { name: /^Target price \(KES a kilo\) −/ }).click();
+  await page.getByTestId("alert-save").click();
+  await expect(page.getByTestId("alert-status")).toContainText("Alert at KES");
+  await page.goto("/");
+  await expect(page.getByTestId("alert-hit-maize")).toContainText(/Maize: KES \d+\/kg at .+ \(target KES \d+\)/);
+});
+
+/** Junk in every key the app stores: wrong types, missing fields, broken JSON. */
+const CORRUPT: Record<string, string> = {
+  "ko-farm": JSON.stringify({ county: 42, acres: "big", plantings: [{ id: 1, crop: "maize" }, { id: "p", crop: "maize", acres: 1, plantedOn: "2026-13-45" }, null], entries: "no", done: [] }),
+  "ko-herd": JSON.stringify({ animals: [{ id: "a", species: "cow", events: [{ id: "e", kind: "served", date: "bad" }, { kind: "birth" }] }, { id: 5 }, { id: "b", species: "dragon" }], milk: [{ animalId: "a", litres: "x" }], done: "x", milkPrice: -3 }),
+  "ko-soko": JSON.stringify([{ id: "z", owner_token: "t", qty_kg: "lots", created_at: "never" }, { owner_token: 1 }]),
+  "ko-alerts": JSON.stringify({ x: 1 }),
+  "ko-weather-cache": JSON.stringify({ county: "Meru", ts: "now", data: { county: "Meru", days: "none" } }),
+  "ko-dash-cache": JSON.stringify({ meta: "junk", arb: { execution_mode: "arbitrage_compile" } }),
+  "ko-chat-log": JSON.stringify([{ id: 1 }, { id: "m", from: "apex", text: { a: 1 } }, { id: "ok", from: "user", text: "Habari" }]),
+};
+
+test("Corrupted storage never crashes a screen", async ({ page }) => {
+  await page.addInitScript((data) => {
+    if (sessionStorage.getItem("ko-e2e-corrupt")) return;
+    sessionStorage.setItem("ko-e2e-corrupt", "1");
+    localStorage.clear();
+    localStorage.setItem("ko-profile", JSON.stringify({ v: 2, name: "Wanjiru", method: "phone", phone: "+254712345678", lang: "en", signedInAt: "x", serverAck: true }));
+    localStorage.setItem("ko-lang", "en");
+    for (const [k, v] of Object.entries(data)) localStorage.setItem(k, v);
+    localStorage.setItem("ko-theme", "{not json");
+  }, CORRUPT);
+  for (const path of ["/", "/shamba", "/shamba?tab=livestock", "/shamba?tab=records", "/masoko", "/daktari", "/chat", "/autopilot"]) {
+    await page.goto(path);
+    await expect(page.locator("body")).toContainText(/\w/);
+    await page.waitForTimeout(400);
+  }
+  await page.goto("/chat");
+  await expect(page.getByText("Habari", { exact: true })).toBeVisible(); // the one valid message survives
+});
+
+test("Broken JSON in storage is ignored", async ({ page }) => {
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem("ko-e2e-broken")) return;
+    sessionStorage.setItem("ko-e2e-broken", "1");
+    localStorage.clear();
+    localStorage.setItem("ko-profile", JSON.stringify({ v: 2, name: "Wanjiru", method: "phone", phone: "+254712345678", lang: "en", signedInAt: "x", serverAck: true }));
+    for (const k of ["ko-farm", "ko-herd", "ko-soko", "ko-alerts", "ko-weather-cache", "ko-dash-cache", "ko-chat-log"]) localStorage.setItem(k, "{not json");
+  });
+  for (const path of ["/", "/shamba?tab=livestock", "/masoko", "/chat"]) {
+    await page.goto(path);
+    await page.waitForTimeout(400);
+  }
+  await page.goto("/");
+  // ko-lang is unset here, so the app falls back to its default, Kiswahili.
+  await expect(page.getByText("KAZI ZA WIKI HII")).toBeVisible();
+});
+
+test("A server answering garbage degrades to 'no data', never a crash", async ({ page, context }) => {
+  await context.route("http://localhost:4517/api/meta", (r) => r.fulfill({ status: 200, contentType: "text/html", body: "<html>proxy error</html>" }));
+  await context.route("http://localhost:4517/api/weather**", (r) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ county: "Meru", days: [] }) }));
+  await context.route("http://localhost:4517/api/prices/history**", (r) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ crop: "maize", markets: [{ market: "X", prices: [1] }] }) }));
+  await context.route("http://localhost:4517/api/soko/**", (r) => r.fulfill({ status: 500, contentType: "application/json", body: "{}" }));
+  await start(page, "/");
+  await expect(page.getByText("Can't reach KilimoOrbit right now.")).toBeVisible();
+  await expect(page.getByText("The forecast will show when you're online.")).toBeVisible();
+  await page.goto("/masoko");
+  await expect(page.getByText("Prices will show when you're online.")).toBeVisible();
+});
+
+test("Apex answering without a market run: board stays, Today explains", async ({ page, context }) => {
+  await context.route("http://localhost:4517/api/apex", (r) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ result: { execution_mode: "arbitrage_compile" } }) }));
+  await start(page, "/");
+  await expect(page.getByText("Apex couldn't plan a market run right now.")).toBeVisible();
+  await page.goto("/masoko");
+  await expect(page.getByTestId("mk-crop-maize")).toBeVisible();
 });

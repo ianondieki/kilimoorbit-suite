@@ -66,3 +66,6 @@ function TabShell() {
     </View>
   );
 }
+
+// A screen that throws shows a "try again" card, never a blank app.
+export { ScreenErrorBoundary as ErrorBoundary } from "../../components/ScreenError";

@@ -194,6 +194,21 @@ await check("GET /api/prices/history unknown/missing crop → 400", async () => 
   return a.status === 400 && a.body.error_type === "UNKNOWN_CROP" && b.status === 400 && b.body.error_type === "MISSING_CROP";
 });
 
+await check("Odd query shapes (arrays, very long, unicode) → 400, never 500", async () => {
+  const r = await Promise.all([
+    get("/api/weather?county=a&county=b"),
+    get("/api/weather?county=" + "x".repeat(5000)),
+    get("/api/prices/history?crop[]=maize"),
+    get("/api/prices/history?crop=%F0%9F%8C%BD"),
+  ]);
+  return { ok: r.every((x) => x.status === 400 && typeof x.body?.error_type === "string"), detail: r.map((x) => x.status).join(",") };
+});
+
+await check("POST /api/apex with a hostile payload (huge history, wrong types) → structured answer, not 500", async () => {
+  const r = await post("/api/apex", { payload: { execution_mode: "user_chat", user_message: 42, chat_history: Array(500).fill({ role: "x", text: {} }) } });
+  return { ok: r.status === 200 && typeof r.body?.result?.execution_mode === "string", detail: r.body?.result?.execution_mode };
+});
+
 await check("GET /api/nope → 404 JSON", async () => {
   const r = await get("/api/nope");
   return { ok: r.status === 404 && r.body?.error_type === "NOT_FOUND" };

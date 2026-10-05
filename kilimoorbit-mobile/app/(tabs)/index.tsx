@@ -10,6 +10,13 @@ import { router, useFocusEffect } from "expo-router";
 import Header from "../../components/Header";
 import FAB from "../../components/FAB";
 import WeatherCard, { windowText, type Win } from "../../components/WeatherCard";
+import { Guard } from "../../components/ScreenError";
+import { AddAnimalSheet, HerdRows, MilkSheet, herdHasMilkers } from "../../components/Herd";
+import { AlertsCard } from "../../components/PriceAlerts";
+import { useAlerts } from "../../lib/alerts";
+import { alertHits } from "../../lib/pricewatch";
+import { useHerd } from "../../lib/herd";
+import { fill, openReminders } from "../../lib/livestock";
 import { ListenPill } from "../../components/auth/Controls";
 import TaskRows from "../../components/TaskRows";
 import { useMenu } from "../../components/MenuContext";
@@ -44,7 +51,9 @@ export default function Today() {
   const wx = useForecast(county);
   const { width } = useWindowDimensions();
   const { isDocked } = useMenu();
-  const [sheet, setSheet] = useState<null | "county" | "crop" | "record">(null);
+  const [sheet, setSheet] = useState<null | "county" | "crop" | "record" | "animal" | "milk">(null);
+  const { herd } = useHerd();
+  const alerts = useAlerts();
   const [refreshing, setRefreshing] = useState(false);
 
   // Two columns once the content area (window minus the docked sidebar) is wide enough.
@@ -66,12 +75,17 @@ export default function Today() {
       for (const k of ["spray", "plant", "dry"] as Win[]) parts.push(`${tt(`win.${k}` as Key)}: ${windowText(k, days, lang, tt)}.`);
     }
     const due = upcomingTasks(farm).slice(0, 3).map((x) => `${pick(lang, x.title)} (${cropName(lang, x.planting.crop)})`);
-    if (due.length) parts.push(tt("listen.today.tasks", { list: due.join("; ") }));
+    const herdDue = openReminders(herd.animals, herd.done, todayKey(), 7).slice(0, 2)
+      .map((r) => fill(pick(lang, r.title), herd.animals.find((a) => a.id === r.animalId)?.name ?? ""));
+    const all = [...due, ...herdDue];
+    if (all.length) parts.push(tt("listen.today.tasks", { list: all.join("; ") }));
+    for (const h of alertHits(alerts, sentinel.meta?.commodity_feed))
+      parts.push(tt("listen.today.alert", { crop: cropName(lang, h.alert.crop), p: h.price, market: h.market }));
     const c = sentinel.arb?.cargo_optimized_route;
     if (c?.live_market_wholesale_price_per_kg != null)
       parts.push(tt("listen.today.market", { crop: cropName(lang, c.crop_type), market: c.optimal_market_destination, p: c.live_market_wholesale_price_per_kg }));
     return parts.join(" ").replace(/°/g, "");
-  }, [wx.data, farm, sentinel.arb, lang, county, first, hello]);
+  }, [wx.data, farm, herd, alerts, sentinel.arb, sentinel.meta, lang, county, first, hello]);
 
   const refresh = async () => {
     setRefreshing(true);
@@ -79,12 +93,13 @@ export default function Today() {
     setRefreshing(false);
   };
 
+  // Each card is guarded: one that fails shows a small note, the rest of Today keeps working.
   const weather = (
-    <WeatherCard wx={wx} county={county} countySet={!!farm.county} onChooseCounty={() => setSheet("county")} />
+    <Guard name="weather"><WeatherCard wx={wx} county={county} countySet={!!farm.county} onChooseCounty={() => setSheet("county")} /></Guard>
   );
-  const tasks = <TasksCard onAddCrop={() => setSheet("crop")} days={wx.data?.days} />;
-  const market = <MarketCard />;
-  const climate = <ClimateCard />;
+  const tasks = <Guard name="tasks"><TasksCard onAddCrop={() => setSheet("crop")} onAddAnimal={() => setSheet("animal")} days={wx.data?.days} /></Guard>;
+  const market = <Guard name="market"><MarketCard /></Guard>;
+  const climate = <Guard name="climate"><ClimateCard /></Guard>;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]} {...webLang(lang)}>
@@ -110,6 +125,7 @@ export default function Today() {
           </Enter>
 
           <ProblemBanner />
+          <Guard name="alerts"><AlertsCard /></Guard>
 
           {wide ? (
             <View style={{ flexDirection: "row", gap: 14, alignItems: "flex-start" }}>
@@ -137,6 +153,10 @@ export default function Today() {
         actions={[
           { label: tt("fab.record"), glyph: (c) => <BarsGlyph size={20} color={c} />, onPress: () => setSheet("record"), testID: "fab-record" },
           { label: tt("fab.addCrop"), glyph: (c) => <SproutGlyph size={22} color={c} />, onPress: () => setSheet("crop"), testID: "fab-add-crop" },
+          // Dairy farmers record milk daily; everyone else gets "add an animal".
+          herdHasMilkers(herd.animals)
+            ? { label: tt("fab.milk"), glyph: (c) => <PlusGlyph size={18} color={c} />, onPress: () => setSheet("milk"), testID: "fab-milk" }
+            : { label: tt("fab.addAnimal"), glyph: (c) => <PlusGlyph size={18} color={c} />, onPress: () => setSheet("animal"), testID: "fab-add-animal" },
           { label: tt("fab.diagnose"), glyph: (c) => <LensGlyph size={20} color={c} />, onPress: () => router.navigate("/daktari") },
           { label: tt("fab.ask"), glyph: (c) => <ChatGlyph size={20} color={c} />, onPress: () => router.navigate("/chat") },
         ]}
@@ -145,6 +165,8 @@ export default function Today() {
       <FarmProfileSheet visible={sheet === "county"} onClose={() => setSheet(null)} />
       <AddCropSheet visible={sheet === "crop"} onClose={() => setSheet(null)} />
       <RecordSheet visible={sheet === "record"} onClose={() => setSheet(null)} />
+      <AddAnimalSheet visible={sheet === "animal"} onClose={() => setSheet(null)} />
+      <MilkSheet visible={sheet === "milk"} onClose={() => setSheet(null)} />
     </SafeAreaView>
   );
 }
@@ -169,36 +191,46 @@ function ProblemBanner() {
 }
 
 /* ── This week's tasks ── */
-function TasksCard({ onAddCrop, days }: { onAddCrop: () => void; days?: WxDay[] }) {
+function TasksCard({ onAddCrop, onAddAnimal, days }: { onAddCrop: () => void; onAddAnimal: () => void; days?: WxDay[] }) {
   const t = useTheme();
   const { t: tt } = useLang();
   const { farm, ready } = useFarm();
+  const { herd, ready: herdReady } = useHerd();
   // Ticked on this visit: kept in the list, struck through, until the screen is left.
   const [kept, setKept] = useState<ReadonlySet<string>>(new Set());
   useFocusEffect(useCallback(() => () => setKept(new Set()), []));
   const due = upcomingTasks(farm, 7, undefined, kept);
-  const open = due.filter((x) => !x.done);
   const shown = due.slice(0, SHOWN_TASKS);
+  const hasCrops = farm.plantings.length > 0;
+  const hasAnimals = herd.animals.length > 0;
+  const herdDue = hasAnimals ? openReminders(herd.animals, herd.done, todayKey(), 7).length : 0;
 
   return (
     <Card>
       <Eyebrow text={tt("tasks.eyebrow")} />
-      {!ready ? (
+      {!ready || !herdReady ? (
         <Skeleton height={48} color={t.raised} radius={12} />
-      ) : farm.plantings.length === 0 ? (
+      ) : !hasCrops && !hasAnimals ? (
         <View style={{ gap: 12 }}>
-          <Text style={{ color: t.dim, ...T.body }}>{tt("tasks.empty")}</Text>
-          <Btn kind="secondary" label={tt("tasks.addCrop")} onPress={onAddCrop} icon={(c) => <PlusGlyph size={14} color={c} />} testID="today-add-crop" />
-        </View>
-      ) : open.length === 0 && shown.length === 0 ? (
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4 }}>
-          <CheckCoin size={24} bg={t.ok} fg={t.field} />
-          <Text style={{ flex: 1, color: t.ink, ...T.body }}>{tt("tasks.allDone")}</Text>
+          <Text style={{ color: t.dim, ...T.body }}>{tt("tasks.emptyAll")}</Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+            <Btn kind="secondary" label={tt("tasks.addCrop")} onPress={onAddCrop} icon={(c) => <PlusGlyph size={14} color={c} />} style={{ flexGrow: 1 }} testID="today-add-crop" />
+            <Btn kind="secondary" label={tt("herd.add")} onPress={onAddAnimal} icon={(c) => <PlusGlyph size={14} color={c} />} style={{ flexGrow: 1 }} testID="today-add-animal" />
+          </View>
         </View>
       ) : (
-        <TaskRows tasks={shown} showCrop days={days} onToggled={(k) => setKept((s) => new Set(s).add(k))} />
+        <>
+          {shown.length > 0 && <TaskRows tasks={shown} showCrop days={days} onToggled={(k) => setKept((s) => new Set(s).add(k))} />}
+          <Guard name="herd-rows"><HerdRows max={3} /></Guard>
+          {shown.length === 0 && herdDue === 0 && (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4 }}>
+              <CheckCoin size={24} bg={t.ok} fg={t.field} />
+              <Text style={{ flex: 1, color: t.ink, ...T.body }}>{tt("tasks.allDone")}</Text>
+            </View>
+          )}
+        </>
       )}
-      {due.length > SHOWN_TASKS || (farm.plantings.length > 0 && shown.length === 0) ? (
+      {due.length > SHOWN_TASKS || (hasCrops && shown.length === 0) || herdDue > 3 ? (
         <Btn
           kind="ghost"
           small
@@ -292,3 +324,6 @@ function ClimateCard() {
     </Card>
   );
 }
+
+// A screen that throws shows a "try again" card, never a blank app.
+export { ScreenErrorBoundary as ErrorBoundary } from "../../components/ScreenError";

@@ -70,8 +70,11 @@ export default function Chat() {
       .then((raw) => {
         if (!raw) return;
         try {
-          const saved = JSON.parse(raw);
-          if (Array.isArray(saved) && saved.length) {
+          // A stored log is re-checked: only well-formed messages are shown.
+          const saved = (JSON.parse(raw) as unknown[] | null ?? [])
+            .filter((m: any): m is Msg => !!m && typeof m.id === "string" && (m.from === "user" || m.from === "apex") && typeof m.text === "string")
+            .map((m) => ({ id: m.id, from: m.from, text: m.text.slice(0, 2000), intent: typeof m.intent === "string" ? m.intent : undefined, err: m.err === true }));
+          if (saved.length) {
             setMsgs(saved);
             setTimeout(() => list.current?.scrollToEnd({ animated: false }), 80);
           }
@@ -291,3 +294,6 @@ const s = StyleSheet.create({
   input: { flex: 1, minHeight: 48, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15 },
   send: { flex: 1, minHeight: 48, borderRadius: 12, paddingHorizontal: 18, justifyContent: "center" },
 });
+
+// A screen that throws shows a "try again" card, never a blank app.
+export { ScreenErrorBoundary as ErrorBoundary } from "../../components/ScreenError";

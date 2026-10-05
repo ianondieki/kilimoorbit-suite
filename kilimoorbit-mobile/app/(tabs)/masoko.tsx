@@ -16,7 +16,9 @@ import { Enter, CountUp, Skeleton } from "../../components/Motion";
 import { CropCoin, DemoTag } from "../../components/ShambaPanel";
 import { ArrowGlyph, RouteGlyph, SignalOffGlyph } from "../../components/Glyphs";
 import TrendTile from "../../components/TrendTile";
+import { Guard } from "../../components/ScreenError";
 import { MyListings, SokoSheet } from "../../components/SokoSell";
+import { AlertRow } from "../../components/PriceAlerts";
 import { FarmProfileSheet } from "../../components/FarmSheets";
 import { useTheme } from "../../lib/theme-context";
 import { useLang } from "../../lib/session";
@@ -120,17 +122,19 @@ export default function Masoko() {
 
               {commodity && (
                 <Enter index={0}>
+                  <Guard name="prices">
                   <PricesCard
                     c={commodity}
                     demo={demo}
                     fresh={freshnessText(lang, { status: "live", rows: [], ageMin: feed.data_age_minutes, offline: false })}
                     onSell={(kg, fair) => { setSale({ kg, fair }); setSheet("soko"); }}
                   />
+                  </Guard>
                 </Enter>
               )}
-              <MyListings />
-              <Enter index={1}><RunCard /></Enter>
-              <Enter index={2}><DeliveryCard /></Enter>
+              <Guard name="soko"><MyListings /></Guard>
+              <Enter index={1}><Guard name="run"><RunCard /></Guard></Enter>
+              <Enter index={2}><Guard name="delivery"><DeliveryCard /></Guard></Enter>
             </>
           )}
         </Bounded>
@@ -271,6 +275,7 @@ function PricesCard({ c, demo, fresh, onSell }: { c: Commodity; demo: boolean; f
         style={{ marginTop: 16 }}
         testID="sell-on-soko"
       />
+      <AlertRow c={c} />
     </Card>
   );
 }
@@ -363,3 +368,6 @@ function DeliveryCard() {
     </Card>
   );
 }
+
+// A screen that throws shows a "try again" card, never a blank app.
+export { ScreenErrorBoundary as ErrorBoundary } from "../../components/ScreenError";

@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { cancelSokoListing, createSokoListing, getSokoListing, type SokoListing } from "./api";
+import { cleanListing } from "./validate";
 
 export const SOKO_KEY = "ko-soko";
 const MAX = 20;
@@ -24,7 +25,12 @@ function hydrate() {
   hydrating = AsyncStorage.getItem(SOKO_KEY)
     .then((raw) => {
       const v = raw ? JSON.parse(raw) : [];
-      if (!hydrated && Array.isArray(v)) state = v.filter((x) => x && typeof x.id === "string" && typeof x.owner_token === "string");
+      if (!hydrated && Array.isArray(v))
+        state = v
+          .map((x) => ({ l: cleanListing(x), token: x && typeof x.owner_token === "string" ? x.owner_token : null }))
+          .filter((x): x is { l: SokoListing; token: string } => !!x.l && !!x.token)
+          .map(({ l, token }) => ({ ...l, owner_token: token }))
+          .slice(0, MAX);
     })
     .catch(() => {})
     .finally(() => { hydrated = true; emit(); });

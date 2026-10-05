@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getWeather, type Forecast } from "./api";
 import { todayKey } from "./dates";
+import { cleanForecast } from "./validate";
 
 export const WEATHER_CACHE_KEY = "ko-weather-cache";
 
@@ -40,8 +41,10 @@ export function useForecast(county: string): WeatherState & { reload: () => void
       try {
         const raw = await AsyncStorage.getItem(WEATHER_CACHE_KEY);
         const c = raw ? JSON.parse(raw) : null;
-        const f = c?.county === county && c?.data ? fromToday(c.data) : null;
-        if (f) cached = { status: "cached", data: f, cachedAgeMin: Math.max(1, Math.round((Date.now() - c.ts) / 60000)) };
+        const clean = c?.county === county ? cleanForecast(c?.data) : null;
+        const f = clean ? fromToday(clean) : null;
+        const ts = typeof c?.ts === "number" && Number.isFinite(c.ts) ? c.ts : Date.now();
+        if (f) cached = { status: "cached", data: f, cachedAgeMin: Math.max(1, Math.round((Date.now() - ts) / 60000)) };
       } catch {}
       // A failed refresh never blanks a forecast that is already on screen.
       if (my === seq.current) setState((prev) => (cached.status === "none" && prev.data?.county === county ? prev : cached));

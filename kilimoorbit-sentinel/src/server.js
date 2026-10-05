@@ -150,19 +150,24 @@ export function createApp() {
   // Farm weather: 7-day forecast for a county plus the spray / plant / dry
   // windows. SAMPLE by default (deterministic); WEATHER_PROVIDER=open-meteo for real data.
   app.get("/api/weather", rateLimit({ windowMs: 60_000, max: 120, name: "weather" }), async (req, res) => {
-    const name = String(req.query.county ?? "").trim().slice(0, 40);
+    // Only a plain string: ?county[]=… or repeated keys arrive as arrays/objects.
+    const name = typeof req.query.county === "string" ? req.query.county.trim().slice(0, 40) : "";
     if (!name)
       return res.status(400).json({ error: "A county is required, e.g. ?county=Meru.", error_type: "MISSING_COUNTY", fields: ["county"] });
     const county = findCounty(name);
     if (!county)
       return res.status(400).json({ error: `Unknown county: ${name}.`, error_type: "UNKNOWN_COUNTY", fields: ["county"] });
-    res.json(await forecastFor(county));
+    try {
+      res.json(await forecastFor(county));
+    } catch (err) {
+      res.status(500).json({ error: "Forecast unavailable.", error_type: "SERVER_ERROR" });
+    }
   });
 
   // Price history for one crop: 14 daily closes per market (sample data, same
   // levels as the live board) and the change over the last week.
   app.get("/api/prices/history", rateLimit({ windowMs: 60_000, max: 120, name: "price history" }), (req, res) => {
-    const crop = String(req.query.crop ?? "").trim().slice(0, 40);
+    const crop = typeof req.query.crop === "string" ? req.query.crop.trim().slice(0, 40) : "";
     if (!crop)
       return res.status(400).json({ error: "A crop is required, e.g. ?crop=maize.", error_type: "MISSING_CROP", fields: ["crop"] });
     const h = historyFor(loadPayload("commodity_feed.json"), crop);
@@ -319,8 +324,12 @@ export function createApp() {
 
   app.post("/api/apex", apexLimiter, async (req, res) => {
     const t0 = Date.now();
-    const result = await callApex(req.body?.payload ?? {});
-    res.json({ result, latency_ms: Date.now() - t0, engine: engineMode() });
+    try {
+      const result = await callApex(req.body?.payload ?? {});
+      res.json({ result, latency_ms: Date.now() - t0, engine: engineMode() });
+    } catch (err) {
+      res.status(500).json({ error: "Apex failed unexpectedly.", error_type: "SERVER_ERROR" });
+    }
   });
 
   // ── verification suite (shared catalogue: src/suite.js)
@@ -455,6 +464,12 @@ if (isMain) {
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 3000).unref();
   };
+  // Safety net: Node exits on an unhandled promise rejection by default. Every
+  // route catches its own errors; anything that still slips through is logged
+  // and the server keeps serving farmers rather than going down.
+  process.on("unhandledRejection", (reason) => {
+    console.error("[unhandledRejection]", reason instanceof Error ? reason.stack : reason);
+  });
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
 }

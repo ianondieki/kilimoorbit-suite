@@ -13,8 +13,10 @@ type TT = (k: Key, v?: Vars) => string;
 
 export function buildReport(opts: {
   lang: Lang; tt: TT; name?: string; farm: Farm; entries: Entry[]; periodLabel: string;
+  /** Livestock line, e.g. "Cow 2, Chickens 50", and litres of milk in the period. */
+  herdLine?: string; milkLitres?: number;
 }): string {
-  const { lang, tt, name, farm, entries, periodLabel } = opts;
+  const { lang, tt, name, farm, entries, periodLabel, herdLine, milkLitres } = opts;
   const sum = totals(entries);
   const who = [name, farm.county, farm.acres ? acresText(tt, farm.acres) : null].filter(Boolean).join(" · ");
   const lines = [
@@ -38,6 +40,10 @@ export function buildReport(opts: {
     lines.push("", tt("report.crops"));
     for (const p of farm.plantings)
       lines.push(`- ${cropName(lang, p.crop)}: ${acresText(tt, p.acres)}, ${tt("report.planted", { date: dayMonth(lang, p.plantedOn) })}`);
+  }
+  if (herdLine) {
+    lines.push("", tt("report.herd", { list: herdLine }));
+    if (milkLitres) lines.push(tt("report.milk", { n: Math.round(milkLitres * 10) / 10 }));
   }
   lines.push("", tt("report.footer"));
   return lines.join("\n");

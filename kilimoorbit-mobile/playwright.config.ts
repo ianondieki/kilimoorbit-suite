@@ -14,8 +14,10 @@ export default defineConfig({
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
   use: { baseURL: "http://localhost:8085", trace: "retain-on-failure", screenshot: "only-on-failure" },
   projects: [
-    { name: "phone", use: { viewport: { width: 390, height: 844 }, hasTouch: true } },
-    { name: "desktop", use: { viewport: { width: 1280, height: 900 } } },
+    // Pure logic (livestock calendar, alerts, advice, diagnosis, validation): no browser needed.
+    { name: "logic", testMatch: /logic\.spec\.ts/ },
+    { name: "phone", testIgnore: /logic\.spec\.ts/, use: { viewport: { width: 390, height: 844 }, hasTouch: true } },
+    { name: "desktop", testIgnore: /logic\.spec\.ts/, use: { viewport: { width: 1280, height: 900 } } },
   ],
   webServer: [
     {

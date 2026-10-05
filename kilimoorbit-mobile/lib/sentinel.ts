@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { callApex, getMeta, type ApexError, type ArbitrageResult, type Meta } from "./api";
+import { cleanArb, cleanMeta } from "./validate";
 
 export const CACHE_KEY = "ko-dash-cache";
 
@@ -36,15 +37,19 @@ export function loadSentinel(): Promise<void> {
   if (inflight) return inflight;
   set(state.meta ? { refreshing: true } : { status: "loading" });
   inflight = (async () => {
+    let fresh: Meta | null = null;
     try {
       const meta = await getMeta();
+      fresh = meta;
       set({ meta, engine: meta.engine });
       const res = await callApex<ArbitrageResult | ApexError>(meta.payloads.arbitrage);
-      if ((res.result as ApexError).execution_mode === "error") {
-        set({ problem: { kind: "apex", detail: (res.result as ApexError).error_message ?? "Apex returned an error" } });
+      const arb = cleanArb(res?.result);
+      if (!arb) {
+        const e = res?.result as ApexError | undefined;
+        set({ problem: { kind: "apex", detail: (e?.execution_mode === "error" && e.error_message) || "Apex returned no usable market run" } });
       } else {
-        set({ arb: res.result as ArbitrageResult, problem: null });
-        AsyncStorage.setItem(CACHE_KEY, JSON.stringify({ meta, arb: res.result, ts: Date.now() })).catch(() => {});
+        set({ arb, problem: null });
+        AsyncStorage.setItem(CACHE_KEY, JSON.stringify({ meta, arb, ts: Date.now() })).catch(() => {});
       }
     } catch (e: any) {
       const detail = String(e?.message ?? e);
@@ -52,12 +57,22 @@ export function loadSentinel(): Promise<void> {
       const cached = await AsyncStorage.getItem(CACHE_KEY).catch(() => null);
       if (cached) {
         try {
-          const { meta, arb, ts } = JSON.parse(cached);
-          set({ meta, arb, engine: "OFFLINE", problem: { kind: "cached", mins: Math.max(1, Math.round((Date.now() - ts) / 60000)), detail } });
-          restored = true;
+          // The cache is re-validated: an old or half-written copy is ignored, never trusted.
+          const c = JSON.parse(cached);
+          if (fresh) {
+            // The board is fresh; only Apex failed: keep today's prices, use the last good market run.
+            set({ arb: state.arb ?? cleanArb(c?.arb), problem: { kind: "apex", detail } });
+            restored = true;
+          }
+          const meta = fresh ? null : cleanMeta(c?.meta);
+          if (meta) {
+            const ts = typeof c.ts === "number" && Number.isFinite(c.ts) ? c.ts : Date.now();
+            set({ meta, arb: cleanArb(c.arb), engine: "OFFLINE", problem: { kind: "cached", mins: Math.max(1, Math.round((Date.now() - ts) / 60000)), detail } });
+            restored = true;
+          }
         } catch {}
       }
-      if (!restored) set({ engine: "OFFLINE", problem: { kind: "offline", detail } });
+      if (!restored) set(fresh ? { problem: { kind: "apex", detail } } : { engine: "OFFLINE", problem: { kind: "offline", detail } });
     } finally {
       set({ status: "ready", refreshing: false });
       inflight = null;

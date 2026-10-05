@@ -17,29 +17,38 @@ const H = 64;
 const PAD = 6;
 
 export default function TrendTile({
-  label, prices, dates, changePct, a11yName,
-}: { label: string; prices: number[]; dates: string[]; changePct: number; a11yName: string }) {
+  label, prices, dates, changePct, a11yName, fmt = (v) => `KES ${v}/kg`, summary: summaryOverride, testID,
+}: {
+  label: string; prices: number[]; dates: string[]; changePct: number | null; a11yName: string;
+  /** How a value reads (default: a price per kilo). */
+  fmt?: (v: number) => string;
+  /** Screen-reader summary, when the default price wording doesn't fit. */
+  summary?: string;
+  testID?: string;
+}) {
   const t = useTheme();
   const { lang, t: tt } = useLang();
   const [w, setW] = useState(0);
   const [active, setActive] = useState<number | null>(null);
 
   const n = prices.length;
+  // Nothing to draw: a trend needs two points (callers validate, this is the last line of defence).
+  if (n < 2 || dates.length !== n) return null;
   const lo = Math.min(...prices);
   const hi = Math.max(...prices);
   const last = prices[n - 1];
   const x = (i: number) => PAD + (i * (w - PAD * 2)) / Math.max(1, n - 1);
   const y = (p: number) => (hi === lo ? H / 2 : PAD + (1 - (p - lo) / (hi - lo)) * (H - PAD * 2));
 
-  const flat = Math.abs(changePct) < 1;
-  const up = changePct > 0;
-  const week = flat ? tt("trend.flat") : tt("trend.week", { sign: up ? "▲ +" : "▼ −", n: Math.abs(changePct) });
-  const summary = tt("trend.a11y", { name: a11yName, first: prices[0], last, lo, hi, week: week.replace(/[▲▼]\s?/, "") });
+  const flat = changePct == null || Math.abs(changePct) < 1;
+  const up = (changePct ?? 0) > 0;
+  const week = changePct == null ? "" : flat ? tt("trend.flat") : tt("trend.week", { sign: up ? "▲ +" : "▼ −", n: Math.abs(changePct) });
+  const summary = summaryOverride ?? tt("trend.a11y", { name: a11yName, first: prices[0], last, lo, hi, week: week.replace(/[▲▼]\s?/, "") });
 
   const shown = active ?? n - 1;
   const readout = active == null
     ? `${dayMonth(lang, dates[0])} – ${tt("common.today")}`
-    : `${longDay(lang, dates[active])} · KES ${prices[active]}/kg`;
+    : `${longDay(lang, dates[active])} · ${fmt(prices[active])}`;
 
   const keys = isWeb
     ? {
@@ -53,11 +62,11 @@ export default function TrendTile({
     : {};
 
   return (
-    <View style={{ gap: 6 }}>
+    <View style={{ gap: 6 }} testID={testID}>
       <Text style={{ color: t.dim, ...T.meta, fontWeight: "700" }}>{label}</Text>
       <View style={{ flexDirection: "row", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-        <Text style={{ color: t.ink, fontSize: 24, lineHeight: 30, fontWeight: "800" }}>KES {prices[shown]}/kg</Text>
-        <Text style={{ color: flat ? t.dim : up ? t.ok : t.alert, fontSize: 13, lineHeight: 18, fontWeight: "800" }}>{week}</Text>
+        <Text style={{ color: t.ink, fontSize: 24, lineHeight: 30, fontWeight: "800" }}>{fmt(prices[shown])}</Text>
+        {week ? <Text style={{ color: flat ? t.dim : up ? t.ok : t.alert, fontSize: 13, lineHeight: 18, fontWeight: "800" }}>{week}</Text> : null}
       </View>
 
       <View

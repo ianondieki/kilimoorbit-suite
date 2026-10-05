@@ -12,7 +12,7 @@ import { cropName } from "../lib/prices";
 import { searchCounties } from "../lib/counties";
 import { CROPS, CROP_KEYS, inputsFor, pick, type CropKey } from "../lib/agronomy";
 import { addDays, longDay, todayKey } from "../lib/dates";
-import { farmActions, useFarm, type Entry, type ExpenseCat, type IncomeCat } from "../lib/farm";
+import { EXPENSE_CATS, INCOME_CATS, farmActions, useFarm, type Entry } from "../lib/farm";
 import type { Key } from "../lib/i18n";
 import { Btn, Chip, ChipRow, Group, Sheet, Stepper, T } from "./Kit";
 import { CropCoin } from "./ShambaPanel";
@@ -23,7 +23,7 @@ import { CheckGlyph, ChevronGlyph, LensGlyph } from "./Glyphs";
 const acresFmt = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/0$/, ""));
 
 /* ── shared: day picker with presets and ‹ › nudges ── */
-function DateNudge({ value, onChange, label }: { value: string; onChange: (k: string) => void; label: string }) {
+export function DateNudge({ value, onChange, label }: { value: string; onChange: (k: string) => void; label: string }) {
   const t = useTheme();
   const { lang, t: tt } = useLang();
   const arrow = (dir: -1 | 1) => (
@@ -218,8 +218,6 @@ export function AddCropSheet({ visible, onClose, initialCrop }: { visible: boole
 }
 
 /* ── Money record ── */
-const EXPENSE: ExpenseCat[] = ["seed", "fertilizer", "chemicals", "labour", "transport", "other"];
-const INCOME: IncomeCat[] = ["sale", "other"];
 
 export function RecordSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const t = useTheme();
@@ -242,7 +240,7 @@ export function RecordSheet({ visible, onClose }: { visible: boolean; onClose: (
   }, [visible]);
 
   const value = Number(amount.replace(/[^\d.]/g, ""));
-  const valid = isFinite(value) && value > 0;
+  const valid = isFinite(value) && value > 0 && value < 1e9;
   const isSale = kind === "income" && cat === "sale";
   const kg = isSale ? Number(kgSold) || 0 : 0;
   const crops = Array.from(new Set([...farm.plantings.map((p) => p.crop), ...CROP_KEYS]));
@@ -273,7 +271,7 @@ export function RecordSheet({ visible, onClose }: { visible: boolean; onClose: (
         label={tt("rec.amount")}
         glyph={null}
         value={amount}
-        onChangeText={setAmount}
+        onChangeText={(v) => setAmount(v.replace(/[^\d.,]/g, "").slice(0, 12))}
         inputRef={amountRef}
         height={56}
         inputStyle={{ fontSize: 20, fontWeight: "700" }}
@@ -285,7 +283,7 @@ export function RecordSheet({ visible, onClose }: { visible: boolean; onClose: (
 
       <Group label={tt("rec.cat")}>
         <ChipRow role="radiogroup" label={tt("rec.cat")}>
-          {(kind === "income" ? INCOME : EXPENSE).map((c) => (
+          {(kind === "income" ? INCOME_CATS : EXPENSE_CATS).map((c) => (
             <Chip key={c} role="radio" selected={cat === c} onPress={() => setCat(c)} label={tt(`rec.cat.${c}` as Key)} />
           ))}
         </ChipRow>

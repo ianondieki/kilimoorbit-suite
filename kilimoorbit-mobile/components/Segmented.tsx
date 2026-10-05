@@ -1,4 +1,4 @@
-/** Two-option radio group (e.g. Kiswahili | English). */
+/** Radio group of two or three options (Kiswahili | English; Calendar | Livestock | Records). */
 import React, { useRef } from "react";
 import { View, Text, Pressable } from "react-native";
 import { useTheme } from "../lib/theme-context";
@@ -9,7 +9,7 @@ type Option<V extends string> = { value: V; label: string };
 export default function Segmented<V extends string>({
   options, value, onChange, accessibilityLabel,
 }: {
-  options: [Option<V>, Option<V>];
+  options: [Option<V>, Option<V>, ...Option<V>[]];
   value: V;
   onChange: (v: V) => void;
   accessibilityLabel: string;
@@ -59,7 +59,8 @@ export default function Segmented<V extends string>({
                 />
                 <Text
                   maxFontSizeMultiplier={1.4}
-                  style={{ fontSize: 16, lineHeight: 22, fontWeight: selected ? "800" : "600", color: selected ? t.field : t.ink }}
+                  numberOfLines={1}
+                  style={{ fontSize: options.length > 2 ? 15 : 16, lineHeight: 22, fontWeight: selected ? "800" : "600", color: selected ? t.field : t.ink, paddingHorizontal: 4 }}
                 >
                   {o.label}
                 </Text>

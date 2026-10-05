@@ -1,6 +1,6 @@
 # KilimoOrbit Sentinel
 
-An AI agri-logistics decision engine for Kenyan smallholder farmers, powered by Google Gemini (APEX core). It routes JSON payloads through five execution modes — market arbitrage, farmer chat, alert broadcast, onboarding, and logistics replanning — and ships with a Mission Control web dashboard, an investor one-pager at `/pitch`, farm-weather and price-history APIs, and five verification suites (30 APEX contract checks, 12 Soko store checks, 21 farm-weather and price checks, 37 HTTP integration checks, 7 LIVE→MOCK fallback checks).
+An AI agri-logistics decision engine for Kenyan smallholder farmers, powered by Google Gemini (APEX core). It routes JSON payloads through five execution modes — market arbitrage, farmer chat, alert broadcast, onboarding, and logistics replanning — and ships with a Mission Control web dashboard, an investor one-pager at `/pitch`, farm-weather and price-history APIs, and five verification suites (30 APEX contract checks, 12 Soko store checks, 21 farm-weather and price checks, 39 HTTP integration checks, 7 LIVE→MOCK fallback checks).
 
 ## Prerequisites
 
@@ -12,7 +12,7 @@ An AI agri-logistics decision engine for Kenyan smallholder farmers, powered by 
 ```bash
 npm install
 cp .env.example .env       # then paste your GEMINI_API_KEY into .env
-npm test                   # APEX (30) + Soko (12) + weather & prices (21) + HTTP (37) + fallback (7)
+npm test                   # APEX (30) + Soko (12) + weather & prices (21) + HTTP (39) + fallback (7)
 npm start                  # launches Mission Control → http://localhost:4517
 npm run dev                # same, with auto-restart on file changes
 ```
@@ -115,6 +115,7 @@ The commodity board (`/api/meta` → `commodity_feed`) is sample data with marke
 - Per-IP rate limits (dependency-free): APEX 60/min, Autopilot 20/min, suite 6/min, marketplace 120/min, weather 120/min, price history 120/min, sign-in 5/hour (the sign-in endpoint sends email, so it is capped hardest). `429` responses carry `Retry-After`. Set `RATE_LIMIT_DISABLED=1` for load tests.
 - Malformed JSON bodies → `400 {"error_type":"BAD_JSON"}`; unknown `/api/*` routes → `404` JSON; bodies over 256 KB → `413`.
 - `GET /api/health` reports engine, model, version and uptime for uptime monitors and the Docker healthcheck.
+- Every async route catches its own errors (`500` JSON, never a hung request), query parameters must be plain strings (`?crop[]=` or repeated keys → `400`), and a process-level `unhandledRejection` handler logs anything that still slips through instead of letting Node exit: one bad request never takes the server down for every farmer.
 
 ## The Apex v2.0 system prompt
 
@@ -134,11 +135,11 @@ The governing prompt is loaded verbatim from **`src/apex_system_prompt.md`** (yo
 
 | Command                  | What it does                                  |
 |--------------------------|-----------------------------------------------|
-| `npm test`               | All five suites: APEX contract (30) + Soko store (12) + farm weather & prices (21) + HTTP (37) + fallback (7) |
+| `npm test`               | All five suites: APEX contract (30) + Soko store (12) + farm weather & prices (21) + HTTP (39) + fallback (7) |
 | `npm run test:apex`      | Cold start + integrity + all 5 routes + climate + guardrails (30/30) |
 | `npm run test:soko`      | Soko marketplace store + fair-price suite (12/12)             |
 | `npm run test:agro`      | Farm weather (counties, sample forecast, farming windows, Open-Meteo mapping + fallback) and market prices (levels, history, board consistency) (21/21) |
-| `npm run test:server`    | Boots the real server on a random port, hits every endpoint (37/37) |
+| `npm run test:server`    | Boots the real server on a random port, hits every endpoint, including hostile query shapes and payloads (39/39) |
 | `npm run check`          | Syntax-check every module (fast CI gate)      |
 | `npm start` / `npm run dev` | Mission Control dashboard on port 4517 (dev = auto-restart) |
 | `npm run docker:build`   | Build the production image                    |

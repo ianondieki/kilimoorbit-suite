@@ -7,6 +7,10 @@ import { View, Text, ScrollView, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Header from "../../components/Header";
 import TaskRows from "../../components/TaskRows";
+import { Guard } from "../../components/ScreenError";
+import { HerdSection } from "../../components/Herd";
+import { useHerd } from "../../lib/herd";
+import { useLocalSearchParams } from "expo-router";
 import Segmented from "../../components/Segmented";
 import { Bounded } from "../../components/Bounded";
 import { AddCropSheet, FarmProfileSheet, RecordSheet } from "../../components/FarmSheets";
@@ -29,13 +33,15 @@ import type { WxDay } from "../../lib/api";
 import { useForecast } from "../../lib/weather";
 import { DEMO_COUNTY } from "../../lib/counties";
 
-type Tab = "calendar" | "records";
+type Tab = "calendar" | "livestock" | "records";
 
 export default function Shamba() {
   const t = useTheme();
   const { lang, t: tt } = useLang();
   const { farm } = useFarm();
-  const [tab, setTab] = useState<Tab>("calendar");
+  // ?tab=livestock (or records) opens that section directly.
+  const params = useLocalSearchParams<{ tab?: string }>();
+  const [tab, setTab] = useState<Tab>(params.tab === "livestock" || params.tab === "records" ? params.tab : "calendar");
   const [sheet, setSheet] = useState<null | "county" | "crop" | "record">(null);
   const [preset, setPreset] = useState<CropKey | undefined>(undefined);
 
@@ -70,16 +76,24 @@ export default function Shamba() {
 
           <Segmented
             accessibilityLabel={tt("farm.tabs")}
-            options={[{ value: "calendar", label: tt("farm.tab.calendar") }, { value: "records", label: tt("farm.tab.records") }]}
+            options={[
+              { value: "calendar", label: tt("farm.tab.calendar") },
+              { value: "livestock", label: tt("farm.tab.livestock") },
+              { value: "records", label: tt("farm.tab.records") },
+            ]}
             value={tab}
             onChange={setTab}
           />
 
-          {tab === "calendar" ? (
-            <Calendar onAdd={addCrop} />
-          ) : (
-            <Records onAdd={() => setSheet("record")} />
-          )}
+          <Guard name={tab}>
+            {tab === "calendar" ? (
+              <Calendar onAdd={addCrop} />
+            ) : tab === "livestock" ? (
+              <HerdSection />
+            ) : (
+              <Records onAdd={() => setSheet("record")} />
+            )}
+          </Guard>
         </Bounded>
       </ScrollView>
 
@@ -113,7 +127,7 @@ function Calendar({ onAdd }: { onAdd: (k?: CropKey) => void }) {
         <>
           {sorted.map((p, i) => (
             <Enter key={p.id} index={i}>
-              <PlantingCard p={p} days={wx.data?.days} />
+              <Guard name={`planting:${p.crop}`}><PlantingCard p={p} days={wx.data?.days} /></Guard>
             </Enter>
           ))}
           <Btn kind="secondary" label={tt("tasks.addCrop")} onPress={() => onAdd()} icon={(c) => <PlusGlyph size={14} color={c} />} testID="farm-add-crop" />
@@ -298,6 +312,7 @@ function Records({ onAdd }: { onAdd: () => void }) {
   const { profile } = useSession();
   const { meta } = useSentinel();
   const [shared, setShared] = useState<null | "copied" | "failed">(null);
+  const { herd } = useHerd();
   const [period, setPeriod] = useState<"season" | "all">("season");
   const [limit, setLimit] = useState(12);
   const from = seasonStartKey();
@@ -362,7 +377,11 @@ function Records({ onAdd }: { onAdd: () => void }) {
           kind="secondary"
           label={shared === "copied" ? tt("rec.copied") : shared === "failed" ? tt("rec.shareFail") : tt("rec.share")}
           onPress={async () => {
-            const text = buildReport({ lang, tt, name: profile?.name, farm, entries, periodLabel: tt(period === "all" ? "rec.all" : "rec.season") });
+            const counts = new Map<string, number>();
+            for (const a of herd.animals) counts.set(a.species, (counts.get(a.species) ?? 0) + (a.species === "chicken" ? a.count ?? 1 : 1));
+            const herdLine = [...counts].map(([sp, n]) => `${tt(`sp.${sp}` as Key)} ${n.toLocaleString("en-KE")}`).join(", ");
+            const milkLitres = herd.milk.filter((m) => period === "all" || m.date >= from).reduce((x, m) => x + m.litres, 0);
+            const text = buildReport({ lang, tt, name: profile?.name, farm, entries, periodLabel: tt(period === "all" ? "rec.all" : "rec.season"), herdLine, milkLitres });
             const r = await shareText(text);
             if (r !== "shared") { setShared(r); announce(tt(r === "copied" ? "rec.copied" : "rec.shareFail")); setTimeout(() => setShared(null), 2500); }
           }}
@@ -440,3 +459,6 @@ function EntryRow({ e, last }: { e: Entry; last: boolean }) {
     </View>
   );
 }
+
+// A screen that throws shows a "try again" card, never a blank app.
+export { ScreenErrorBoundary as ErrorBoundary } from "../../components/ScreenError";

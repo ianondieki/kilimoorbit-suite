@@ -150,3 +150,6 @@ const s = StyleSheet.create({
   stepBody: { flex: 1, borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 14 },
   brief: { borderWidth: 1.5, borderRadius: 14, padding: 16, marginTop: 6 },
 });
+
+// A screen that throws shows a "try again" card, never a blank app.
+export { ScreenErrorBoundary as ErrorBoundary } from "../../components/ScreenError";
