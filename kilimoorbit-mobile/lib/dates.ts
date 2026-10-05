@@ -49,3 +49,6 @@ export const dayMonth = (lang: Lang, k: string) => {
 
 /** "Monday 5 Oct" */
 export const longDay = (lang: Lang, k: string) => `${weekday(lang, k)} ${dayMonth(lang, k)}`;
+
+/** "Oct" / "Okt" for a month number (0 = January). */
+export const monthShort = (lang: Lang, m: number) => MONTHS_SHORT[lang][((m % 12) + 12) % 12];

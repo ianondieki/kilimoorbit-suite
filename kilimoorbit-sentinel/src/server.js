@@ -26,6 +26,7 @@ import { callApex, engineMode, MODEL } from "./apex_client.js";
 import { createSokoRouter } from "./soko/routes.js";
 import { findCounty, forecastFor } from "./agro/weather.js";
 import { boardFor, historyFor } from "./agro/prices.js";
+import { createPestWatch, validateReport } from "./agro/pests.js";
 import { SUITE, runSuite, loadPayload } from "./suite.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -174,6 +175,25 @@ export function createApp() {
     if (!h)
       return res.status(400).json({ error: `No prices for crop: ${crop}.`, error_type: "UNKNOWN_CROP", fields: ["crop"] });
     res.json({ ...h, source: "SAMPLE", currency: "KES", unit: "kg" });
+  });
+
+  // Pest watch: anonymous fall armyworm scouting results pooled by county
+  // (FAMEWS-style). Only county, crop, plants checked / hit and crop age are
+  // accepted; nothing that identifies the farmer.
+  const pests = createPestWatch();
+  app.post("/api/pests/report", rateLimit({ windowMs: 10 * 60_000, max: 30, name: "pest report" }), (req, res) => {
+    const v = validateReport(req.body);
+    if (v.error) return res.status(400).json({ error: v.error, error_type: "VALIDATION_ERROR", fields: v.fields });
+    pests.add(v.report);
+    res.status(201).json({ ok: true, report: v.report, watch: pests.watch(v.report.county) });
+  });
+  app.get("/api/pests/watch", rateLimit({ windowMs: 60_000, max: 120, name: "pest watch" }), (req, res) => {
+    const name = typeof req.query.county === "string" ? req.query.county.trim().slice(0, 40) : "";
+    if (!name)
+      return res.status(400).json({ error: "A county is required, e.g. ?county=Meru.", error_type: "MISSING_COUNTY", fields: ["county"] });
+    const w = pests.watch(name);
+    if (!w) return res.status(400).json({ error: `Unknown county: ${name}.`, error_type: "UNKNOWN_COUNTY", fields: ["county"] });
+    res.json(w);
   });
 
   app.get("/api/meta", (_req, res) => {

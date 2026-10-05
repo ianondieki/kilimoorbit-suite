@@ -1,7 +1,8 @@
 /**
  * The farmer's shamba, kept on this phone ("ko-farm"): county and size, the
- * crops in the ground, which calendar tasks are done, and a simple money
- * ledger (daftari). Works fully offline; nothing is sent to the server.
+ * crops in the ground, which calendar tasks are done, a simple money ledger
+ * (daftari), produce in store (ghala) and the farmer's own input prices for
+ * the budget. Works fully offline; nothing is sent to the server.
  *
  * A tiny module store (like lib/voice.ts): every screen reads the same value
  * through useFarm(), and writes are persisted at once.
@@ -10,6 +11,9 @@ import { useCallback, useEffect, useSyncExternalStore } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CROPS, type CropKey, type CropTask } from "./agronomy";
 import { addDays, daysBetween, todayKey } from "./dates";
+import { isStoreCrop, type Lot } from "./postharvest";
+import { isPriceKey } from "./budget";
+import type { Scout } from "./scouting";
 
 export const FARM_KEY = "ko-farm";
 
@@ -38,9 +42,21 @@ export type Farm = {
   plantings: Planting[];
   done: Record<string, true>;
   entries: Entry[];
+  /** Produce in store (ghala). */
+  store: Lot[];
+  /** The farmer's own prices for the budget (lib/budget.ts keys). */
+  prices: Record<string, number>;
+  /** Fall armyworm scouting walks (lib/scouting.ts). */
+  scouts: Scout[];
+  /** Soil pH from a soil test, when the farmer has one. */
+  soilPh: number | null;
+  /** Share scouting results anonymously with the county pest watch. */
+  sharePest: boolean;
 };
 
-const EMPTY: Farm = { v: 1, county: null, acres: null, plantings: [], done: {}, entries: [] };
+const EMPTY: Farm = { v: 1, county: null, acres: null, plantings: [], done: {}, entries: [], store: [], prices: {}, scouts: [], soilPh: null, sharePest: false };
+const MAX_LOTS = 50;
+const MAX_SCOUTS = 300;
 
 let state: Farm = EMPTY;
 let hydrated = false;
@@ -48,7 +64,8 @@ let hydrating: Promise<void> | null = null;
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
-const isCrop = (k: unknown): k is CropKey => typeof k === "string" && k in CROPS;
+// Own keys only: "toString" or "constructor" from a corrupted store must not pass as a crop.
+const isCrop = (k: unknown): k is CropKey => typeof k === "string" && Object.prototype.hasOwnProperty.call(CROPS, k);
 
 /** Drops anything malformed rather than crashing on a hand-edited or old store. */
 function sanitize(raw: any): Farm {
@@ -74,6 +91,28 @@ function sanitize(raw: any): Farm {
         note: typeof e.note === "string" ? e.note.slice(0, 80) : undefined,
       }))
       .slice(0, 2000),
+    store: (Array.isArray(raw.store) ? raw.store : [])
+      .filter((l: any) => l && typeof l.id === "string" && isStoreCrop(l.crop) && num(l.kg) && l.kg <= 1e6 && day(l.since))
+      .map((l: any): Lot => ({
+        id: l.id, crop: l.crop, kg: Math.round(l.kg), since: l.since, hermetic: l.hermetic === true,
+        ...(day(l.checked) ? { checked: l.checked } : null),
+      }))
+      .slice(0, MAX_LOTS),
+    prices: Object.fromEntries(
+      Object.entries(raw.prices && typeof raw.prices === "object" && !Array.isArray(raw.prices) ? raw.prices : {})
+        .filter(([k, v]) => isPriceKey(k) && typeof v === "number" && Number.isFinite(v) && v >= 0 && v < 1e7),
+    ) as Record<string, number>,
+    scouts: (Array.isArray(raw.scouts) ? raw.scouts : [])
+      .filter((x: any) => x && typeof x.id === "string" && day(x.date) && Number.isInteger(x.plants) && x.plants >= 1 && x.plants <= 200
+        && Number.isInteger(x.hit) && x.hit >= 0 && x.hit <= x.plants)
+      .map((x: any): Scout => ({
+        id: x.id, date: x.date, plants: x.plants, hit: x.hit,
+        ageDays: Number.isInteger(x.ageDays) && x.ageDays >= 0 && x.ageDays <= 400 ? x.ageDays : null,
+        ...(typeof x.plantingId === "string" ? { plantingId: x.plantingId } : null),
+      }))
+      .slice(-MAX_SCOUTS),
+    soilPh: typeof raw.soilPh === "number" && Number.isFinite(raw.soilPh) && raw.soilPh >= 3 && raw.soilPh <= 9 ? Math.round(raw.soilPh * 10) / 10 : null,
+    sharePest: raw.sharePest === true,
   };
 }
 
@@ -132,6 +171,7 @@ export const farmActions = {
       ...s,
       plantings: s.plantings.filter((p) => p.id !== id),
       done: Object.fromEntries(Object.entries(s.done).filter(([k]) => !k.startsWith(`${id}:`))) as Farm["done"],
+      scouts: s.scouts.filter((x) => x.plantingId !== id),
     }));
   },
   toggleTask(plantingId: string, taskId: string) {
@@ -149,6 +189,91 @@ export const farmActions = {
   },
   removeEntry(id: string) {
     mutate((s) => ({ ...s, entries: s.entries.filter((e) => e.id !== id) }));
+  },
+
+  /* ── ghala ── */
+  addLot(l: Omit<Lot, "id" | "checked">) {
+    if (!isStoreCrop(l.crop) || !(l.kg > 0) || l.kg > 1e6) return;
+    const lot: Lot = { id: uid("l"), crop: l.crop, kg: Math.round(l.kg), since: l.since, hermetic: !!l.hermetic };
+    mutate((s) => (s.store.length >= MAX_LOTS ? s : { ...s, store: [...s.store, lot] }));
+  },
+  removeLot(id: string) {
+    mutate((s) => ({ ...s, store: s.store.filter((l) => l.id !== id) }));
+  },
+  /** Marks a store check done (or restores the previous one, for undo). */
+  setChecked(id: string, date: string | undefined) {
+    mutate((s) => ({
+      ...s,
+      store: s.store.map((l) => {
+        if (l.id !== id) return l;
+        const { checked: _, ...rest } = l;
+        return date ? { ...rest, checked: date } : rest;
+      }),
+    }));
+  },
+  /**
+   * Sells from a lot: the lot shrinks (and goes when empty) and the sale is
+   * written to the daftari with its kilos, in one change.
+   */
+  sellFromStore(id: string, kg: number, amount: number, date: string, note?: string) {
+    if (!(kg > 0) || !(amount > 0) || !Number.isFinite(amount)) return;
+    const entryId = uid("e");
+    mutate((s) => {
+      const lot = s.store.find((l) => l.id === id);
+      if (!lot) return s;
+      const sold = Math.min(Math.round(kg), lot.kg);
+      const left = lot.kg - sold;
+      return {
+        ...s,
+        store: left > 0 ? s.store.map((l) => (l.id === id ? { ...l, kg: left } : l)) : s.store.filter((l) => l.id !== id),
+        entries: [{ id: entryId, kind: "income", category: "sale", amount: Math.round(amount), crop: lot.crop, kg: sold, date, ...(note ? { note: note.slice(0, 80) } : null) }, ...s.entries],
+      };
+    });
+  },
+
+  /** Takes kilos out of a lot without a sale (eaten at home, given away, spoiled). */
+  takeFromLot(id: string, kg: number) {
+    if (!(kg > 0)) return;
+    mutate((s) => {
+      const lot = s.store.find((l) => l.id === id);
+      if (!lot) return s;
+      const left = lot.kg - Math.round(kg);
+      return { ...s, store: left > 0 ? s.store.map((l) => (l.id === id ? { ...l, kg: left } : l)) : s.store.filter((l) => l.id !== id) };
+    });
+  },
+
+  /* ── scouting and soil ── */
+  /** Saves a walk; the planting's scouting tasks due by now (or within 3 days) are ticked off with it. */
+  addScout(x: Omit<Scout, "id">) {
+    if (!(x.plants >= 1 && x.plants <= 200 && x.hit >= 0 && x.hit <= x.plants)) return;
+    const scout: Scout = { ...x, id: uid("s") };
+    mutate((s) => {
+      const done = { ...s.done };
+      const p = x.plantingId ? s.plantings.find((q) => q.id === x.plantingId) : undefined;
+      if (p) for (const t of CROPS[p.crop].tasks)
+        if (t.id.startsWith("faw") && addDays(p.plantedOn, t.day) <= addDays(x.date, 3)) done[`${p.id}:${t.id}`] = true;
+      return { ...s, done, scouts: [...s.scouts, scout].slice(-MAX_SCOUTS) };
+    });
+  },
+  removeScout(id: string) {
+    mutate((s) => ({ ...s, scouts: s.scouts.filter((x) => x.id !== id) }));
+  },
+  setSoilPh(ph: number | null) {
+    mutate((s) => ({ ...s, soilPh: ph != null && Number.isFinite(ph) && ph >= 3 && ph <= 9 ? Math.round(ph * 10) / 10 : null }));
+  },
+  setSharePest(on: boolean) {
+    mutate((s) => ({ ...s, sharePest: on }));
+  },
+
+  /* ── budget prices ── */
+  setPrice(key: string, value: number | null) {
+    if (!isPriceKey(key)) return;
+    mutate((s) => {
+      const prices = { ...s.prices };
+      if (value == null || !Number.isFinite(value) || value < 0 || value >= 1e7) delete prices[key];
+      else prices[key] = value;
+      return { ...s, prices };
+    });
   },
 };
 

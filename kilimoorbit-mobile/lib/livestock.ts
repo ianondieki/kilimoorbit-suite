@@ -267,13 +267,142 @@ export function milkSeries(milk: MilkEntry[], today: string, days = 14, animalId
   return { dates, litres: dates.map((d) => Math.round((by.get(d) ?? 0) * 10) / 10) };
 }
 
-/** Litres in the last 7 days vs the 7 before, and the change in percent (null without a base). */
+/**
+ * Week-on-week change of the daily average over the days actually recorded
+ * (a day not written down yet is not a day of zero), in percent; null
+ * without a base. `values` are 14 daily totals, oldest first.
+ */
+export function weekChange(values: number[]): number | null {
+  const avg = (xs: number[]) => { const r = xs.filter((x) => x > 0); return r.length ? r.reduce((s, x) => s + x, 0) / r.length : 0; };
+  const now = avg(values.slice(-7));
+  const before = avg(values.slice(-14, -7));
+  return before > 0 && now > 0 ? Math.round(((now - before) / before) * 1000) / 10 : null;
+}
+
+/** Only the days with a record, for a trend line that doesn't dive to zero on a day not yet written down. */
+export function recordedDays(dates: string[], values: number[]) {
+  const keep = values.map((v, i) => (v > 0 ? i : -1)).filter((i) => i >= 0);
+  return { dates: keep.map((i) => dates[i]), values: keep.map((i) => values[i]) };
+}
+
+/** Litres in the last 7 days and the 7 before, and the change in the daily average. */
 export function milkWeek(milk: MilkEntry[], today: string) {
   const { litres } = milkSeries(milk, today, 14);
   const last = litres.slice(7).reduce((s, x) => s + x, 0);
   const prev = litres.slice(0, 7).reduce((s, x) => s + x, 0);
-  return { thisWeek: Math.round(last * 10) / 10, lastWeek: Math.round(prev * 10) / 10, changePct: prev > 0 ? Math.round(((last - prev) / prev) * 1000) / 10 : null };
+  return { thisWeek: Math.round(last * 10) / 10, lastWeek: Math.round(prev * 10) / 10, changePct: weekChange(litres) };
 }
 
 /** "{name}" in a reminder title. */
 export const fill = (s: string, name: string) => s.replace(/\{name\}/g, name);
+
+/* ── eggs ── */
+export type EggEntry = { id: string; flockId: string; date: string; eggs: number };
+export const TRAY = 30;
+/** Layers usually start at 18–20 weeks; offer the egg log from 17 weeks (or when the age is unknown). */
+export const LAY_FROM_DAYS = 119;
+
+export const canLay = (a: Animal, today: string) =>
+  a.species === "chicken" && (!a.born || daysBetween(a.born, today) >= LAY_FROM_DAYS);
+
+export function eggSeries(eggs: EggEntry[], today: string, days = 14, flockId?: string) {
+  const dates = Array.from({ length: days }, (_, i) => addDays(today, i - days + 1));
+  const by = new Map<string, number>();
+  for (const e of eggs) if (!flockId || e.flockId === flockId) by.set(e.date, (by.get(e.date) ?? 0) + e.eggs);
+  return { dates, eggs: dates.map((d) => by.get(d) ?? 0) };
+}
+
+/** Eggs in the last 7 days and the 7 before, and the change in the daily average. */
+export function eggWeek(eggs: EggEntry[], today: string) {
+  const { eggs: n } = eggSeries(eggs, today, 14);
+  const last = n.slice(7).reduce((s, x) => s + x, 0);
+  const prev = n.slice(0, 7).reduce((s, x) => s + x, 0);
+  return { thisWeek: last, lastWeek: prev, changePct: weekChange(n) };
+}
+
+/**
+ * Laying rate (eggs a day per 100 hens) over the days recorded in the last
+ * week, and in the week before; null where fewer than 3 days were recorded.
+ */
+export function layRate(eggs: EggEntry[], flockId: string, hens: number, today: string): { now: number | null; before: number | null } {
+  if (!(hens > 0)) return { now: null, before: null };
+  const { eggs: n } = eggSeries(eggs, today, 14, flockId);
+  const rate = (xs: number[]) => {
+    const recorded = xs.filter((x) => x > 0);
+    return recorded.length >= 3 ? Math.round((recorded.reduce((s, x) => s + x, 0) / recorded.length / hens) * 100) : null;
+  };
+  return { now: rate(n.slice(7)), before: rate(n.slice(0, 7)) };
+}
+
+/** A drop worth acting on: 10 points or more, week on week. */
+export const layDropped = (r: { now: number | null; before: number | null }) =>
+  r.now != null && r.before != null && r.before - r.now >= 10;
+
+/* ── a milking cow's daily water and dairy meal ── */
+/**
+ * East African extension rules of thumb: a milking cow drinks about 60–70 L a
+ * day plus 4–5 L for every litre of milk, gets about 1 kg of dairy meal for
+ * every 2–3 L of milk, and eats 50–70 kg of chopped fresh Napier a day
+ * (icipe). Water is shown in 20 L jerrycans, the way it is carried.
+ */
+export const JERRYCAN_L = 20;
+export const waterFor = (litres: number) => Math.round(65 + 4.5 * Math.max(0, litres));
+export const dairyMealFor = (litres: number) => Math.round((Math.max(0, litres) / 2.5) * 2) / 2;
+export const NAPIER_KG: [number, number] = [50, 70];
+
+/** A cow's average litres a day over the days recorded in the last week (null with none). */
+export function dailyLitres(milk: MilkEntry[], animalId: string, today: string): number | null {
+  const { litres } = milkSeries(milk, today, 7, animalId);
+  const r = litres.filter((x) => x > 0);
+  return r.length ? Math.round((r.reduce((s, x) => s + x, 0) / r.length) * 10) / 10 : null;
+}
+
+/* ── co-op deliveries and the payslip ── */
+export type Delivery = { id: string; date: string; litres: number };
+export type CoopTerms = { price: number | null; deduction: number | null };
+
+/** Litres delivered in a calendar month ("2026-10"), and the expected pay after per-litre deductions. */
+export function monthStatement(deliveries: Delivery[], month: string, terms: CoopTerms) {
+  const litres = Math.round(deliveries.filter((d) => d.date.startsWith(month)).reduce((s, d) => s + d.litres, 0) * 10) / 10;
+  const gross = terms.price ? Math.round(litres * terms.price) : null;
+  const deductions = terms.price && terms.deduction ? Math.round(litres * terms.deduction) : 0;
+  return { month, litres, days: new Set(deliveries.filter((d) => d.date.startsWith(month)).map((d) => d.date)).size, gross, deductions, net: gross == null ? null : gross - deductions };
+}
+
+/** The payslip against the farmer's own record: litres missing (positive) or extra, and their worth. */
+export function payslipGap(recordLitres: number, payslipLitres: number, terms: CoopTerms) {
+  const gap = Math.round((recordLitres - payslipLitres) * 10) / 10;
+  const perLitre = terms.price != null ? terms.price - (terms.deduction ?? 0) : null;
+  return { gap, worth: perLitre != null ? Math.round(gap * perLitre) : null, matches: Math.abs(gap) < 1 };
+}
+
+/* ── hatching eggs ── */
+export type Hatch = { id: string; set: string; eggs: number; method: "incubator" | "hen" };
+export const HATCH_DAYS = 21;
+export type HatchStep = { id: "candle1" | "candle2" | "lockdown" | "hatch"; day: number };
+
+/**
+ * The 21-day calendar for chicken eggs: candle at day 7 (and 14 in an
+ * incubator) to take out clear or dead eggs; in an incubator, stop turning
+ * and raise the humidity at day 18 ("lockdown"); chicks hatch about day 21.
+ */
+export const hatchSteps = (h: Pick<Hatch, "method">): HatchStep[] =>
+  h.method === "incubator"
+    ? [{ id: "candle1", day: 7 }, { id: "candle2", day: 14 }, { id: "lockdown", day: 18 }, { id: "hatch", day: 21 }]
+    : [{ id: "candle1", day: 7 }, { id: "hatch", day: 21 }];
+
+export type HatchDue = { hatch: Hatch; step: HatchStep; due: string; inDays: number };
+
+/** Hatch steps due within `ahead` days (or up to 3 days late) and not ticked, soonest first. */
+export function dueHatchSteps(hatches: Hatch[], done: Record<string, true>, today: string, ahead = 1): HatchDue[] {
+  return hatches
+    .flatMap((hatch) => hatchSteps(hatch).map((step) => {
+      const due = addDays(hatch.set, step.day);
+      return { hatch, step, due, inDays: daysBetween(today, due) };
+    }))
+    .filter((x) => !done[`hatch:${x.hatch.id}:${x.step.id}`] && x.inDays <= ahead && x.inDays >= -3)
+    .sort((a, b) => a.inDays - b.inDays);
+}
+
+/** Brooder temperature for chicks this many weeks old: 35 °C in week 1, about 3 °C less each week, down to 21 °C. */
+export const brooderTemp = (week: number) => Math.max(21, 35 - 3 * Math.max(0, Math.floor(week) - 1));

@@ -6,7 +6,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, ScrollView, RefreshControl, TextInput, Pressable, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import Header from "../../components/Header";
 import Ticker from "../../components/Ticker";
 import Field from "../../components/Field";
@@ -19,6 +19,7 @@ import TrendTile from "../../components/TrendTile";
 import { Guard } from "../../components/ScreenError";
 import { MyListings, SokoSheet } from "../../components/SokoSell";
 import { AlertRow } from "../../components/PriceAlerts";
+import { HoldCard } from "../../components/Ghala";
 import { FarmProfileSheet } from "../../components/FarmSheets";
 import { useTheme } from "../../lib/theme-context";
 import { useLang } from "../../lib/session";
@@ -39,6 +40,11 @@ export default function Masoko() {
   const [refreshing, setRefreshing] = useState(false);
   const [sheet, setSheet] = useState<null | "soko" | "county">(null);
   const [sale, setSale] = useState<{ kg: number; fair: number }>({ kg: 0, fair: 0 });
+  // The farmer's harvest (kg): shared by the price card and the sell-or-store card.
+  const [qty, setQty] = useState("500");
+  // ?crop=maize (from the store) opens that crop.
+  const params = useLocalSearchParams<{ crop?: string }>();
+  useEffect(() => { if (typeof params.crop === "string" && params.crop) setPicked(params.crop); }, [params.crop]);
 
   // Until the farmer picks one: their own first crop on the board, else the
   // planned run's crop, else the first on the board.
@@ -125,6 +131,8 @@ export default function Masoko() {
                   <Guard name="prices">
                   <PricesCard
                     c={commodity}
+                    qty={qty}
+                    setQty={setQty}
                     demo={demo}
                     fresh={freshnessText(lang, { status: "live", rows: [], ageMin: feed.data_age_minutes, offline: false })}
                     onSell={(kg, fair) => { setSale({ kg, fair }); setSheet("soko"); }}
@@ -132,6 +140,7 @@ export default function Masoko() {
                   </Guard>
                 </Enter>
               )}
+              {commodity && <Guard name="hold"><HoldCard crop={commodity.crop} qtyKg={Math.max(0, Number(qty) || 0)} demo={demo} /></Guard>}
               <Guard name="soko"><MyListings /></Guard>
               <Enter index={1}><Guard name="run"><RunCard /></Guard></Enter>
               <Enter index={2}><Guard name="delivery"><DeliveryCard /></Guard></Enter>
@@ -166,10 +175,11 @@ function usePriceHistory(crop: string) {
   return h?.crop === crop ? h : null;
 }
 
-function PricesCard({ c, demo, fresh, onSell }: { c: Commodity; demo: boolean; fresh: string; onSell: (kg: number, fair: number) => void }) {
+function PricesCard({
+  c, qty, setQty, demo, fresh, onSell,
+}: { c: Commodity; qty: string; setQty: (v: string) => void; demo: boolean; fresh: string; onSell: (kg: number, fair: number) => void }) {
   const t = useTheme();
   const { lang, t: tt } = useLang();
-  const [qty, setQty] = useState("500");
   const qtyRef = useRef<TextInput>(null);
   const kg = Math.max(0, Number(qty.replace(/[^\d]/g, "")) || 0);
   const rows = [...c.quotes].sort((a, b) => b.price - a.price);

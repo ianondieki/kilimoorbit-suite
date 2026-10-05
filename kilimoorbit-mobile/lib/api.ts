@@ -1,5 +1,5 @@
 import { API_BASE } from "./config";
-import { cleanForecast, cleanHistory, cleanListing, cleanMeta } from "./validate";
+import { cleanForecast, cleanHistory, cleanListing, cleanMeta, cleanPestWatch } from "./validate";
 
 /* ── Apex v2.0 result types (the fields the app renders) ── */
 export type ArbitrageResult = {
@@ -164,6 +164,18 @@ export type PriceHistory = {
 };
 export const getPriceHistory = async (crop: string) =>
   must(cleanHistory(await request<unknown>(`/api/prices/history?crop=${encodeURIComponent(crop)}`, undefined, 10000)), "price history");
+
+/* ── Pest watch (/api/pests) ── */
+export type PestWatch = {
+  county: string; pest: "faw"; window_days: number; source: "FARMERS" | "SAMPLE";
+  reports: number; over_threshold: number; avg_pct: number; max_pct: number;
+  last_report: string | null; level: "none" | "low" | "high";
+};
+export const getPestWatch = async (county: string) =>
+  must(cleanPestWatch(await request<unknown>(`/api/pests/watch?county=${encodeURIComponent(county)}`, undefined, 10000)), "pest watch");
+/** Anonymous: county, crop, plants checked / hit and the crop's age only. */
+export const reportPest = async (input: { county: string; crop: "maize"; plants: number; hit: number; age_days: number | null }) =>
+  must(cleanPestWatch((await post<any>("/api/pests/report", input, 10000))?.watch), "pest watch");
 
 /* ── Soko marketplace (/api/soko) ── */
 export type SokoStatus = "open" | "claimed" | "delivered" | "cancelled";
