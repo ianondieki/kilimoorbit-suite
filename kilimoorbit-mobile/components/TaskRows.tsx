@@ -6,6 +6,8 @@ import { cropName } from "../lib/prices";
 import { pick } from "../lib/agronomy";
 import { dayMonth } from "../lib/dates";
 import { farmActions, type DatedTask } from "../lib/farm";
+import { taskHint } from "../lib/advice";
+import type { WxDay } from "../lib/api";
 import type { Key, Vars } from "../lib/i18n";
 import { CheckRow } from "./Kit";
 import { CropCoin } from "./ShambaPanel";
@@ -18,8 +20,8 @@ export function dueText(tt: (k: Key, v?: Vars) => string, inDays: number) {
 }
 
 export default function TaskRows({
-  tasks, showCrop = false, dates = false, onToggled,
-}: { tasks: DatedTask[]; showCrop?: boolean; dates?: boolean; onToggled?: (key: string) => void }) {
+  tasks, showCrop = false, dates = false, onToggled, days,
+}: { tasks: DatedTask[]; showCrop?: boolean; dates?: boolean; onToggled?: (key: string) => void; days?: WxDay[] }) {
   const { lang, t: tt } = useLang();
   return (
     <View>
@@ -36,6 +38,7 @@ export default function TaskRows({
             meta={meta}
             metaTone={task.inDays < 0 ? "late" : task.inDays <= 1 ? "soon" : undefined}
             leading={showCrop ? <CropCoin cropKey={task.planting.crop} size={30} /> : undefined}
+            hint={taskHint(task, days, lang, tt)}
           />
         );
       })}

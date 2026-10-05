@@ -3,8 +3,8 @@
  * and what the farmer's harvest is worth at each; then the planned harvest
  * run (Apex Route A) and any delivery on the road, with Autopilot one tap away.
  */
-import React, { useMemo, useRef, useState } from "react";
-import { View, Text, ScrollView, RefreshControl, TextInput, useWindowDimensions } from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { View, Text, ScrollView, RefreshControl, TextInput, Pressable, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Header from "../../components/Header";
@@ -14,14 +14,17 @@ import { Bounded } from "../../components/Bounded";
 import { Btn, Card, Chip, ChipRow, Eyebrow, T, Tag } from "../../components/Kit";
 import { Enter, CountUp, Skeleton } from "../../components/Motion";
 import { CropCoin, DemoTag } from "../../components/ShambaPanel";
-import { RouteGlyph, SignalOffGlyph } from "../../components/Glyphs";
+import { ArrowGlyph, RouteGlyph, SignalOffGlyph } from "../../components/Glyphs";
+import TrendTile from "../../components/TrendTile";
+import { MyListings, SokoSheet } from "../../components/SokoSell";
+import { FarmProfileSheet } from "../../components/FarmSheets";
 import { useTheme } from "../../lib/theme-context";
 import { useLang } from "../../lib/session";
-import { isWeb, webLang } from "../../lib/ui";
+import { focusRing, isWeb, webCursor, webLang, type PressState } from "../../lib/ui";
 import { SAFE_EMOJI, cropName, freshnessText, isDemoBoard } from "../../lib/prices";
 import { useSentinel } from "../../lib/sentinel";
 import { useFarm } from "../../lib/farm";
-import { fmtKES, type Commodity } from "../../lib/api";
+import { fmtKES, getPriceHistory, type Commodity, type PriceHistory } from "../../lib/api";
 import type { Key } from "../../lib/i18n";
 
 export default function Masoko() {
@@ -32,6 +35,8 @@ export default function Masoko() {
   const feed = s.meta?.commodity_feed;
   const [picked, setPicked] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [sheet, setSheet] = useState<null | "soko" | "county">(null);
+  const [sale, setSale] = useState<{ kg: number; fair: number }>({ kg: 0, fair: 0 });
 
   // Until the farmer picks one: their own first crop on the board, else the
   // planned run's crop, else the first on the board.
@@ -115,20 +120,49 @@ export default function Masoko() {
 
               {commodity && (
                 <Enter index={0}>
-                  <PricesCard c={commodity} demo={demo} fresh={freshnessText(lang, { status: "live", rows: [], ageMin: feed.data_age_minutes, offline: false })} />
+                  <PricesCard
+                    c={commodity}
+                    demo={demo}
+                    fresh={freshnessText(lang, { status: "live", rows: [], ageMin: feed.data_age_minutes, offline: false })}
+                    onSell={(kg, fair) => { setSale({ kg, fair }); setSheet("soko"); }}
+                  />
                 </Enter>
               )}
+              <MyListings />
               <Enter index={1}><RunCard /></Enter>
               <Enter index={2}><DeliveryCard /></Enter>
             </>
           )}
         </Bounded>
       </ScrollView>
+      {crop && (
+        <SokoSheet
+          visible={sheet === "soko"}
+          onClose={() => setSheet(null)}
+          crop={crop}
+          qty={sale.kg}
+          fair={sale.fair || null}
+          onNeedCounty={() => setSheet("county")}
+        />
+      )}
+      <FarmProfileSheet visible={sheet === "county"} onClose={() => setSheet(null)} />
     </SafeAreaView>
   );
 }
 
-function PricesCard({ c, demo, fresh }: { c: Commodity; demo: boolean; fresh: string }) {
+/** 14-day history for a crop; null while loading, offline, or not on the board. */
+function usePriceHistory(crop: string) {
+  const [h, setH] = useState<PriceHistory | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setH(null);
+    getPriceHistory(crop).then((r) => { if (alive) setH(r); }).catch(() => {});
+    return () => { alive = false; };
+  }, [crop]);
+  return h?.crop === crop ? h : null;
+}
+
+function PricesCard({ c, demo, fresh, onSell }: { c: Commodity; demo: boolean; fresh: string; onSell: (kg: number, fair: number) => void }) {
   const t = useTheme();
   const { lang, t: tt } = useLang();
   const [qty, setQty] = useState("500");
@@ -139,6 +173,13 @@ function PricesCard({ c, demo, fresh }: { c: Commodity; demo: boolean; fresh: st
   const best = rows[0];
   const worst = rows[rows.length - 1];
   const gap = best && worst && best !== worst ? (best.price - worst.price) * kg : 0;
+  // Soko's fair price: the average across the board's markets.
+  const fair = Math.round(c.quotes.reduce((s, q) => s + q.price, 0) / Math.max(1, c.quotes.length));
+
+  const history = usePriceHistory(c.crop);
+  const [trendMarket, setTrendMarket] = useState<string | null>(null);
+  useEffect(() => { setTrendMarket(null); }, [c.crop]);
+  const tm = history?.markets.find((m) => m.market === (trendMarket ?? best?.market)) ?? null;
 
   return (
     <Card>
@@ -158,32 +199,45 @@ function PricesCard({ c, demo, fresh }: { c: Commodity; demo: boolean; fresh: st
         inputProps={{ keyboardType: "numeric", inputMode: "numeric", testID: "mk-qty" } as any}
       />
 
-      <View style={{ gap: 4 }}>
+      {/* Each market row also picks which market the trend below follows. */}
+      <View accessibilityRole={history ? "radiogroup" : undefined} style={{ gap: 2 }}>
         {rows.map((q) => {
           const isBest = q === best;
+          const picked = history != null && tm?.market === q.market;
           const dir = tt(q.delta > 0 ? "prices.up" : q.delta < 0 ? "prices.down" : "prices.flat");
+          const label = tt("mk.rowA11y", { market: q.market, p: q.price, dir, d: q.delta === 0 ? "" : Math.abs(q.delta), v: (q.price * kg).toLocaleString("en-KE") });
           return (
-            <View
+            <Pressable
               key={q.market}
-              accessible
-              accessibilityLabel={tt("mk.rowA11y", { market: q.market, p: q.price, dir, d: q.delta === 0 ? "" : Math.abs(q.delta), v: (q.price * kg).toLocaleString("en-KE") })}
-              {...(isWeb ? ({ role: "img" } as any) : null)}
-              style={{ paddingVertical: 10, gap: 6 }}
+              disabled={!history}
+              onPress={() => setTrendMarket(q.market)}
+              accessibilityRole={history ? "radio" : undefined}
+              accessibilityLabel={label}
+              accessibilityHint={history ? tt("trend.pick", { market: q.market }) : undefined}
+              accessibilityState={history ? { checked: picked, selected: picked } : undefined}
+              {...(history ? { "aria-checked": picked } : null)}
+              testID={`mk-row-${q.market}`}
+              style={({ pressed, hovered, focused }: PressState) => [
+                { paddingVertical: 10, paddingHorizontal: 8, marginHorizontal: -8, borderRadius: 12, gap: 6 },
+                (picked || (hovered && history)) && { backgroundColor: t.raised },
+                pressed && { opacity: 0.85 },
+                history ? webCursor : null, focusRing(focused, t.accent),
+              ]}
             >
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                 <Text {...webLang("en")} style={{ flex: 1, color: t.ink, fontSize: 15, lineHeight: 20, fontWeight: isBest ? "800" : "600" }} numberOfLines={2}>{q.market}</Text>
-                {isBest && <Tag label={tt("mk.best")} tone="ok" />}
+                {isBest && <View><Tag label={tt("mk.best")} tone="ok" /></View>}
                 <Text style={{ color: isBest ? t.accent : t.ink, fontFamily: "monospace", fontWeight: "700", fontSize: 15 }}>KES {q.price}/kg</Text>
               </View>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                <View style={{ flex: 1, height: 8, borderRadius: 4, backgroundColor: t.raised, overflow: "hidden" }}>
+                <View style={{ flex: 1, height: 8, borderRadius: 4, backgroundColor: picked ? t.bg : t.raised, overflow: "hidden" }}>
                   <View style={{ width: `${(q.price / max) * 100}%`, height: 8, borderRadius: 4, backgroundColor: isBest ? t.accent : t.dim }} />
                 </View>
                 <Text style={{ minWidth: 112, textAlign: "right", color: t.dim, fontSize: 13, lineHeight: 18, fontWeight: "600" }}>
                   {q.delta === 0 ? "" : `${q.delta > 0 ? "▲" : "▼"}${Math.abs(q.delta)} · `}KES {(q.price * kg).toLocaleString("en-KE")}
                 </Text>
               </View>
-            </View>
+            </Pressable>
           );
         })}
       </View>
@@ -196,6 +250,27 @@ function PricesCard({ c, demo, fresh }: { c: Commodity; demo: boolean; fresh: st
           <Text style={{ color: t.dim, fontSize: 12.5, lineHeight: 17, marginTop: 2 }}>{tt("mk.worth")}</Text>
         </View>
       )}
+
+      {tm && history && (
+        <View style={{ marginTop: 16 }} testID="trend-tile">
+          <TrendTile
+            label={tt("trend.label", { market: tm.market })}
+            prices={tm.prices}
+            dates={history.dates}
+            changePct={tm.change_7d_pct}
+            a11yName={`${cropName(lang, c.crop)}, ${tm.market}`}
+          />
+        </View>
+      )}
+
+      <Btn
+        kind="secondary"
+        label={tt("soko.cta")}
+        onPress={() => onSell(kg, fair)}
+        icon={(col) => <ArrowGlyph size={16} color={col} />}
+        style={{ marginTop: 16 }}
+        testID="sell-on-soko"
+      />
     </Card>
   );
 }

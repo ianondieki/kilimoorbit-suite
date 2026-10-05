@@ -180,6 +180,20 @@ await check("GET /api/weather bad/missing county → 400 with fields", async () 
   return a.status === 400 && a.body.error_type === "UNKNOWN_COUNTY" && b.status === 400 && b.body.error_type === "MISSING_COUNTY" && b.body.fields?.[0] === "county";
 });
 
+await check("GET /api/prices/history?crop=beans → 14 days per market, board agrees", async () => {
+  const h = await get("/api/prices/history?crop=beans");
+  const board = (await get("/api/meta")).body.commodity_feed.commodities.find((c) => c.crop === "beans");
+  const m = h.body?.markets ?? [];
+  const agrees = board.quotes.every((q) => { const x = m.find((y) => y.market === q.market); return x && Math.abs(x.prices[13] - q.price) <= Math.max(1, q.price * 0.011); });
+  return { ok: h.status === 200 && h.body.source === "SAMPLE" && h.body.dates.length === 14 && m.length === 3 && m.every((x) => x.prices.length === 14 && typeof x.change_7d_pct === "number") && agrees, detail: m.map((x) => `${x.market} ${x.change_7d_pct}%`).join(" · ") };
+});
+
+await check("GET /api/prices/history unknown/missing crop → 400", async () => {
+  const a = await get("/api/prices/history?crop=unobtainium");
+  const b = await get("/api/prices/history");
+  return a.status === 400 && a.body.error_type === "UNKNOWN_CROP" && b.status === 400 && b.body.error_type === "MISSING_CROP";
+});
+
 await check("GET /api/nope → 404 JSON", async () => {
   const r = await get("/api/nope");
   return { ok: r.status === 404 && r.body?.error_type === "NOT_FOUND" };

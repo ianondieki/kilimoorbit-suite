@@ -12,13 +12,13 @@ import { ageText } from "../lib/prices";
 import { weekday, weekdayShort, todayKey, addDays } from "../lib/dates";
 import type { Forecast, WxDay } from "../lib/api";
 import type { WeatherState } from "../lib/weather";
-import type { Key } from "../lib/i18n";
+import type { Key, Lang, Vars } from "../lib/i18n";
 import { Btn, Card, Eyebrow, T } from "./Kit";
 import { DemoTag } from "./ShambaPanel";
 import { Skeleton } from "./Motion";
 import { CheckCoin, ChevronGlyph, CrossGlyph, SignalOffGlyph, WeatherGlyph } from "./Glyphs";
 
-type Win = "spray" | "plant" | "dry";
+export type Win = "spray" | "plant" | "dry";
 
 export default function WeatherCard({
   wx, county, countySet, onChooseCounty,
@@ -125,21 +125,23 @@ function Body({ f, cachedAgeMin }: { f: Forecast; cachedAgeMin?: number }) {
   );
 }
 
+/** The plain-language verdict for one window, shared with Today's spoken summary. */
+export function windowText(kind: Win, days: WxDay[], lang: Lang, tt: (k: Key, v?: Vars) => string): string {
+  const v = days[0][kind];
+  if (v.ok) return kind === "plant" ? tt("win.plantToday", { mm: Math.round(v.rain_3d_mm ?? 0) }) : tt("win.today");
+  const why = tt(`win.why.${v.reason === "wind" ? "wind" : v.reason === "dry" ? "dry" : "rain"}` as Key);
+  const next = days.slice(1).find((d) => d[kind].ok);
+  const tomorrow = addDays(days[0].date, 1);
+  return next
+    ? tt("win.next", { why, day: next.date === tomorrow ? tt("common.tomorrow") : weekday(lang, next.date) })
+    : tt("win.none", { why });
+}
+
 function WindowRow({ kind, days }: { kind: Win; days: WxDay[] }) {
   const t = useTheme();
   const { lang, t: tt } = useLang();
   const v = days[0][kind];
-  let text: string;
-  if (v.ok) {
-    text = kind === "plant" ? tt("win.plantToday", { mm: Math.round(v.rain_3d_mm ?? 0) }) : tt("win.today");
-  } else {
-    const why = tt(`win.why.${v.reason === "wind" ? "wind" : v.reason === "dry" ? "dry" : "rain"}` as Key);
-    const next = days.slice(1).find((d) => d[kind].ok);
-    const tomorrow = addDays(days[0].date, 1);
-    text = next
-      ? tt("win.next", { why, day: next.date === tomorrow ? tt("common.tomorrow") : weekday(lang, next.date) })
-      : tt("win.none", { why });
-  }
+  const text = windowText(kind, days, lang, tt);
   const label = tt(`win.${kind}` as Key);
   return (
     <View accessible accessibilityLabel={`${label}: ${text}`} style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>

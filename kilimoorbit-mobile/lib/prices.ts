@@ -122,3 +122,10 @@ export function usePriceBoard(): PriceBoard {
   }, []);
   return board;
 }
+
+/** Today's best board price for a crop (highest quote), or null when it isn't on the board. */
+export function bestQuote(feed: CommodityFeed | undefined | null, crop: string): CommodityQuote | null {
+  const c = feed?.commodities?.find((x) => x.crop === crop);
+  if (!c?.quotes?.length) return null;
+  return [...c.quotes].sort((a, b) => b.price - a.price)[0];
+}

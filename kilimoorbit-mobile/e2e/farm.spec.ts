@@ -5,8 +5,11 @@
  */
 import { test, expect, type Page } from "@playwright/test";
 
-async function start(page: Page, path: string, lang: "en" | "sw" = "en") {
-  await page.addInitScript((l) => {
+/** A planting `daysAgo` days back, in the app's local-date format. */
+const planted = (crop: string, daysAgo: number, acres = 1) => ({ crop, daysAgo, acres });
+
+async function start(page: Page, path: string, lang: "en" | "sw" = "en", farm?: { county?: string; plantings?: ReturnType<typeof planted>[] }) {
+  await page.addInitScript(([l, f]) => {
     if (sessionStorage.getItem("ko-e2e-seeded")) return;
     sessionStorage.setItem("ko-e2e-seeded", "1");
     localStorage.clear();
@@ -15,7 +18,17 @@ async function start(page: Page, path: string, lang: "en" | "sw" = "en") {
       lang: l, signedInAt: new Date().toISOString(), serverAck: true,
     }));
     localStorage.setItem("ko-lang", l);
-  }, lang);
+    if (f) {
+      const key = (n: number) => {
+        const d = new Date(); d.setDate(d.getDate() - n);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      };
+      localStorage.setItem("ko-farm", JSON.stringify({
+        v: 1, county: f.county ?? null, acres: null, done: {}, entries: [],
+        plantings: (f.plantings ?? []).map((p: any, i: number) => ({ id: `e2e${i}`, crop: p.crop, acres: p.acres, plantedOn: key(p.daysAgo) })),
+      }));
+    }
+  }, [lang, farm ?? null] as const);
   await page.goto(path);
 }
 
@@ -114,4 +127,76 @@ test("Kiswahili is the default language", async ({ page }) => {
   await expect(page.getByText(/^Habari za (asubuhi|mchana|jioni), Wanjiru$/)).toBeVisible();
   await expect(page.getByText("SIKU NZURI ZA KAZI")).toBeVisible();
   await expect(page.getByText("KAZI ZA WIKI HII")).toBeVisible();
+});
+
+test("Weather-aware tasks: a harvest due today says when to harvest and dry", async ({ page }) => {
+  await start(page, "/", "en", { county: "Nakuru", plantings: [planted("maize", 120)] });
+  const harvest = page.getByTestId("task-maize-harvest");
+  await expect(harvest).toBeVisible();
+  await expect(harvest).toContainText(/Dry day: good to harvest and dry|next dry day|No dry day this week/);
+});
+
+test("Shamba: each crop shows its expected harvest and value", async ({ page }) => {
+  await start(page, "/shamba", "en", { county: "Meru", plantings: [planted("maize", 30, 1)] });
+  const outlook = page.getByTestId("outlook-maize");
+  await expect(outlook).toContainText("Expected harvest: 900–2,250 kg");
+  await expect(outlook).toContainText(/≈ KES [\d,]+–[\d,]+ at today's best price/);
+});
+
+test("Records: kilos sold give the average price, and the season report can be shared", async ({ page, context, browserName }) => {
+  test.skip(browserName !== "chromium", "clipboard permissions are Chromium-only");
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await start(page, "/shamba", "en", { county: "Meru" });
+  await page.getByRole("radio", { name: "Records" }).click();
+  await page.getByTestId("records-add").click();
+  await page.getByRole("radio", { name: "Income" }).click();
+  await page.getByTestId("record-amount").fill("12500");
+  await page.getByTestId("record-kg").fill("250");
+  await expect(page.getByText("= KES 50 a kilo")).toBeVisible();
+  await page.getByRole("radio", { name: "Beans" }).first().click();
+  await page.getByTestId("record-save").click();
+  await expect(page.getByText(/^Avg KES 50\/kg/)).toBeVisible();
+  await expect(page.getByText("250 kg · KES 50/kg")).toBeVisible();
+
+  await page.getByTestId("records-share").click();
+  await expect(page.getByTestId("records-share")).toContainText(/Report copied|Share report/);
+  const text = await page.evaluate(() => navigator.clipboard.readText());
+  expect(text).toContain("KilimoOrbit · Farm report");
+  expect(text).toContain("Beans: +KES 12,500 (250 kg sold, avg KES 50/kg)");
+});
+
+test("Masoko: a 14-day trend follows the chosen market; sell on Soko, then withdraw", async ({ page }) => {
+  await start(page, "/masoko", "en", {});
+  await page.getByTestId("mk-crop-maize").click();
+  const trend = page.getByTestId("trend-tile");
+  await expect(trend).toContainText(/14-day price · /);
+  await page.getByTestId("mk-row-Eldoret Main").click();
+  await expect(trend).toContainText("14-day price · Eldoret Main");
+  await expect(trend).toContainText(/this week|Steady this week/);
+
+  await page.getByTestId("sell-on-soko").click();
+  await page.getByTestId("soko-county").click(); // no county yet: choose one first
+  await page.getByTestId("county-search").fill("uasin");
+  await page.getByRole("radio", { name: "Uasin Gishu" }).click();
+  await page.getByTestId("farm-save").click();
+  await page.getByTestId("sell-on-soko").click();
+  await page.getByTestId("soko-qty").fill("300");
+  await page.getByTestId("soko-ask").fill("30");
+  await expect(page.getByText(/below the fair price/)).toBeVisible();
+  await page.getByTestId("soko-ask").fill("48");
+  await page.getByTestId("soko-submit").click();
+
+  const mine = page.getByTestId("listing-maize").first();
+  await expect(mine).toContainText("300 kg · KES 48/kg");
+  await expect(mine).toContainText("Waiting for a buyer");
+  await mine.getByTestId("soko-withdraw").click();
+  await mine.getByTestId("soko-withdraw-yes").click();
+  await expect(mine).toContainText("Withdrawn");
+});
+
+test("Crop doctor: problems common in the current season are flagged first", async ({ page }) => {
+  await start(page, "/daktari");
+  await page.getByTestId("dr-crop-tomato").click();
+  // Tomato has an in-season problem in every Kenyan season.
+  await expect(page.getByText("Common this season").first()).toBeVisible();
 });

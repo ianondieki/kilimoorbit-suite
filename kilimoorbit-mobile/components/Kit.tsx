@@ -145,23 +145,32 @@ export function Chip({
 }
 
 /* ── Tag: small status label (tinted, ink text for contrast in every theme) ── */
-export function Tag({ label, tone = "dim" }: { label: string; tone?: "ok" | "warn" | "bad" | "dim" | "water" }) {
+export function Tag({ label, tone = "dim", block = false }: { label: string; tone?: "ok" | "warn" | "bad" | "dim" | "water"; block?: boolean }) {
   const t = useTheme();
   const c = tone === "ok" ? t.ok : tone === "warn" ? t.accent : tone === "bad" ? t.alert : tone === "water" ? t.water : t.dim;
+  // block: a sentence-length note (may wrap), so a soft rectangle instead of a pill.
+  // A pill pins itself to the start (alignSelf), so in a row wrap it in a View to centre it.
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", minHeight: 26, paddingHorizontal: 10, borderRadius: 999, backgroundColor: tint(c, 0.16) }}>
-      <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: c }} />
-      <Text maxFontSizeMultiplier={1.3} style={{ color: t.ink, fontSize: 12.5, lineHeight: 16, fontWeight: "700" }}>{label}</Text>
+    <View
+      style={[
+        { flexDirection: "row", alignItems: block ? "flex-start" : "center", gap: 8, minHeight: 26, paddingHorizontal: 10, backgroundColor: tint(c, 0.16) },
+        block ? { alignSelf: "stretch", borderRadius: 10, paddingVertical: 8 } : { alignSelf: "flex-start", borderRadius: 999 },
+      ]}
+    >
+      <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: c, marginTop: block ? 5 : 0 }} />
+      <Text maxFontSizeMultiplier={1.3} style={{ flexShrink: 1, color: t.ink, fontSize: block ? 13.5 : 12.5, lineHeight: block ? 18 : 16, fontWeight: block ? "600" : "700" }}>{label}</Text>
     </View>
   );
 }
 
 /* ── CheckRow: a task you can tick off ── */
 export function CheckRow({
-  checked, onToggle, title, meta, metaTone, leading, a11yLabel, testID,
+  checked, onToggle, title, meta, metaTone, leading, a11yLabel, testID, hint,
 }: {
   checked: boolean; onToggle: () => void; title: string; meta?: string; metaTone?: "late" | "soon";
   leading?: React.ReactNode; a11yLabel?: string; testID?: string;
+  /** Weather advice for this task (lib/advice.ts), shown under the due date. */
+  hint?: { tone: "ok" | "warn"; text: string } | null;
 }) {
   const t = useTheme();
   const { t: tt } = useLang();
@@ -171,7 +180,7 @@ export function CheckRow({
       onPress={onToggle}
       {...spaceActivates(onToggle)}
       accessibilityRole="checkbox"
-      accessibilityLabel={a11yLabel ?? [title, meta].filter(Boolean).join(", ")}
+      accessibilityLabel={a11yLabel ?? [title, meta, !checked && hint ? hint.text : null].filter(Boolean).join(", ")}
       accessibilityState={{ checked }}
       aria-checked={checked}
       style={({ pressed, hovered, focused }: PressState) => [
@@ -204,6 +213,12 @@ export function CheckRow({
           <Text style={{ color: metaTone === "late" && !checked ? t.alert : t.dim, fontSize: 13, lineHeight: 18, fontWeight: metaTone ? "700" : "500" }}>
             {checked ? tt("tasks.doneA11y") : meta}
           </Text>
+        ) : null}
+        {hint && !checked ? (
+          <View style={{ flexDirection: "row", gap: 6, alignItems: "flex-start", marginTop: 3 }}>
+            <View style={{ width: 7, height: 7, borderRadius: 4, marginTop: 6, backgroundColor: hint.tone === "ok" ? t.ok : t.accent }} />
+            <Text style={{ flex: 1, color: t.ink, fontSize: 13, lineHeight: 18 }}>{hint.text}</Text>
+          </View>
         ) : null}
       </View>
     </Pressable>

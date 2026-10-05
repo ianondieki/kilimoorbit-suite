@@ -10,6 +10,7 @@
  * by an extension agronomist, before release.
  */
 import type { CropKey, L } from "./agronomy";
+import type { SeasonKey } from "./season";
 
 export type Part = "leaf" | "stem" | "fruit";
 
@@ -57,6 +58,8 @@ export type Problem = {
   /** Everything it can cause, and the giveaways among them. */
   symptoms: string[];
   key: string[];
+  /** Seasons when it is most common (weather it favours), for the "common now" flag. */
+  seasons: SeasonKey[];
   look: L;
   act: L[];
   prevent: L[];
@@ -66,7 +69,7 @@ export const PROBLEMS: Problem[] = [
   {
     id: "faw", kind: "pest", crops: ["maize"],
     name: { en: "Fall armyworm", sw: "Viwavijeshi vamizi" }, latin: "Spodoptera frugiperda",
-    symptoms: ["holes", "frass", "windows", "cobDamage"], key: ["frass", "windows"],
+    symptoms: ["holes", "frass", "windows", "cobDamage"], key: ["frass", "windows"], seasons: ["masika", "vuli"],
     look: { en: "Caterpillars with a pale upside-down Y on the head, feeding deep in the funnel.", sw: "Viwavi wenye alama ya Y iliyopinduka kichwani, wakila ndani ya kikonyo." },
     act: [
       { en: "Check 20 plants across the field every week.", sw: "Kagua mimea 20 shambani kote kila wiki." },
@@ -82,7 +85,7 @@ export const PROBLEMS: Problem[] = [
   {
     id: "mln", kind: "disease", crops: ["maize"],
     name: { en: "Maize lethal necrosis (MLN)", sw: "Ugonjwa hatari wa mahindi (MLN)" },
-    symptoms: ["yellowEdges", "mottled", "deadHeart", "stunted"], key: ["yellowEdges", "deadHeart"],
+    symptoms: ["yellowEdges", "mottled", "deadHeart", "stunted"], key: ["yellowEdges", "deadHeart"], seasons: ["masika", "vuli"],
     look: { en: "Leaves dry from the edges inward; the centre shoot dies; cobs are small or empty.", sw: "Majani yanakauka kutoka kingoni; kichipukizi cha katikati kinakufa; magunzi madogo au matupu." },
     act: [
       { en: "Uproot infected plants and destroy them away from the field.", sw: "Ng'oa mimea iliyoathirika na iharibu mbali na shamba." },
@@ -97,7 +100,7 @@ export const PROBLEMS: Problem[] = [
   {
     id: "msv", kind: "disease", crops: ["maize"],
     name: { en: "Maize streak virus", sw: "Ugonjwa wa michirizi ya mahindi" },
-    symptoms: ["streaks", "stunted"], key: ["streaks"],
+    symptoms: ["streaks", "stunted"], key: ["streaks"], seasons: ["masika", "vuli"],
     look: { en: "Narrow, broken yellow streaks along the veins; young plants are hit hardest.", sw: "Mistari myembamba ya manjano kando ya mishipa; mimea michanga huathirika zaidi." },
     act: [
       { en: "Pull out badly streaked young plants.", sw: "Ng'oa mimea michanga iliyoathirika vibaya." },
@@ -111,7 +114,7 @@ export const PROBLEMS: Problem[] = [
   {
     id: "beanfly", kind: "pest", crops: ["beans"],
     name: { en: "Bean fly (bean stem maggot)", sw: "Inzi wa maharagwe" }, latin: "Ophiomyia spp.",
-    symptoms: ["seedlingsDie", "swollenBase", "stunted"], key: ["swollenBase"],
+    symptoms: ["seedlingsDie", "swollenBase", "stunted"], key: ["swollenBase"], seasons: ["masika", "vuli"],
     look: { en: "Seedlings yellow and wilt; the stem is swollen and cracked just above the soil.", sw: "Miche inageuka manjano na kunyauka; shina limevimba na kupasuka juu ya udongo." },
     act: [
       { en: "Pull and destroy dying seedlings.", sw: "Ng'oa na uharibu miche inayokufa." },
@@ -125,7 +128,7 @@ export const PROBLEMS: Problem[] = [
   {
     id: "aphids", kind: "pest", crops: ["beans", "cabbage", "kale", "potatoes"],
     name: { en: "Aphids", sw: "Vidukari" },
-    symptoms: ["curled", "stunted", "mottled"], key: ["curled"],
+    symptoms: ["curled", "stunted", "mottled"], key: ["curled"], seasons: ["kiangazi", "kipupwe"],
     look: { en: "Clusters of tiny green, black or grey insects on shoots and leaf undersides.", sw: "Vikundi vya wadudu wadogo wa kijani, weusi au kijivu kwenye vichipukizi na chini ya majani." },
     act: [
       { en: "Wash clusters off with a strong jet of water.", sw: "Ondoa vikundi kwa kunyunyizia maji kwa nguvu." },
@@ -139,7 +142,7 @@ export const PROBLEMS: Problem[] = [
   {
     id: "rust", kind: "disease", crops: ["beans"],
     name: { en: "Bean rust", sw: "Kutu ya maharagwe" },
-    symptoms: ["rust"], key: ["rust"],
+    symptoms: ["rust"], key: ["rust"], seasons: ["masika", "vuli"],
     look: { en: "Small rusty pustules that rub off like powder, mostly on leaf undersides.", sw: "Vipele vidogo vya kutu vinavyotoka kama unga, hasa chini ya majani." },
     act: [
       { en: "Remove badly infected leaves.", sw: "Ondoa majani yaliyoathirika vibaya." },
@@ -153,7 +156,7 @@ export const PROBLEMS: Problem[] = [
   {
     id: "beanspots", kind: "disease", crops: ["beans"],
     name: { en: "Angular leaf spot and anthracnose", sw: "Madoa ya pembe na anthracnose" },
-    symptoms: ["angular", "podSpots"], key: ["angular", "podSpots"],
+    symptoms: ["angular", "podSpots"], key: ["angular", "podSpots"], seasons: ["masika", "vuli"],
     look: { en: "Angular spots boxed in by veins; dark sunken spots on pods and seed.", sw: "Madoa ya pembe yaliyozungukwa na mishipa; madoa meusi yaliyobonyea kwenye maganda na mbegu." },
     act: [
       { en: "Don't walk or weed among wet plants: it spreads the disease.", sw: "Usitembee wala kupalilia mimea ikiwa na unyevu: huueneza ugonjwa." },
@@ -167,7 +170,7 @@ export const PROBLEMS: Problem[] = [
   {
     id: "tuta", kind: "pest", crops: ["tomato"],
     name: { en: "Tomato leafminer (Tuta absoluta)", sw: "Funza wa nyanya (Tuta absoluta)" },
-    symptoms: ["mines", "fruitHoles", "windows"], key: ["mines"],
+    symptoms: ["mines", "fruitHoles", "windows"], key: ["mines"], seasons: ["kiangazi", "kipupwe"],
     look: { en: "Pale blotches inside leaves with a small caterpillar; pinholes in fruit.", sw: "Madoa meupe ndani ya majani yenye kiwavi mdogo; vitundu vidogo kwenye matunda." },
     act: [
       { en: "Pick off mined leaves and holed fruit; bury or burn them.", sw: "Chuma majani yenye njia na matunda yenye matundu; yafukie au uyachome." },
@@ -182,7 +185,7 @@ export const PROBLEMS: Problem[] = [
   {
     id: "lateblight", kind: "disease", crops: ["tomato", "potatoes"],
     name: { en: "Late blight", sw: "Baridi (late blight)" }, latin: "Phytophthora infestans",
-    symptoms: ["darkPatches", "whiteMould", "fruitRot"], key: ["whiteMould", "darkPatches"],
+    symptoms: ["darkPatches", "whiteMould", "fruitRot"], key: ["whiteMould", "darkPatches"], seasons: ["masika", "vuli", "kipupwe"],
     look: { en: "Dark water-soaked patches that spread fast in cool, wet weather, with white fuzz beneath.", sw: "Madoa meusi kama yaliyoloweshwa yanayoenea haraka hali ya baridi na mvua, na ukungu mweupe chini." },
     act: [
       { en: "Remove and destroy infected leaves and plants.", sw: "Ondoa na uharibu majani na mimea iliyoathirika." },
@@ -198,7 +201,7 @@ export const PROBLEMS: Problem[] = [
   {
     id: "wilt", kind: "disease", crops: ["tomato", "potatoes"],
     name: { en: "Bacterial wilt", sw: "Mnyauko bakteria" }, latin: "Ralstonia solanacearum",
-    symptoms: ["wiltWet", "brownInside", "stunted"], key: ["wiltWet", "brownInside"],
+    symptoms: ["wiltWet", "brownInside", "stunted"], key: ["wiltWet", "brownInside"], seasons: ["kiangazi", "masika"],
     look: { en: "Green plants wilt in the heat of the day though the soil is moist. Test: a cut stem in clear water streams milky threads.", sw: "Mimea mibichi inanyauka mchana ingawa udongo una unyevu. Jaribio: shina lililokatwa ndani ya maji safi hutoa nyuzi kama maziwa." },
     act: [
       { en: "Uproot wilted plants with the soil around the roots; destroy them away from the field.", sw: "Ng'oa mimea iliyonyauka pamoja na udongo wa mizizi; iharibu mbali na shamba." },
@@ -212,7 +215,7 @@ export const PROBLEMS: Problem[] = [
   {
     id: "earlyblight", kind: "disease", crops: ["tomato", "potatoes"],
     name: { en: "Early blight", sw: "Madoa ya pete (early blight)" }, latin: "Alternaria solani",
-    symptoms: ["rings", "fruitRot"], key: ["rings"],
+    symptoms: ["rings", "fruitRot"], key: ["rings"], seasons: ["masika", "vuli"],
     look: { en: "Brown spots with target-like rings, starting on the oldest leaves.", sw: "Madoa ya kahawia yenye pete kama shabaha, kuanzia majani ya zamani zaidi." },
     act: [
       { en: "Remove the lower infected leaves.", sw: "Ondoa majani ya chini yaliyoathirika." },
@@ -226,7 +229,7 @@ export const PROBLEMS: Problem[] = [
   {
     id: "ber", kind: "disorder", crops: ["tomato"],
     name: { en: "Blossom-end rot", sw: "Kuoza kwa kitako cha tunda" },
-    symptoms: ["blackBottom"], key: ["blackBottom"],
+    symptoms: ["blackBottom"], key: ["blackBottom"], seasons: ["kiangazi"],
     look: { en: "A dark, leathery, sunken patch at the bottom of the fruit. Not a disease: the fruit lacks calcium.", sw: "Doa jeusi lililobonyea chini ya tunda. Si ugonjwa: tunda limekosa kalsiamu." },
     act: [
       { en: "Water evenly: don't let the soil dry out and then flood it.", sw: "Mwagilia kwa usawa: usiache udongo ukauke kisha uufurike." },
@@ -240,7 +243,7 @@ export const PROBLEMS: Problem[] = [
   {
     id: "tubermoth", kind: "pest", crops: ["potatoes"],
     name: { en: "Potato tuber moth", sw: "Nondo wa viazi" }, latin: "Phthorimaea operculella",
-    symptoms: ["tuberTunnels", "mines"], key: ["tuberTunnels"],
+    symptoms: ["tuberTunnels", "mines"], key: ["tuberTunnels"], seasons: ["kiangazi", "kipupwe"],
     look: { en: "Tunnels in tubers, often with droppings at the eye; leaf mines in the field.", sw: "Njia ndani ya viazi, mara nyingi na kinyesi kwenye jicho; njia ndani ya majani shambani." },
     act: [
       { en: "Earth up well so no tubers are exposed.", sw: "Pandisha udongo vizuri ili viazi visionekane." },
@@ -254,7 +257,7 @@ export const PROBLEMS: Problem[] = [
   {
     id: "dbm", kind: "pest", crops: ["cabbage", "kale"],
     name: { en: "Diamondback moth", sw: "Nondo wa kabichi" }, latin: "Plutella xylostella",
-    symptoms: ["holes", "windows", "caterpillars"], key: ["caterpillars", "windows"],
+    symptoms: ["holes", "windows", "caterpillars"], key: ["caterpillars", "windows"], seasons: ["kiangazi", "kipupwe"],
     look: { en: "Small green caterpillars that wriggle back when touched; leaves full of small holes.", sw: "Viwavi wadogo wa kijani wanaorudi nyuma kwa haraka ukiwagusa; majani yenye matundu madogo mengi." },
     act: [
       { en: "Check leaf undersides twice a week.", sw: "Kagua chini ya majani mara mbili kwa wiki." },
@@ -269,7 +272,7 @@ export const PROBLEMS: Problem[] = [
   {
     id: "blackrot", kind: "disease", crops: ["cabbage", "kale"],
     name: { en: "Black rot", sw: "Kuoza mweusi" }, latin: "Xanthomonas campestris",
-    symptoms: ["vShape", "stunted"], key: ["vShape"],
+    symptoms: ["vShape", "stunted"], key: ["vShape"], seasons: ["masika", "vuli"],
     look: { en: "Yellow V-shaped patches from the leaf edge, with blackened veins.", sw: "Madoa ya manjano umbo la V kutoka kingo za jani, na mishipa myeusi." },
     act: [
       { en: "Remove infected leaves and badly hit plants.", sw: "Ondoa majani na mimea iliyoathirika vibaya." },
@@ -283,6 +286,10 @@ export const PROBLEMS: Problem[] = [
 ];
 
 export const problemsFor = (crop: CropKey) => PROBLEMS.filter((p) => p.crops.includes(crop));
+
+/** In-season problems first (stable otherwise), for the "common problems" list. */
+export const problemsForSeason = (crop: CropKey, season: SeasonKey) =>
+  problemsFor(crop).sort((a, b) => Number(b.seasons.includes(season)) - Number(a.seasons.includes(season)));
 
 /** The symptoms worth offering for a crop, in catalogue order. */
 export function symptomsFor(crop: CropKey): Symptom[] {

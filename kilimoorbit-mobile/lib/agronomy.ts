@@ -21,7 +21,9 @@ export type CropKey = "maize" | "beans" | "tomato" | "potatoes" | "cabbage" | "k
 export const CROP_KEYS: CropKey[] = ["maize", "beans", "tomato", "potatoes", "cabbage", "kale"];
 
 export type TaskKind = "prep" | "plant" | "feed" | "weed" | "protect" | "harvest" | "store";
-export type CropTask = { id: string; day: number; kind: TaskKind; title: L };
+/** Which forecast window decides the best day for this task (see lib/advice.ts). */
+export type TaskWeather = "spray" | "plant" | "feed" | "dry";
+export type CropTask = { id: string; day: number; kind: TaskKind; title: L; wx?: TaskWeather };
 export type Stage = { day: number; name: L };
 
 export type Input = { product: string; kgPerAcre: number; splits?: number; when: L };
@@ -39,6 +41,8 @@ export type CropPlan = {
   seed: { perAcre: number; unit: "kg" | "seedlings"; note: L };
   basal?: Input;
   topdress?: Input;
+  /** Typical smallholder harvest per acre, kg: [average practice, good practice]. */
+  yieldPerAcre: [number, number];
   /** Rain-fed planting seasons; `water` crops can go in any season with irrigation. */
   seasons: SeasonKey[];
   water?: boolean;
@@ -52,6 +56,7 @@ const ALL: SeasonKey[] = ["kiangazi", "masika", "kipupwe", "vuli"];
 export const CROPS: Record<CropKey, CropPlan> = {
   maize: {
     key: "maize",
+    yieldPerAcre: [900, 2250],
     daysToHarvest: 120,
     harvestDays: 14,
     maturity: { en: "90–180 days, by variety and altitude", sw: "Siku 90–180, kulingana na aina na mwinuko" },
@@ -71,18 +76,19 @@ export const CROPS: Record<CropKey, CropPlan> = {
     tasks: [
       { id: "prep", day: -14, kind: "prep", title: { en: "Plough and harrow before the rains", sw: "Lima na lainisha udongo kabla ya mvua" } },
       { id: "buy", day: -7, kind: "prep", title: { en: "Buy certified seed and DAP", sw: "Nunua mbegu zilizothibitishwa na mbolea ya DAP" } },
-      { id: "plant", day: 0, kind: "plant", title: { en: "Plant 75 × 25 cm with DAP", sw: "Panda sm 75 × 25 pamoja na DAP" } },
+      { id: "plant", day: 0, kind: "plant", title: { en: "Plant 75 × 25 cm with DAP", sw: "Panda sm 75 × 25 pamoja na DAP" }, wx: "plant" },
       { id: "faw1", day: 14, kind: "protect", title: { en: "Scout 20 plants for fall armyworm", sw: "Kagua mimea 20 kuona viwavijeshi" } },
       { id: "weed1", day: 21, kind: "weed", title: { en: "First weeding", sw: "Palizi ya kwanza" } },
-      { id: "can", day: 35, kind: "feed", title: { en: "Top-dress with CAN", sw: "Weka mbolea ya CAN" } },
+      { id: "can", day: 35, kind: "feed", title: { en: "Top-dress with CAN", sw: "Weka mbolea ya CAN" }, wx: "feed" },
       { id: "faw2", day: 35, kind: "protect", title: { en: "Scout again for fall armyworm", sw: "Kagua tena viwavijeshi" } },
       { id: "weed2", day: 42, kind: "weed", title: { en: "Second weeding", sw: "Palizi ya pili" } },
-      { id: "harvest", day: 120, kind: "harvest", title: { en: "Harvest when husks are dry and cobs droop", sw: "Vuna maganda yakikauka na magunzi kuinama" } },
-      { id: "store", day: 127, kind: "store", title: { en: "Dry grain well, then store in hermetic bags", sw: "Kausha punje vizuri, hifadhi kwenye mifuko isiyopitisha hewa" } },
+      { id: "harvest", day: 120, kind: "harvest", title: { en: "Harvest when husks are dry and cobs droop", sw: "Vuna maganda yakikauka na magunzi kuinama" }, wx: "dry" },
+      { id: "store", day: 127, kind: "store", title: { en: "Dry grain well, then store in hermetic bags", sw: "Kausha punje vizuri, hifadhi kwenye mifuko isiyopitisha hewa" }, wx: "dry" },
     ],
   },
   beans: {
     key: "beans",
+    yieldPerAcre: [270, 720],
     daysToHarvest: 85,
     harvestDays: 10,
     maturity: { en: "60–90 days, by variety", sw: "Siku 60–90, kulingana na aina" },
@@ -101,17 +107,18 @@ export const CROPS: Record<CropKey, CropPlan> = {
     tasks: [
       { id: "prep", day: -7, kind: "prep", title: { en: "Prepare a fine seedbed", sw: "Andaa kitalu laini" } },
       { id: "buy", day: -3, kind: "prep", title: { en: "Buy certified seed and DAP", sw: "Nunua mbegu zilizothibitishwa na DAP" } },
-      { id: "plant", day: 0, kind: "plant", title: { en: "Plant 50 × 10 cm with DAP", sw: "Panda sm 50 × 10 pamoja na DAP" } },
+      { id: "plant", day: 0, kind: "plant", title: { en: "Plant 50 × 10 cm with DAP", sw: "Panda sm 50 × 10 pamoja na DAP" }, wx: "plant" },
       { id: "weed1", day: 14, kind: "weed", title: { en: "First weeding, when leaves are dry", sw: "Palizi ya kwanza, majani yakiwa makavu" } },
       { id: "fly", day: 18, kind: "protect", title: { en: "Check seedlings for bean fly and aphids", sw: "Kagua miche kuona inzi wa maharagwe na vidukari" } },
       { id: "weed2", day: 30, kind: "weed", title: { en: "Second weeding, before flowering", sw: "Palizi ya pili, kabla ya maua" } },
       { id: "spots", day: 40, kind: "protect", title: { en: "Watch for rust and leaf spots", sw: "Angalia kutu na madoa ya majani" } },
-      { id: "harvest", day: 85, kind: "harvest", title: { en: "Harvest when most pods are dry", sw: "Vuna maganda mengi yakikauka" } },
-      { id: "store", day: 90, kind: "store", title: { en: "Thresh, dry and store in hermetic bags", sw: "Pura, kausha na hifadhi kwenye mifuko isiyopitisha hewa" } },
+      { id: "harvest", day: 85, kind: "harvest", title: { en: "Harvest when most pods are dry", sw: "Vuna maganda mengi yakikauka" }, wx: "dry" },
+      { id: "store", day: 90, kind: "store", title: { en: "Thresh, dry and store in hermetic bags", sw: "Pura, kausha na hifadhi kwenye mifuko isiyopitisha hewa" }, wx: "dry" },
     ],
   },
   tomato: {
     key: "tomato",
+    yieldPerAcre: [6000, 16000],
     daysToHarvest: 75,
     harvestDays: 45,
     maturity: { en: "first picking 70–90 days after transplanting", sw: "mavuno ya kwanza siku 70–90 baada ya kuhamisha miche" },
@@ -136,15 +143,16 @@ export const CROPS: Record<CropKey, CropPlan> = {
       { id: "plant", day: 0, kind: "plant", title: { en: "Transplant in the evening with DAP", sw: "Hamisha miche jioni pamoja na DAP" } },
       { id: "stake", day: 14, kind: "prep", title: { en: "Stake and tie the plants", sw: "Weka miti na funga mimea" } },
       { id: "scout", day: 18, kind: "protect", title: { en: "Scout for Tuta absoluta and blight", sw: "Kagua Tuta absoluta na baridi (blight)" } },
-      { id: "can1", day: 21, kind: "feed", title: { en: "First CAN top-dress (half the dose)", sw: "CAN ya kwanza (nusu ya kipimo)" } },
+      { id: "can1", day: 21, kind: "feed", title: { en: "First CAN top-dress (half the dose)", sw: "CAN ya kwanza (nusu ya kipimo)" }, wx: "feed" },
       { id: "prune", day: 28, kind: "weed", title: { en: "Weed and remove side shoots", sw: "Palilia na ondoa machipukizi ya pembeni" } },
-      { id: "can2", day: 42, kind: "feed", title: { en: "Second CAN top-dress", sw: "CAN ya pili" } },
-      { id: "blight", day: 45, kind: "protect", title: { en: "Protect against blight before heavy rain", sw: "Kinga dhidi ya baridi kabla ya mvua kubwa" } },
+      { id: "can2", day: 42, kind: "feed", title: { en: "Second CAN top-dress", sw: "CAN ya pili" }, wx: "feed" },
+      { id: "blight", day: 45, kind: "protect", title: { en: "Protect against blight before heavy rain", sw: "Kinga dhidi ya baridi kabla ya mvua kubwa" }, wx: "spray" },
       { id: "harvest", day: 75, kind: "harvest", title: { en: "Start picking at colour-turning", sw: "Anza kuvuna nyanya zikianza kubadilika rangi" } },
     ],
   },
   potatoes: {
     key: "potatoes",
+    yieldPerAcre: [2800, 8000],
     daysToHarvest: 100,
     harvestDays: 10,
     maturity: { en: "90–120 days, by variety", sw: "Siku 90–120, kulingana na aina" },
@@ -163,17 +171,18 @@ export const CROPS: Record<CropKey, CropPlan> = {
     tasks: [
       { id: "prep", day: -14, kind: "prep", title: { en: "Plough deep and harrow", sw: "Lima kwa kina na lainisha" } },
       { id: "buy", day: -7, kind: "prep", title: { en: "Buy certified, sprouted seed potatoes", sw: "Nunua mbegu za viazi zilizothibitishwa zenye machipukizi" } },
-      { id: "plant", day: 0, kind: "plant", title: { en: "Plant 75 × 30 cm with DAP in the furrow", sw: "Panda sm 75 × 30, DAP mtaroni" } },
+      { id: "plant", day: 0, kind: "plant", title: { en: "Plant 75 × 30 cm with DAP in the furrow", sw: "Panda sm 75 × 30, DAP mtaroni" }, wx: "plant" },
       { id: "earth1", day: 28, kind: "weed", title: { en: "Weed and earth up", sw: "Palilia na pandisha udongo" } },
       { id: "blight1", day: 35, kind: "protect", title: { en: "Scout for late blight in cool, wet weather", sw: "Kagua baridi (blight) hali ikiwa ya baridi na mvua" } },
       { id: "earth2", day: 49, kind: "weed", title: { en: "Second earthing up to cover tubers", sw: "Pandisha udongo tena kufunika viazi" } },
       { id: "dehaulm", day: 90, kind: "harvest", title: { en: "Cut the tops 2 weeks before harvest", sw: "Kata mashina wiki 2 kabla ya kuvuna" } },
-      { id: "harvest", day: 104, kind: "harvest", title: { en: "Harvest on a dry day; cure in shade", sw: "Vuna siku kavu; kausha kivulini" } },
+      { id: "harvest", day: 104, kind: "harvest", title: { en: "Harvest on a dry day; cure in shade", sw: "Vuna siku kavu; kausha kivulini" }, wx: "dry" },
       { id: "store", day: 110, kind: "store", title: { en: "Store in a dark, cool, airy place", sw: "Hifadhi mahali penye giza, baridi na hewa" } },
     ],
   },
   cabbage: {
     key: "cabbage",
+    yieldPerAcre: [8000, 16000],
     daysToHarvest: 90,
     harvestDays: 21,
     maturity: { en: "75–120 days after transplanting", sw: "siku 75–120 baada ya kuhamisha miche" },
@@ -195,14 +204,15 @@ export const CROPS: Record<CropKey, CropPlan> = {
       { id: "holes", day: -3, kind: "prep", title: { en: "Dig holes and mix in manure", sw: "Chimba mashimo na changanya samadi" } },
       { id: "plant", day: 0, kind: "plant", title: { en: "Transplant 60 × 60 cm with DAP", sw: "Hamisha miche sm 60 × 60 pamoja na DAP" } },
       { id: "weed1", day: 14, kind: "weed", title: { en: "First weeding", sw: "Palizi ya kwanza" } },
-      { id: "can1", day: 21, kind: "feed", title: { en: "First CAN top-dress (half the dose)", sw: "CAN ya kwanza (nusu ya kipimo)" } },
+      { id: "can1", day: 21, kind: "feed", title: { en: "First CAN top-dress (half the dose)", sw: "CAN ya kwanza (nusu ya kipimo)" }, wx: "feed" },
       { id: "dbm", day: 21, kind: "protect", title: { en: "Check leaf undersides for diamondback moth", sw: "Kagua chini ya majani kuona nondo wa kabichi" } },
-      { id: "can2", day: 42, kind: "feed", title: { en: "Second CAN top-dress", sw: "CAN ya pili" } },
+      { id: "can2", day: 42, kind: "feed", title: { en: "Second CAN top-dress", sw: "CAN ya pili" }, wx: "feed" },
       { id: "harvest", day: 90, kind: "harvest", title: { en: "Harvest when heads are firm", sw: "Vuna vichwa vikiwa vigumu" } },
     ],
   },
   kale: {
     key: "kale",
+    yieldPerAcre: [4000, 8000],
     daysToHarvest: 42,
     harvestDays: 120,
     maturity: { en: "picking from week 6 for several months", sw: "kuvuna kuanzia wiki ya 6 kwa miezi kadhaa" },
@@ -222,10 +232,10 @@ export const CROPS: Record<CropKey, CropPlan> = {
       { id: "nursery", day: -30, kind: "prep", title: { en: "Sow seed in a nursery bed", sw: "Panda mbegu kitaluni" } },
       { id: "plant", day: 0, kind: "plant", title: { en: "Transplant 60 × 45 cm with DAP", sw: "Hamisha miche sm 60 × 45 pamoja na DAP" } },
       { id: "weed1", day: 14, kind: "weed", title: { en: "First weeding", sw: "Palizi ya kwanza" } },
-      { id: "can1", day: 21, kind: "feed", title: { en: "Top-dress with CAN", sw: "Weka mbolea ya CAN" } },
+      { id: "can1", day: 21, kind: "feed", title: { en: "Top-dress with CAN", sw: "Weka mbolea ya CAN" }, wx: "feed" },
       { id: "aphids", day: 25, kind: "protect", title: { en: "Check for aphids and diamondback moth", sw: "Kagua vidukari na nondo wa kabichi" } },
       { id: "harvest", day: 42, kind: "harvest", title: { en: "Start picking the lower leaves weekly", sw: "Anza kuvuna majani ya chini kila wiki" } },
-      { id: "can2", day: 63, kind: "feed", title: { en: "Top-dress CAN again to keep leaves coming", sw: "Weka CAN tena ili majani yaendelee" } },
+      { id: "can2", day: 63, kind: "feed", title: { en: "Top-dress CAN again to keep leaves coming", sw: "Weka CAN tena ili majani yaendelee" }, wx: "feed" },
     ],
   },
 };

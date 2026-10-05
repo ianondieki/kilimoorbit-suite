@@ -148,3 +148,26 @@ export type Forecast = {
 };
 export const getWeather = (county: string) =>
   request<Forecast>(`/api/weather?county=${encodeURIComponent(county)}`, undefined, 10000);
+
+/* ── Price history (GET /api/prices/history) ── */
+export type PriceHistory = {
+  crop: string; dates: string[]; source: "SAMPLE";
+  markets: { market: string; prices: number[]; change_7d_pct: number }[];
+};
+export const getPriceHistory = (crop: string) =>
+  request<PriceHistory>(`/api/prices/history?crop=${encodeURIComponent(crop)}`, undefined, 10000);
+
+/* ── Soko marketplace (/api/soko) ── */
+export type SokoStatus = "open" | "claimed" | "delivered" | "cancelled";
+export type SokoListing = {
+  id: string; farmer_name: string; crop: string; county: string; qty_kg: number; ask_per_kg: number;
+  fair_price_per_kg: number | null; best_market: string | null; status: SokoStatus; created_at: string;
+  /** Returned once, by the create call only. */
+  owner_token?: string;
+};
+export const createSokoListing = (input: { farmer_name: string; crop: string; county: string; qty_kg: number; ask_per_kg: number }) =>
+  post<{ listing: SokoListing }>("/api/soko/listings", input, 12000);
+export const getSokoListing = (id: string) =>
+  request<{ listing: SokoListing }>(`/api/soko/listings/${encodeURIComponent(id)}`, undefined, 8000);
+export const cancelSokoListing = (id: string, owner_token: string) =>
+  post<{ listing: SokoListing }>(`/api/soko/listings/${encodeURIComponent(id)}/cancel`, { owner_token }, 8000);

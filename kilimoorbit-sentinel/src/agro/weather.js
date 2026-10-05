@@ -90,10 +90,10 @@ const RAINY = new Set(["masika", "vuli"]);
 /* ── dates in East Africa Time (UTC+3, no DST) ── */
 const EAT_MS = 3 * 3600_000;
 export const eatDateKey = (d) => new Date(d.getTime() + EAT_MS).toISOString().slice(0, 10);
-const addDays = (key, n) => new Date(Date.parse(key + "T00:00:00Z") + n * 86400_000).toISOString().slice(0, 10);
+export const addDays = (key, n) => new Date(Date.parse(key + "T00:00:00Z") + n * 86400_000).toISOString().slice(0, 10);
 
-/* ── deterministic noise: hash(county|date|channel) → [0,1) ── */
-function hash(str) {
+/* ── deterministic noise: hash(county|date|channel) → [0,1) (also used by prices.js) ── */
+export function hash(str) {
   let h = 2166136261;
   for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
   // final avalanche (murmur3 fmix32)

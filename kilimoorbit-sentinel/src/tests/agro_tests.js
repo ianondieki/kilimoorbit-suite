@@ -7,6 +7,11 @@ import {
   COUNTIES, findCounty, sampleForecast, withWindows, forecastFor, mapOpenMeteo, seasonOfMonth, eatDateKey, _clearCache,
   SPRAY_MAX_WIND_KMH, PLANT_MIN_RAIN_MM,
 } from "../agro/weather.js";
+import { levelFor, priceOn, boardFor, historyFor } from "../agro/prices.js";
+import { readFileSync } from "node:fs";
+
+const FEED_PATH = new URL("../../payloads/commodity_feed.json", import.meta.url);
+const freshFeed = () => JSON.parse(readFileSync(FEED_PATH, "utf8"));
 
 const C = {
   green: (s) => `\x1b[32m${s}\x1b[0m`,
@@ -30,7 +35,7 @@ const meru = findCounty("Meru");
 const OCT = new Date("2026-10-05T06:00:00Z");
 
 console.log(C.bold("\n" + "═".repeat(57)));
-console.log(C.bold("  FARM WEATHER — FORECAST + FARMING WINDOWS"));
+console.log(C.bold("  FARM WEATHER + MARKET PRICES"));
 console.log("═".repeat(57));
 
 await check("47 counties, unique names, coordinates inside Kenya", () => {
@@ -128,7 +133,52 @@ await check("forecast carries county, season and windows on every day", async ()
   return { ok: r.county === "Meru" && r.season === seasonOfMonth(9) && r.season === "vuli" && r.days.every((d) => d.spray && d.plant && d.dry), detail: `${r.source} · ${r.season}` };
 });
 
+console.log(C.bold("  — market prices —"));
+
+await check("price levels stay within ±15 % of base for a whole year", () => {
+  const feed = freshFeed();
+  let lo = 9, hi = 0;
+  for (const c of feed.commodities)
+    for (const q of c.quotes)
+      for (let i = 0; i < 365; i += 3) {
+        const l = levelFor(c.crop, q.market, new Date(Date.UTC(2026, 0, 1 + i)).toISOString().slice(0, 10));
+        lo = Math.min(lo, l); hi = Math.max(hi, l);
+      }
+  return { ok: lo > 0.84 && hi < 1.16, detail: `${lo.toFixed(3)}–${hi.toFixed(3)}` };
+});
+
+await check("history: 14 days ending today, deterministic, 7-day change matches", () => {
+  const a = historyFor(freshFeed(), "maize", { now: OCT });
+  const b = historyFor(freshFeed(), "MAIZE", { now: OCT });
+  const m = a.markets[0];
+  const want = Math.round(((m.prices[13] - m.prices[6]) / m.prices[6]) * 1000) / 10;
+  return { ok: a.dates.length === 14 && a.dates[13] === "2026-10-05" && JSON.stringify(a) === JSON.stringify(b) && m.change_7d_pct === want && a.markets.length === 3, detail: `${m.market} ${m.prices.join(",")} (${m.change_7d_pct}%)` };
+});
+
+await check("history: unknown crop → null", () => historyFor(freshFeed(), "unobtainium") === null);
+
+await check("board without jitter = today's history close; delta = change since yesterday", () => {
+  const board = boardFor(freshFeed(), { now: OCT });
+  const h = historyFor(freshFeed(), "tomato", { now: OCT });
+  const q = board.commodities.find((c) => c.crop === "tomato").quotes[0];
+  const m = h.markets.find((x) => x.market === q.market);
+  return { ok: q.price === m.prices[13] && q.delta === m.prices[13] - m.prices[12], detail: `${q.market} ${q.price} (${q.delta >= 0 ? "+" : ""}${q.delta})` };
+});
+
+await check("live jitter stays within ±1 % of the day's price", () => {
+  const ref = boardFor(freshFeed(), { now: OCT });
+  const live = boardFor(freshFeed(), { now: OCT, jitter: 0.01, rand: () => 0.999 });
+  const bad = [];
+  ref.commodities.forEach((c, i) => c.quotes.forEach((q, j) => {
+    const p = live.commodities[i].quotes[j].price;
+    if (Math.abs(p - q.price) > Math.max(1, q.price * 0.011)) bad.push(`${c.crop}@${q.market}`);
+  }));
+  return { ok: bad.length === 0, detail: bad.join(", ") };
+});
+
+await check("priceOn never drops below 1 shilling", () => priceOn(1, "x", "y", "2026-10-05") >= 1);
+
 console.log("─".repeat(57));
 const ok = passed === total;
-console.log((ok ? C.green : C.red)(C.bold(`  ${ok ? "✓" : "✗"} ${passed}/${total} farm weather tests passed`)));
+console.log((ok ? C.green : C.red)(C.bold(`  ${ok ? "✓" : "✗"} ${passed}/${total} farm weather + price tests passed`)));
 process.exit(ok ? 0 : 1);

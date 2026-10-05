@@ -230,23 +230,26 @@ export function RecordSheet({ visible, onClose }: { visible: boolean; onClose: (
   const [amount, setAmount] = useState("");
   const [crop, setCrop] = useState<CropKey | undefined>(undefined);
   const [note, setNote] = useState("");
+  const [kgSold, setKgSold] = useState("");
   const [date, setDate] = useState(todayKey());
   const [tried, setTried] = useState(false);
   const amountRef = useRef<TextInput>(null);
 
   useEffect(() => {
     if (!visible) return;
-    setKind("expense"); setCat("seed"); setAmount(""); setNote(""); setDate(todayKey()); setTried(false);
+    setKind("expense"); setCat("seed"); setAmount(""); setNote(""); setKgSold(""); setDate(todayKey()); setTried(false);
     setCrop(farm.plantings[0]?.crop);
   }, [visible]);
 
   const value = Number(amount.replace(/[^\d.]/g, ""));
   const valid = isFinite(value) && value > 0;
+  const isSale = kind === "income" && cat === "sale";
+  const kg = isSale ? Number(kgSold) || 0 : 0;
   const crops = Array.from(new Set([...farm.plantings.map((p) => p.crop), ...CROP_KEYS]));
 
   const save = () => {
     if (!valid) { setTried(true); amountRef.current?.focus(); return; }
-    farmActions.addEntry({ kind, category: cat, amount: Math.round(value), crop, note: note.trim() || undefined, date });
+    farmActions.addEntry({ kind, category: cat, amount: Math.round(value), crop, kg: kg > 0 ? kg : undefined, note: note.trim() || undefined, date });
     announce(tt("rec.saved"));
     onClose();
   };
@@ -287,6 +290,20 @@ export function RecordSheet({ visible, onClose }: { visible: boolean; onClose: (
           ))}
         </ChipRow>
       </Group>
+
+      {isSale && (
+        <Field
+          label={tt("rec.kg")}
+          glyph={null}
+          value={kgSold}
+          onChangeText={(v) => setKgSold(v.replace(/[^\d]/g, "").slice(0, 6))}
+          height={52}
+          inputStyle={{ fontSize: 17, fontWeight: "700" }}
+          status={kg > 0 && valid ? { kind: "note", text: tt("rec.perKg", { p: Math.round(value / kg) }) } : null}
+          statusMinHeight={0}
+          inputProps={{ keyboardType: "numeric", inputMode: "numeric", testID: "record-kg" } as any}
+        />
+      )}
 
       <Group label={tt("rec.crop")}>
         <ChipRow role="radiogroup" label={tt("rec.crop")}>

@@ -10,6 +10,7 @@
  *   POST /api/autopilot  → agentic chain SENSE → A → gate → C → brief
  *   POST /api/signin     → { name, email } | { name, phone } → welcome email (SMTP or SIMULATED) | phone profile (SIMULATED, no SMS)
  *   GET  /api/weather    → ?county= → 7-day farm forecast + spray / plant / dry windows (see src/agro/weather.js)
+ *   GET  /api/prices/history → ?crop= → 14 daily prices per market + 7-day change (see src/agro/prices.js)
  *   /api/soko/*          → produce marketplace (see src/soko/routes.js)
  *
  * `createApp()` is exported so the HTTP test-suite can boot the server on an
@@ -24,6 +25,7 @@ import { dirname, join } from "node:path";
 import { callApex, engineMode, MODEL } from "./apex_client.js";
 import { createSokoRouter } from "./soko/routes.js";
 import { findCounty, forecastFor } from "./agro/weather.js";
+import { boardFor, historyFor } from "./agro/prices.js";
 import { SUITE, runSuite, loadPayload } from "./suite.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -128,16 +130,13 @@ export function createApp() {
     return p;
   }
 
+  // Board prices follow the deterministic daily levels in src/agro/prices.js
+  // (so the board, its 14-day history and Soko's fair price agree, and ▲/▼ is
+  // the change since yesterday), with ±1 % intraday movement on top.
   function liveCommodityFeed() {
     const feed = loadPayload("commodity_feed.json");
     feed.data_age_minutes = 3 + Math.floor(Math.random() * 40);
-    for (const c of feed.commodities)
-      for (const q of c.quotes) {
-        const np = Math.max(1, Math.round(q.price + (Math.random() * 2 - 1) * q.price * 0.03));
-        q.delta = np - q.price;
-        q.price = np;
-      }
-    return feed;
+    return boardFor(feed, { jitter: 0.01 });
   }
 
   app.get("/api/health", (_req, res) =>
@@ -158,6 +157,18 @@ export function createApp() {
     if (!county)
       return res.status(400).json({ error: `Unknown county: ${name}.`, error_type: "UNKNOWN_COUNTY", fields: ["county"] });
     res.json(await forecastFor(county));
+  });
+
+  // Price history for one crop: 14 daily closes per market (sample data, same
+  // levels as the live board) and the change over the last week.
+  app.get("/api/prices/history", rateLimit({ windowMs: 60_000, max: 120, name: "price history" }), (req, res) => {
+    const crop = String(req.query.crop ?? "").trim().slice(0, 40);
+    if (!crop)
+      return res.status(400).json({ error: "A crop is required, e.g. ?crop=maize.", error_type: "MISSING_CROP", fields: ["crop"] });
+    const h = historyFor(loadPayload("commodity_feed.json"), crop);
+    if (!h)
+      return res.status(400).json({ error: `No prices for crop: ${crop}.`, error_type: "UNKNOWN_CROP", fields: ["crop"] });
+    res.json({ ...h, source: "SAMPLE", currency: "KES", unit: "kg" });
   });
 
   app.get("/api/meta", (_req, res) => {

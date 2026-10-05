@@ -13,16 +13,21 @@ import { AddCropSheet, FarmProfileSheet, RecordSheet } from "../../components/Fa
 import { Btn, Card, Chip, ChipRow, Empty, Eyebrow, T, Tag, tint } from "../../components/Kit";
 import { Enter, LevelBar } from "../../components/Motion";
 import { CropCoin } from "../../components/ShambaPanel";
-import { ChevronGlyph, CrossGlyph, PlusGlyph, SproutGlyph } from "../../components/Glyphs";
+import { ArrowGlyph, ChevronGlyph, CrossGlyph, PlusGlyph, SproutGlyph } from "../../components/Glyphs";
 import { useTheme } from "../../lib/theme-context";
-import { useLang } from "../../lib/session";
-import { focusRing, webCursor, webLang, type PressState } from "../../lib/ui";
-import { cropName } from "../../lib/prices";
+import { useLang, useSession } from "../../lib/session";
+import { announce, focusRing, webCursor, webLang, type PressState } from "../../lib/ui";
+import { bestQuote, cropName } from "../../lib/prices";
+import { useSentinel } from "../../lib/sentinel";
+import { buildReport, shareText } from "../../lib/report";
 import { CROPS, cropsForSeason, inputsFor, pick, stageAt, type CropKey } from "../../lib/agronomy";
 import { daysBetween, dayMonth, todayKey } from "../../lib/dates";
 import { SEASON_START, seasonFor } from "../../lib/season";
 import { acresText, byCrop, farmActions, fmtMoney, tasksOf, totals, useFarm, type Entry, type Planting } from "../../lib/farm";
 import type { Key } from "../../lib/i18n";
+import type { WxDay } from "../../lib/api";
+import { useForecast } from "../../lib/weather";
+import { DEMO_COUNTY } from "../../lib/counties";
 
 type Tab = "calendar" | "records";
 
@@ -90,6 +95,7 @@ function Calendar({ onAdd }: { onAdd: (k?: CropKey) => void }) {
   const t = useTheme();
   const { t: tt } = useLang();
   const { farm } = useFarm();
+  const wx = useForecast(farm.county ?? DEMO_COUNTY);
   const sorted = [...farm.plantings].sort((a, b) => (a.plantedOn < b.plantedOn ? -1 : 1));
 
   return (
@@ -107,7 +113,7 @@ function Calendar({ onAdd }: { onAdd: (k?: CropKey) => void }) {
         <>
           {sorted.map((p, i) => (
             <Enter key={p.id} index={i}>
-              <PlantingCard p={p} />
+              <PlantingCard p={p} days={wx.data?.days} />
             </Enter>
           ))}
           <Btn kind="secondary" label={tt("tasks.addCrop")} onPress={() => onAdd()} icon={(c) => <PlusGlyph size={14} color={c} />} testID="farm-add-crop" />
@@ -118,7 +124,7 @@ function Calendar({ onAdd }: { onAdd: (k?: CropKey) => void }) {
   );
 }
 
-function PlantingCard({ p }: { p: Planting }) {
+function PlantingCard({ p, days }: { p: Planting; days?: WxDay[] }) {
   const t = useTheme();
   const { lang, t: tt } = useLang();
   const { farm } = useFarm();
@@ -161,17 +167,19 @@ function PlantingCard({ p }: { p: Planting }) {
         ) : null}
       </View>
 
+      <Outlook p={p} />
+
       {/* Collapsed: the next two open tasks. Open: the whole calendar instead. */}
       {!open && (
         <View style={{ marginTop: 12 }}>
           <Text style={{ color: t.dim, ...T.meta, fontWeight: "700", marginBottom: 2 }}>{tt("plant.next")}</Text>
-          {next.length ? <TaskRows tasks={next} /> : <Text style={{ color: t.dim, ...T.body, paddingVertical: 8 }}>{tt("plant.noOpen")}</Text>}
+          {next.length ? <TaskRows tasks={next} days={days} /> : <Text style={{ color: t.dim, ...T.body, paddingVertical: 8 }}>{tt("plant.noOpen")}</Text>}
         </View>
       )}
 
       {open && (
         <View style={{ marginTop: 12, gap: 14 }}>
-          <TaskRows tasks={all} dates />
+          <TaskRows tasks={all} dates days={days} />
           <View style={{ backgroundColor: t.raised, borderRadius: 14, padding: 14, gap: 8 }}>
             <Text style={{ color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "800" }}>{tt("plant.inputs")}</Text>
             {inputsFor(p.crop, p.acres, lang).map((n) => (
@@ -222,6 +230,27 @@ function PlantingCard({ p }: { p: Planting }) {
   );
 }
 
+/** Typical harvest for the planted area, and its worth at today's best board price. */
+function Outlook({ p }: { p: Planting }) {
+  const t = useTheme();
+  const { t: tt } = useLang();
+  const { meta } = useSentinel();
+  const [lo, hi] = CROPS[p.crop].yieldPerAcre.map((y) => y * p.acres);
+  const round = (n: number, to: number) => Math.round(n / to) * to;
+  const kg = (n: number) => round(n, n >= 1000 ? 50 : 10).toLocaleString("en-KE");
+  const best = bestQuote(meta?.commodity_feed, p.crop);
+  return (
+    <View style={{ marginTop: 12, padding: 12, borderRadius: 12, backgroundColor: t.raised, gap: 2 }} testID={`outlook-${p.crop}`}>
+      <Text style={{ color: t.ink, fontSize: 14, lineHeight: 20, fontWeight: "700" }}>{tt("plant.outlook", { lo: kg(lo), hi: kg(hi) })}</Text>
+      {best ? (
+        <Text style={{ color: t.dim, ...T.meta }}>
+          {tt("plant.outlookValue", { lo: round(lo * best.price, 100).toLocaleString("en-KE"), hi: round(hi * best.price, 100).toLocaleString("en-KE") })}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 function SuggestCard({ onPick }: { onPick: (k: CropKey) => void }) {
   const t = useTheme();
   const { lang, t: tt } = useLang();
@@ -266,6 +295,9 @@ function Records({ onAdd }: { onAdd: () => void }) {
   const t = useTheme();
   const { lang, t: tt } = useLang();
   const { farm } = useFarm();
+  const { profile } = useSession();
+  const { meta } = useSentinel();
+  const [shared, setShared] = useState<null | "copied" | "failed">(null);
   const [period, setPeriod] = useState<"season" | "all">("season");
   const [limit, setLimit] = useState(12);
   const from = seasonStartKey();
@@ -301,20 +333,44 @@ function Records({ onAdd }: { onAdd: () => void }) {
         {crops.length > 0 && (
           <View style={{ marginTop: 16 }}>
             <Eyebrow text={tt("rec.byCrop")} />
-            {crops.map(({ crop, t: c }) => (
-              <View key={crop} style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: 44 }}>
-                <CropCoin cropKey={crop} size={28} />
-                <Text style={{ flex: 1, color: t.ink, ...T.body, fontWeight: "600" }}>{cropName(lang, crop)}</Text>
-                <Text style={{ color: c.profit < 0 ? t.alert : t.ok, fontFamily: "monospace", fontWeight: "700", fontSize: 14 }}>
-                  {c.profit < 0 ? "−" : "+"}{fmtMoney(Math.abs(c.profit))}
-                </Text>
-              </View>
-            ))}
+            {crops.map(({ crop, t: c, avgPerKg }) => {
+              const best = avgPerKg ? bestQuote(meta?.commodity_feed, crop) : null;
+              return (
+                <View key={crop} style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: 44, paddingVertical: 4 }}>
+                  <CropCoin cropKey={crop} size={28} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: t.ink, ...T.body, fontWeight: "600" }}>{cropName(lang, crop)}</Text>
+                    {avgPerKg ? (
+                      <Text style={{ color: t.dim, ...T.meta }}>
+                        {best ? tt("rec.avgVs", { p: avgPerKg, b: best.price }) : tt("rec.avg", { p: avgPerKg })}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Text style={{ color: c.profit < 0 ? t.alert : t.ok, fontFamily: "monospace", fontWeight: "700", fontSize: 14 }}>
+                    {c.profit < 0 ? "−" : "+"}{fmtMoney(Math.abs(c.profit))}
+                  </Text>
+                </View>
+              );
+            })}
           </View>
         )}
       </Card>
 
-      <Btn label={tt("rec.add")} onPress={onAdd} icon={(c) => <PlusGlyph size={14} color={c} />} testID="records-add" />
+      <View style={{ flexDirection: "row", gap: 10 }}>
+        <Btn label={tt("rec.add")} onPress={onAdd} icon={(c) => <PlusGlyph size={14} color={c} />} style={{ flex: 1 }} testID="records-add" />
+        <Btn
+          kind="secondary"
+          label={shared === "copied" ? tt("rec.copied") : shared === "failed" ? tt("rec.shareFail") : tt("rec.share")}
+          onPress={async () => {
+            const text = buildReport({ lang, tt, name: profile?.name, farm, entries, periodLabel: tt(period === "all" ? "rec.all" : "rec.season") });
+            const r = await shareText(text);
+            if (r !== "shared") { setShared(r); announce(tt(r === "copied" ? "rec.copied" : "rec.shareFail")); setTimeout(() => setShared(null), 2500); }
+          }}
+          icon={(c) => <ArrowGlyph size={14} color={c} />}
+          style={{ flex: 1 }}
+          testID="records-share"
+        />
+      </View>
 
       <Card>
         <Eyebrow text={tt("rec.recent")} />
@@ -355,6 +411,7 @@ function EntryRow({ e, last }: { e: Entry; last: boolean }) {
         </View>
         <View style={{ flex: 1 }}>
           <Text style={{ color: t.ink, ...T.body, fontWeight: "600" }}>{what}</Text>
+          {e.kg ? <Text style={{ color: t.dim, ...T.meta }}>{tt("rec.kgLine", { kg: e.kg.toLocaleString("en-KE"), p: Math.round(e.amount / e.kg) })}</Text> : null}
           {e.note ? <Text style={{ color: t.dim, ...T.meta }} numberOfLines={1}>{e.note}</Text> : null}
         </View>
         <Text style={{ color: e.kind === "income" ? t.ok : t.ink, fontFamily: "monospace", fontWeight: "700", fontSize: 14 }}>

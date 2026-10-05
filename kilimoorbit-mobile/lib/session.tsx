@@ -8,6 +8,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { tr, type Key, type Lang, type Vars } from "./i18n";
 import { FARM_KEY, clearFarmMemory } from "./farm";
+import { SOKO_KEY, clearSokoMemory } from "./soko";
 
 export type Profile = {
   v: 2;
@@ -132,10 +133,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     try {
       await AsyncStorage.setItem(K.profile, JSON.stringify(p));
       await AsyncStorage.removeItem(K.guest);
-      if (replaceLast) await AsyncStorage.multiRemove([K.last, "ko-chat-log", FARM_KEY]);
+      if (replaceLast) await AsyncStorage.multiRemove([K.last, "ko-chat-log", FARM_KEY, SOKO_KEY]);
     } catch {}
     setGuest(false);
-    if (replaceLast) { setLastProfile(null); clearFarmMemory(); }
+    if (replaceLast) { setLastProfile(null); clearFarmMemory(); clearSokoMemory(); }
     setProfile(p);
   }, []);
 
@@ -150,12 +151,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     const current = profile;
     try {
       await AsyncStorage.removeItem(K.profile);
-      if (forget) await AsyncStorage.multiRemove([K.last, "ko-chat-log", "ko-dash-cache", "ko-weather-cache", FARM_KEY, K.guest]);
+      if (forget) await AsyncStorage.multiRemove([K.last, "ko-chat-log", "ko-dash-cache", "ko-weather-cache", FARM_KEY, SOKO_KEY, K.guest]);
       else if (current) await AsyncStorage.setItem(K.last, JSON.stringify(current));
       // ko-theme, ko-lang and ko-voice are kept.
     } catch {}
     setProfile(null);
-    if (forget) { setLastProfile(null); setGuest(false); clearFarmMemory(); }
+    if (forget) { setLastProfile(null); setGuest(false); clearFarmMemory(); clearSokoMemory(); }
     else if (current) setLastProfile(current);
   }, [profile]);
 
@@ -168,9 +169,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     touched.current = true;
     // "Ondoa kwenye simu hii": the remembered farmer's chat and farm go with
     // them, as with sign-out's "forget" box, so the next person never inherits them.
-    try { await AsyncStorage.multiRemove([K.last, "ko-chat-log", FARM_KEY]); } catch {}
+    try { await AsyncStorage.multiRemove([K.last, "ko-chat-log", FARM_KEY, SOKO_KEY]); } catch {}
     setLastProfile(null);
     clearFarmMemory();
+    clearSokoMemory();
   }, []);
 
   const status: SessionStatus = !hydrated ? "loading" : profile ? "signedIn" : guest ? "guest" : "signedOut";

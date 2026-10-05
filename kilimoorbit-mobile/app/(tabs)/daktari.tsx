@@ -18,7 +18,8 @@ import { useLang } from "../../lib/session";
 import { focusRing, webCursor, webLang, type PressState } from "../../lib/ui";
 import { cropName } from "../../lib/prices";
 import { CROP_KEYS, pick, type CropKey } from "../../lib/agronomy";
-import { diagnose, problemsFor, symptomsFor, type Part, type Problem } from "../../lib/pests";
+import { diagnose, problemsForSeason, symptomsFor, type Part, type Problem } from "../../lib/pests";
+import { seasonFor } from "../../lib/season";
 import { useFarm } from "../../lib/farm";
 import type { Key } from "../../lib/i18n";
 
@@ -119,7 +120,7 @@ export default function Daktari() {
             ) : (
               <>
                 <Eyebrow text={tt("dr.common", { crop: name.toUpperCase() })} style={{ marginBottom: 0, marginTop: 4 }} />
-                {problemsFor(crop).map((p, i) => (
+                {problemsForSeason(crop, seasonFor().key).map((p, i) => (
                   <Enter key={`c:${crop}:${p.id}`} index={i}>
                     <ProblemCard p={p} crop={crop} />
                   </Enter>
@@ -181,7 +182,8 @@ function ProblemCard({
           {p.latin ? <Text {...webLang("la")} style={{ color: t.dim, ...T.meta, fontStyle: "italic", marginTop: -4 }}>{p.latin}</Text> : null}
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
             {strength && <Tag label={tt(strength === "strong" ? "dr.strong" : "dr.possible")} tone={strength === "strong" ? "warn" : "dim"} />}
-            <Tag label={tt(`dr.kind.${p.kind}` as Key)} tone={p.kind === "pest" ? "bad" : p.kind === "disease" ? "water" : "dim"} />
+            {p.seasons.includes(seasonFor().key) && <Tag label={tt("dr.now")} tone="water" />}
+            <Tag label={tt(`dr.kind.${p.kind}` as Key)} tone={p.kind === "pest" ? "bad" : "dim"} />
             {matched ? <Tag label={tt("dr.matched", { n: matched })} /> : null}
           </View>
         </View>

@@ -3,13 +3,14 @@
  * their county, this week's farm tasks, where their crop sells best, and the
  * season's climate watch. Detail lives one tap away (Shamba, Masoko).
  */
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { View, Text, ScrollView, RefreshControl, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect } from "expo-router";
 import Header from "../../components/Header";
 import FAB from "../../components/FAB";
-import WeatherCard from "../../components/WeatherCard";
+import WeatherCard, { windowText, type Win } from "../../components/WeatherCard";
+import { ListenPill } from "../../components/auth/Controls";
 import TaskRows from "../../components/TaskRows";
 import { useMenu } from "../../components/MenuContext";
 import { AddCropSheet, FarmProfileSheet, RecordSheet } from "../../components/FarmSheets";
@@ -24,10 +25,12 @@ import { cropName, isDemoBoard } from "../../lib/prices";
 import { seasonFor } from "../../lib/season";
 import { longDay, todayKey } from "../../lib/dates";
 import { useFarm, upcomingTasks } from "../../lib/farm";
+import { pick } from "../../lib/agronomy";
 import { useForecast } from "../../lib/weather";
 import { useSentinel } from "../../lib/sentinel";
 import { DEMO_COUNTY } from "../../lib/counties";
 import type { Key } from "../../lib/i18n";
+import type { WxDay } from "../../lib/api";
 
 const SHOWN_TASKS = 4;
 
@@ -53,6 +56,23 @@ export default function Today() {
   const first = profile?.name.trim().split(/\s+/)[0];
   const season = seasonFor();
 
+  // "Listen": the morning glance read aloud (low-literacy friendly), in the farmer's language.
+  const script = useMemo(() => {
+    const parts = [`${first ? `${hello}, ${first}` : hello}.`];
+    const days = wx.data?.days;
+    if (days?.length) {
+      const d = days[0];
+      parts.push(tt("listen.today.weather", { county, sky: tt(`wx.sky.${d.sky}` as Key), tmax: d.tmax, p: d.rain_chance }));
+      for (const k of ["spray", "plant", "dry"] as Win[]) parts.push(`${tt(`win.${k}` as Key)}: ${windowText(k, days, lang, tt)}.`);
+    }
+    const due = upcomingTasks(farm).slice(0, 3).map((x) => `${pick(lang, x.title)} (${cropName(lang, x.planting.crop)})`);
+    if (due.length) parts.push(tt("listen.today.tasks", { list: due.join("; ") }));
+    const c = sentinel.arb?.cargo_optimized_route;
+    if (c?.live_market_wholesale_price_per_kg != null)
+      parts.push(tt("listen.today.market", { crop: cropName(lang, c.crop_type), market: c.optimal_market_destination, p: c.live_market_wholesale_price_per_kg }));
+    return parts.join(" ").replace(/°/g, "");
+  }, [wx.data, farm, sentinel.arb, lang, county, first, hello]);
+
   const refresh = async () => {
     setRefreshing(true);
     await Promise.all([sentinel.reload(), Promise.resolve(wx.reload())]);
@@ -62,7 +82,7 @@ export default function Today() {
   const weather = (
     <WeatherCard wx={wx} county={county} countySet={!!farm.county} onChooseCounty={() => setSheet("county")} />
   );
-  const tasks = <TasksCard onAddCrop={() => setSheet("crop")} />;
+  const tasks = <TasksCard onAddCrop={() => setSheet("crop")} days={wx.data?.days} />;
   const market = <MarketCard />;
   const climate = <ClimateCard />;
 
@@ -82,6 +102,10 @@ export default function Today() {
               <Text style={{ color: t.dim, ...T.body, marginTop: 2 }}>
                 {longDay(lang, todayKey())} · {tt(`season.${season.key}.name` as Key)}
               </Text>
+              {/* Hidden by ListenPill itself when the phone has no voice for the language. */}
+              <View style={{ flexDirection: "row", marginTop: 10 }}>
+                <ListenPill script={script} />
+              </View>
             </View>
           </Enter>
 
@@ -145,7 +169,7 @@ function ProblemBanner() {
 }
 
 /* ── This week's tasks ── */
-function TasksCard({ onAddCrop }: { onAddCrop: () => void }) {
+function TasksCard({ onAddCrop, days }: { onAddCrop: () => void; days?: WxDay[] }) {
   const t = useTheme();
   const { t: tt } = useLang();
   const { farm, ready } = useFarm();
@@ -172,7 +196,7 @@ function TasksCard({ onAddCrop }: { onAddCrop: () => void }) {
           <Text style={{ flex: 1, color: t.ink, ...T.body }}>{tt("tasks.allDone")}</Text>
         </View>
       ) : (
-        <TaskRows tasks={shown} showCrop onToggled={(k) => setKept((s) => new Set(s).add(k))} />
+        <TaskRows tasks={shown} showCrop days={days} onToggled={(k) => setKept((s) => new Set(s).add(k))} />
       )}
       {due.length > SHOWN_TASKS || (farm.plantings.length > 0 && shown.length === 0) ? (
         <Btn

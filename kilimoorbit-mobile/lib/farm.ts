@@ -23,6 +23,8 @@ export type Entry = {
   category: ExpenseCat | IncomeCat;
   amount: number;
   crop?: CropKey;
+  /** Sales only: kilos sold, so the ledger knows the price actually received. */
+  kg?: number;
   note?: string;
   date: string;
 };
@@ -60,7 +62,7 @@ function sanitize(raw: any): Farm {
     done: raw.done && typeof raw.done === "object" ? raw.done : {},
     entries: (Array.isArray(raw.entries) ? raw.entries : [])
       .filter((e: any) => e && typeof e.id === "string" && (e.kind === "income" || e.kind === "expense") && num(e.amount) && day(e.date))
-      .map((e: any) => ({ ...e, crop: isCrop(e.crop) ? e.crop : undefined })),
+      .map((e: any) => ({ ...e, crop: isCrop(e.crop) ? e.crop : undefined, kg: num(e.kg) ?? undefined })),
   };
 }
 
@@ -181,10 +183,20 @@ export function totals(entries: Entry[]): Totals {
   return { income, expense, profit: income - expense };
 }
 
-export function byCrop(entries: Entry[]): { crop: CropKey; t: Totals }[] {
+export type CropTotals = { crop: CropKey; t: Totals; soldKg: number; avgPerKg: number | null };
+
+export function byCrop(entries: Entry[]): CropTotals[] {
   const m = new Map<CropKey, Entry[]>();
   for (const e of entries) if (e.crop) m.set(e.crop, [...(m.get(e.crop) ?? []), e]);
-  return [...m.entries()].map(([crop, es]) => ({ crop, t: totals(es) })).sort((a, b) => b.t.income + b.t.expense - (a.t.income + a.t.expense));
+  return [...m.entries()]
+    .map(([crop, es]) => {
+      // Average price received: only sales that recorded their kilos.
+      const sales = es.filter((e) => e.kind === "income" && e.kg);
+      const soldKg = sales.reduce((s, e) => s + (e.kg ?? 0), 0);
+      const avgPerKg = soldKg ? Math.round(sales.reduce((s, e) => s + e.amount, 0) / soldKg) : null;
+      return { crop, t: totals(es), soldKg, avgPerKg };
+    })
+    .sort((a, b) => b.t.income + b.t.expense - (a.t.income + a.t.expense));
 }
 
 export const fmtMoney = (n: number) => `KES ${Math.round(n).toLocaleString("en-KE")}`;
