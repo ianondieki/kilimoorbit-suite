@@ -1,5 +1,5 @@
 import React from "react";
-import { View } from "react-native";
+import { View, type ColorValue } from "react-native";
 import { Redirect, Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, useThemeControls } from "../../lib/theme-context";
@@ -30,6 +30,9 @@ function TabShell() {
   const { isDocked } = useMenu();
   const insets = useSafeAreaInsets();
 
+  // The bar hands icons our own tint colours (theme hex strings); a platform colour object can't reach the glyphs.
+  const ink = (c: ColorValue) => (typeof c === "string" ? c : t.dim);
+
   // The Tabs navigator keeps the same tree position at every width, so a resize
   // across 900px swaps drawer <-> docked instantly without resetting tab state.
   return (
@@ -53,11 +56,11 @@ function TabShell() {
             sceneStyle: { backgroundColor: t.bg },
           }}
         >
-          <Tabs.Screen name="index" options={{ title: tt("nav.today"), tabBarIcon: ({ color }) => <SunGlyph size={22} color={color} /> }} />
-          <Tabs.Screen name="shamba" options={{ title: tt("nav.farm"), tabBarIcon: ({ color }) => <SproutGlyph size={24} color={color} /> }} />
-          <Tabs.Screen name="masoko" options={{ title: tt("nav.markets"), tabBarIcon: ({ color }) => <BarsGlyph size={22} color={color} /> }} />
-          <Tabs.Screen name="daktari" options={{ title: tt("nav.doctorTab"), tabBarAccessibilityLabel: tt("nav.doctor"), tabBarIcon: ({ color }) => <LensGlyph size={22} color={color} /> }} />
-          <Tabs.Screen name="chat" options={{ title: tt("nav.chatTab"), tabBarAccessibilityLabel: tt("nav.chat"), tabBarIcon: ({ color }) => <ChatGlyph size={22} color={color} /> }} />
+          <Tabs.Screen name="index" options={{ title: tt("nav.today"), tabBarIcon: ({ color }) => <SunGlyph size={22} color={ink(color)} /> }} />
+          <Tabs.Screen name="shamba" options={{ title: tt("nav.farm"), tabBarIcon: ({ color }) => <SproutGlyph size={24} color={ink(color)} /> }} />
+          <Tabs.Screen name="masoko" options={{ title: tt("nav.markets"), tabBarIcon: ({ color }) => <BarsGlyph size={22} color={ink(color)} /> }} />
+          <Tabs.Screen name="daktari" options={{ title: tt("nav.doctorTab"), tabBarAccessibilityLabel: tt("nav.doctor"), tabBarIcon: ({ color }) => <LensGlyph size={22} color={ink(color)} /> }} />
+          <Tabs.Screen name="chat" options={{ title: tt("nav.chatTab"), tabBarAccessibilityLabel: tt("nav.chat"), tabBarIcon: ({ color }) => <ChatGlyph size={22} color={ink(color)} /> }} />
           {/* Reached from Markets and the sidebar; not a bar tab (five is the most a phone bar holds well). */}
           <Tabs.Screen name="autopilot" options={{ title: tt("nav.autopilot"), href: null }} />
         </Tabs>
