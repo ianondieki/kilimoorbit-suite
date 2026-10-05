@@ -6,7 +6,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { View, Text, ScrollView, Pressable, Platform, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
+import { Guard } from "../../components/ScreenError";
+import { PestWatchCard, PushPullSheet, ScoutCard, ScoutSheet } from "../../components/Scout";
+import { DEMO_COUNTY } from "../../lib/counties";
 import Header from "../../components/Header";
 import { Bounded } from "../../components/Bounded";
 import { Btn, Card, Chip, ChipRow, Eyebrow, T, Tag } from "../../components/Kit";
@@ -32,11 +35,18 @@ export default function Daktari() {
   const [crop, setCrop] = useState<CropKey>("maize");
   const [picked, setPicked] = useState<string[]>([]);
   const [touched, setTouched] = useState(false);
+  const [sheet, setSheet] = useState<null | "scout" | "pushpull">(null);
 
   // Start on the farmer's own first crop, until they choose.
   useEffect(() => {
     if (ready && !touched && farm.plantings[0]) setCrop(farm.plantings[0].crop);
   }, [ready]);
+  // ?crop=maize (from the pest watch on Today) opens that crop.
+  const params = useLocalSearchParams<{ crop?: string }>();
+  useEffect(() => {
+    const k = params.crop;
+    if (typeof k === "string" && (CROP_KEYS as string[]).includes(k)) { setTouched(true); setCrop(k as CropKey); setPicked([]); }
+  }, [params.crop]);
 
   const choose = (k: CropKey) => { setTouched(true); setCrop(k); setPicked([]); };
   const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
@@ -66,6 +76,14 @@ export default function Daktari() {
         onLayout={(e) => setViewH(e.nativeEvent.layout.height)}
       >
         <Bounded style={{ padding: 16, gap: 14 }}>
+          {/* Maize: fall armyworm scouting and the county pest watch first. */}
+          {crop === "maize" && (
+            <>
+              <Guard name="scout"><ScoutCard onScout={() => setSheet("scout")} onPushPull={() => setSheet("pushpull")} /></Guard>
+              <Guard name="pest-watch"><PestWatchCard county={farm.county ?? DEMO_COUNTY} /></Guard>
+            </>
+          )}
+
           <Card>
             <Text accessibilityRole="header" style={{ color: t.ink, ...T.title, marginBottom: 12 }}>{tt("dr.step1")}</Text>
             <ChipRow role="radiogroup" label={tt("dr.step1")}>
@@ -136,6 +154,8 @@ export default function Daktari() {
           </View>
         </Bounded>
       </ScrollView>
+      <ScoutSheet visible={sheet === "scout"} onClose={() => setSheet(null)} />
+      <PushPullSheet visible={sheet === "pushpull"} onClose={() => setSheet(null)} />
       {showJump && (
         <View style={{ position: "absolute", left: 0, right: 0, bottom: 16, alignItems: "center", pointerEvents: "box-none" }}>
           <Btn

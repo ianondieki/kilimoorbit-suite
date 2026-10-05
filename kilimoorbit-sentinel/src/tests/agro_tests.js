@@ -8,6 +8,7 @@ import {
   SPRAY_MAX_WIND_KMH, PLANT_MIN_RAIN_MM,
 } from "../agro/weather.js";
 import { levelFor, priceOn, boardFor, historyFor } from "../agro/prices.js";
+import { createPestWatch, sampleWatch, thresholdFor, validateReport, WINDOW_DAYS } from "../agro/pests.js";
 import { readFileSync } from "node:fs";
 
 const FEED_PATH = new URL("../../payloads/commodity_feed.json", import.meta.url);
@@ -178,7 +179,65 @@ await check("live jitter stays within ±1 % of the day's price", () => {
 
 await check("priceOn never drops below 1 shilling", () => priceOn(1, "x", "y", "2026-10-05") >= 1);
 
+/* ── pest watch ── */
+await check("pest report: valid → canonical county, percent, threshold by crop age", () => {
+  const young = validateReport({ county: "muranga", crop: "Maize", plants: 50, hit: 11, age_days: 14 }).report;
+  const older = validateReport({ county: "Meru", crop: "maize", plants: 50, hit: 11, age_days: 30 }).report;
+  return {
+    ok: young.county === "Murang'a" && young.pct === 22 && young.over === true && older.over === false
+      && thresholdFor(17) === 20 && thresholdFor(18) === 40 && thresholdFor(null) === 40,
+    detail: `${young.county} ${young.pct}% over=${young.over}; day 30 over=${older.over}`,
+  };
+});
+
+await check("pest report: junk is refused field by field, extra keys are not kept", () => {
+  const bad = [
+    validateReport(null), validateReport([]), validateReport({}),
+    validateReport({ county: "Atlantis", crop: "maize", plants: 50, hit: 1 }),
+    validateReport({ county: "Meru", crop: "rice", plants: 50, hit: 1 }),
+    validateReport({ county: "Meru", crop: "maize", plants: 5, hit: 1 }),
+    validateReport({ county: "Meru", crop: "maize", plants: 50, hit: 51 }),
+    validateReport({ county: "Meru", crop: "maize", plants: 50.5, hit: 1 }),
+    validateReport({ county: "Meru", crop: "maize", plants: 50, hit: "3" }),
+    validateReport({ county: "Meru", crop: "maize", plants: 50, hit: 3, age_days: "ten" }),
+    validateReport({ county: "Meru", crop: "maize", plants: 50, hit: 3, pest: "locust" }),
+  ];
+  const kept = validateReport({ county: "Meru", crop: "maize", plants: 50, hit: 3, phone: "+254712345678", name: "Wanjiru" }).report;
+  return { ok: bad.every((b) => b.error) && !("phone" in kept) && !("name" in kept), detail: bad.map((b) => (b.fields ?? []).join("+") || "body").join(" · ") };
+});
+
+await check("pest watch: farmer reports replace the sample; 14-day window; level", () => {
+  const w = createPestWatch();
+  const now = new Date("2026-10-05T09:00:00Z");
+  const r = (hit, age = 30) => validateReport({ county: "Nyeri", crop: "maize", plants: 50, hit, age_days: age }).report;
+  w.add(r(25), now); w.add(r(5), now); w.add(r(30), new Date("2026-09-01T09:00:00Z")); // last one is too old
+  const nyeri = w.watch("nyeri", now);
+  const meru = w.watch("Meru", now);
+  return {
+    ok: nyeri.source === "FARMERS" && nyeri.reports === 2 && nyeri.avg_pct === 30 && nyeri.max_pct === 50
+      && nyeri.over_threshold === 1 && nyeri.level === "high" && nyeri.window_days === WINDOW_DAYS
+      && meru.source === "SAMPLE" && w.watch("Atlantis", now) === null,
+    detail: `Nyeri ${nyeri.reports} reports, avg ${nyeri.avg_pct}%, ${nyeri.level}; Meru ${meru.source}`,
+  };
+});
+
+await check("pest watch: bounded memory drops the oldest reports", () => {
+  const w = createPestWatch({ max: 3 });
+  for (let i = 0; i < 5; i++) w.add(validateReport({ county: "Meru", crop: "maize", plants: 50, hit: i }).report);
+  return { ok: w.size === 3, detail: `${w.size} kept` };
+});
+
+await check("sample watch: stable within a week, sane numbers", () => {
+  const a = sampleWatch("Kakamega", new Date("2026-10-05T06:00:00Z"));
+  const b = sampleWatch("Kakamega", new Date("2026-10-05T18:00:00Z"));
+  return {
+    ok: JSON.stringify(a) === JSON.stringify(b) && a.source === "SAMPLE" && a.reports >= 0 && a.reports <= 6
+      && a.avg_pct >= 0 && a.max_pct <= 100 && ["none", "low", "high"].includes(a.level),
+    detail: `${a.reports} reports, avg ${a.avg_pct}%, ${a.level}`,
+  };
+});
+
 console.log("─".repeat(57));
 const ok = passed === total;
-console.log((ok ? C.green : C.red)(C.bold(`  ${ok ? "✓" : "✗"} ${passed}/${total} farm weather + price tests passed`)));
+console.log((ok ? C.green : C.red)(C.bold(`  ${ok ? "✓" : "✗"} ${passed}/${total} farm weather, price + pest watch tests passed`)));
 process.exit(ok ? 0 : 1);

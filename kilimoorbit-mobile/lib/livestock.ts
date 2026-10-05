@@ -337,3 +337,72 @@ export function layRate(eggs: EggEntry[], flockId: string, hens: number, today: 
 /** A drop worth acting on: 10 points or more, week on week. */
 export const layDropped = (r: { now: number | null; before: number | null }) =>
   r.now != null && r.before != null && r.before - r.now >= 10;
+
+/* ── a milking cow's daily water and dairy meal ── */
+/**
+ * East African extension rules of thumb: a milking cow drinks about 60–70 L a
+ * day plus 4–5 L for every litre of milk, gets about 1 kg of dairy meal for
+ * every 2–3 L of milk, and eats 50–70 kg of chopped fresh Napier a day
+ * (icipe). Water is shown in 20 L jerrycans, the way it is carried.
+ */
+export const JERRYCAN_L = 20;
+export const waterFor = (litres: number) => Math.round(65 + 4.5 * Math.max(0, litres));
+export const dairyMealFor = (litres: number) => Math.round((Math.max(0, litres) / 2.5) * 2) / 2;
+export const NAPIER_KG: [number, number] = [50, 70];
+
+/** A cow's average litres a day over the days recorded in the last week (null with none). */
+export function dailyLitres(milk: MilkEntry[], animalId: string, today: string): number | null {
+  const { litres } = milkSeries(milk, today, 7, animalId);
+  const r = litres.filter((x) => x > 0);
+  return r.length ? Math.round((r.reduce((s, x) => s + x, 0) / r.length) * 10) / 10 : null;
+}
+
+/* ── co-op deliveries and the payslip ── */
+export type Delivery = { id: string; date: string; litres: number };
+export type CoopTerms = { price: number | null; deduction: number | null };
+
+/** Litres delivered in a calendar month ("2026-10"), and the expected pay after per-litre deductions. */
+export function monthStatement(deliveries: Delivery[], month: string, terms: CoopTerms) {
+  const litres = Math.round(deliveries.filter((d) => d.date.startsWith(month)).reduce((s, d) => s + d.litres, 0) * 10) / 10;
+  const gross = terms.price ? Math.round(litres * terms.price) : null;
+  const deductions = terms.price && terms.deduction ? Math.round(litres * terms.deduction) : 0;
+  return { month, litres, days: new Set(deliveries.filter((d) => d.date.startsWith(month)).map((d) => d.date)).size, gross, deductions, net: gross == null ? null : gross - deductions };
+}
+
+/** The payslip against the farmer's own record: litres missing (positive) or extra, and their worth. */
+export function payslipGap(recordLitres: number, payslipLitres: number, terms: CoopTerms) {
+  const gap = Math.round((recordLitres - payslipLitres) * 10) / 10;
+  const perLitre = terms.price != null ? terms.price - (terms.deduction ?? 0) : null;
+  return { gap, worth: perLitre != null ? Math.round(gap * perLitre) : null, matches: Math.abs(gap) < 1 };
+}
+
+/* ── hatching eggs ── */
+export type Hatch = { id: string; set: string; eggs: number; method: "incubator" | "hen" };
+export const HATCH_DAYS = 21;
+export type HatchStep = { id: "candle1" | "candle2" | "lockdown" | "hatch"; day: number };
+
+/**
+ * The 21-day calendar for chicken eggs: candle at day 7 (and 14 in an
+ * incubator) to take out clear or dead eggs; in an incubator, stop turning
+ * and raise the humidity at day 18 ("lockdown"); chicks hatch about day 21.
+ */
+export const hatchSteps = (h: Pick<Hatch, "method">): HatchStep[] =>
+  h.method === "incubator"
+    ? [{ id: "candle1", day: 7 }, { id: "candle2", day: 14 }, { id: "lockdown", day: 18 }, { id: "hatch", day: 21 }]
+    : [{ id: "candle1", day: 7 }, { id: "hatch", day: 21 }];
+
+export type HatchDue = { hatch: Hatch; step: HatchStep; due: string; inDays: number };
+
+/** Hatch steps due within `ahead` days (or up to 3 days late) and not ticked, soonest first. */
+export function dueHatchSteps(hatches: Hatch[], done: Record<string, true>, today: string, ahead = 1): HatchDue[] {
+  return hatches
+    .flatMap((hatch) => hatchSteps(hatch).map((step) => {
+      const due = addDays(hatch.set, step.day);
+      return { hatch, step, due, inDays: daysBetween(today, due) };
+    }))
+    .filter((x) => !done[`hatch:${x.hatch.id}:${x.step.id}`] && x.inDays <= ahead && x.inDays >= -3)
+    .sort((a, b) => a.inDays - b.inDays);
+}
+
+/** Brooder temperature for chicks this many weeks old: 35 °C in week 1, about 3 °C less each week, down to 21 °C. */
+export const brooderTemp = (week: number) => Math.max(21, 35 - 3 * Math.max(0, Math.floor(week) - 1));

@@ -6,20 +6,32 @@
  */
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { EVENT_KINDS, SPECIES, type Animal, type AnimalEvent, type EggEntry, type EventKind, type MilkEntry, type Species } from "./livestock";
+import {
+  EVENT_KINDS, SPECIES,
+  type Animal, type AnimalEvent, type CoopTerms, type Delivery, type EggEntry, type EventKind, type Hatch, type MilkEntry, type Species,
+} from "./livestock";
 
 export const HERD_KEY = "ko-herd";
 const MAX_ANIMALS = 100;
 const MAX_EVENTS = 200;
 const MAX_MILK = 3000;
 const MAX_EGGS = 3000;
+const MAX_DELIVERIES = 1500;
+const MAX_HATCHES = 30;
 
 export type Herd = {
   v: 1; animals: Animal[]; milk: MilkEntry[]; done: Record<string, true>; milkPrice: number | null;
   /** Egg log for chicken flocks, and the farmer's price for a tray of 30. */
   eggs: EggEntry[]; eggPrice: number | null;
+  /** Milk delivered to a co-op or buyer, and the farmer's terms (per litre). */
+  deliveries: Delivery[]; coop: CoopTerms;
+  /** Eggs set to hatch (incubator or broody hen). */
+  hatches: Hatch[];
 };
-const EMPTY: Herd = { v: 1, animals: [], milk: [], done: {}, milkPrice: null, eggs: [], eggPrice: null };
+const EMPTY: Herd = {
+  v: 1, animals: [], milk: [], done: {}, milkPrice: null, eggs: [], eggPrice: null,
+  deliveries: [], coop: { price: null, deduction: null }, hatches: [],
+};
 
 let state: Herd = EMPTY;
 let hydrated = false;
@@ -71,6 +83,19 @@ export function sanitizeHerd(raw: any): Herd {
     milkPrice: pos(raw.milkPrice) && raw.milkPrice < 10000 ? raw.milkPrice : null,
     eggs,
     eggPrice: pos(raw.eggPrice) && raw.eggPrice < 100000 ? raw.eggPrice : null,
+    deliveries: (Array.isArray(raw.deliveries) ? raw.deliveries : [])
+      .filter((d: any) => d && typeof d.id === "string" && day(d.date) && pos(d.litres) && d.litres <= 2000)
+      .map((d: any): Delivery => ({ id: d.id, date: d.date, litres: Math.round(d.litres * 10) / 10 }))
+      .slice(-MAX_DELIVERIES),
+    coop: {
+      price: pos(raw.coop?.price) && raw.coop.price < 1000 ? raw.coop.price : null,
+      deduction: typeof raw.coop?.deduction === "number" && raw.coop.deduction >= 0 && raw.coop.deduction < 100 ? raw.coop.deduction : null,
+    },
+    hatches: (Array.isArray(raw.hatches) ? raw.hatches : [])
+      .filter((h: any) => h && typeof h.id === "string" && day(h.set) && Number.isInteger(h.eggs) && h.eggs >= 1 && h.eggs <= 10000
+        && (h.method === "incubator" || h.method === "hen"))
+      .map((h: any): Hatch => ({ id: h.id, set: h.set, eggs: h.eggs, method: h.method }))
+      .slice(-MAX_HATCHES),
   };
 }
 
@@ -167,6 +192,41 @@ export const herdActions = {
   },
   setEggPrice(price: number | null) {
     mutate((s) => ({ ...s, eggPrice: price && Number.isFinite(price) && price > 0 && price < 100000 ? Math.round(price) : null }));
+  },
+  /** One delivery total per day: a second entry replaces the first; 0 removes it. */
+  setDelivery(date: string, litres: number) {
+    if (!DAY.test(date) || !Number.isFinite(litres) || litres < 0 || litres > 2000) return;
+    mutate((s) => {
+      const rest = s.deliveries.filter((d) => d.date !== date);
+      return { ...s, deliveries: litres > 0 ? [...rest, { id: uid("d"), date, litres: Math.round(litres * 10) / 10 }].slice(-MAX_DELIVERIES) : rest };
+    });
+  },
+  setCoop(terms: { price: number | null; deduction: number | null }) {
+    const price = terms.price != null && Number.isFinite(terms.price) && terms.price > 0 && terms.price < 1000 ? Math.round(terms.price * 100) / 100 : null;
+    const deduction = terms.deduction != null && Number.isFinite(terms.deduction) && terms.deduction >= 0 && terms.deduction < 100 ? Math.round(terms.deduction * 100) / 100 : null;
+    mutate((s) => ({ ...s, coop: { price, deduction } }));
+  },
+  addHatch(h: Omit<Hatch, "id">) {
+    if (!DAY.test(h.set) || !Number.isInteger(h.eggs) || h.eggs < 1 || h.eggs > 10000) return;
+    const hatch: Hatch = { ...h, id: uid("h") };
+    mutate((s) => (s.hatches.length >= MAX_HATCHES ? s : { ...s, hatches: [...s.hatches, hatch] }));
+  },
+  /** Ends a batch (hatched or given up), with its ticked steps. */
+  removeHatch(id: string) {
+    mutate((s) => ({
+      ...s,
+      hatches: s.hatches.filter((h) => h.id !== id),
+      done: Object.fromEntries(Object.entries(s.done).filter(([k]) => !k.startsWith(`hatch:${id}:`))) as Herd["done"],
+    }));
+  },
+  toggleHatchStep(id: string, step: string) {
+    const k = `hatch:${id}:${step}`;
+    mutate((s) => {
+      const done = { ...s.done };
+      if (done[k]) delete done[k];
+      else done[k] = true;
+      return { ...s, done };
+    });
   },
 };
 

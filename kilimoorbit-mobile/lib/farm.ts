@@ -13,6 +13,7 @@ import { CROPS, type CropKey, type CropTask } from "./agronomy";
 import { addDays, daysBetween, todayKey } from "./dates";
 import { isStoreCrop, type Lot } from "./postharvest";
 import { isPriceKey } from "./budget";
+import type { Scout } from "./scouting";
 
 export const FARM_KEY = "ko-farm";
 
@@ -45,10 +46,17 @@ export type Farm = {
   store: Lot[];
   /** The farmer's own prices for the budget (lib/budget.ts keys). */
   prices: Record<string, number>;
+  /** Fall armyworm scouting walks (lib/scouting.ts). */
+  scouts: Scout[];
+  /** Soil pH from a soil test, when the farmer has one. */
+  soilPh: number | null;
+  /** Share scouting results anonymously with the county pest watch. */
+  sharePest: boolean;
 };
 
-const EMPTY: Farm = { v: 1, county: null, acres: null, plantings: [], done: {}, entries: [], store: [], prices: {} };
+const EMPTY: Farm = { v: 1, county: null, acres: null, plantings: [], done: {}, entries: [], store: [], prices: {}, scouts: [], soilPh: null, sharePest: false };
 const MAX_LOTS = 50;
+const MAX_SCOUTS = 300;
 
 let state: Farm = EMPTY;
 let hydrated = false;
@@ -94,6 +102,17 @@ function sanitize(raw: any): Farm {
       Object.entries(raw.prices && typeof raw.prices === "object" && !Array.isArray(raw.prices) ? raw.prices : {})
         .filter(([k, v]) => isPriceKey(k) && typeof v === "number" && Number.isFinite(v) && v >= 0 && v < 1e7),
     ) as Record<string, number>,
+    scouts: (Array.isArray(raw.scouts) ? raw.scouts : [])
+      .filter((x: any) => x && typeof x.id === "string" && day(x.date) && Number.isInteger(x.plants) && x.plants >= 1 && x.plants <= 200
+        && Number.isInteger(x.hit) && x.hit >= 0 && x.hit <= x.plants)
+      .map((x: any): Scout => ({
+        id: x.id, date: x.date, plants: x.plants, hit: x.hit,
+        ageDays: Number.isInteger(x.ageDays) && x.ageDays >= 0 && x.ageDays <= 400 ? x.ageDays : null,
+        ...(typeof x.plantingId === "string" ? { plantingId: x.plantingId } : null),
+      }))
+      .slice(-MAX_SCOUTS),
+    soilPh: typeof raw.soilPh === "number" && Number.isFinite(raw.soilPh) && raw.soilPh >= 3 && raw.soilPh <= 9 ? Math.round(raw.soilPh * 10) / 10 : null,
+    sharePest: raw.sharePest === true,
   };
 }
 
@@ -152,6 +171,7 @@ export const farmActions = {
       ...s,
       plantings: s.plantings.filter((p) => p.id !== id),
       done: Object.fromEntries(Object.entries(s.done).filter(([k]) => !k.startsWith(`${id}:`))) as Farm["done"],
+      scouts: s.scouts.filter((x) => x.plantingId !== id),
     }));
   },
   toggleTask(plantingId: string, taskId: string) {
@@ -220,6 +240,29 @@ export const farmActions = {
       const left = lot.kg - Math.round(kg);
       return { ...s, store: left > 0 ? s.store.map((l) => (l.id === id ? { ...l, kg: left } : l)) : s.store.filter((l) => l.id !== id) };
     });
+  },
+
+  /* ── scouting and soil ── */
+  /** Saves a walk; the planting's scouting tasks due by now (or within 3 days) are ticked off with it. */
+  addScout(x: Omit<Scout, "id">) {
+    if (!(x.plants >= 1 && x.plants <= 200 && x.hit >= 0 && x.hit <= x.plants)) return;
+    const scout: Scout = { ...x, id: uid("s") };
+    mutate((s) => {
+      const done = { ...s.done };
+      const p = x.plantingId ? s.plantings.find((q) => q.id === x.plantingId) : undefined;
+      if (p) for (const t of CROPS[p.crop].tasks)
+        if (t.id.startsWith("faw") && addDays(p.plantedOn, t.day) <= addDays(x.date, 3)) done[`${p.id}:${t.id}`] = true;
+      return { ...s, done, scouts: [...s.scouts, scout].slice(-MAX_SCOUTS) };
+    });
+  },
+  removeScout(id: string) {
+    mutate((s) => ({ ...s, scouts: s.scouts.filter((x) => x.id !== id) }));
+  },
+  setSoilPh(ph: number | null) {
+    mutate((s) => ({ ...s, soilPh: ph != null && Number.isFinite(ph) && ph >= 3 && ph <= 9 ? Math.round(ph * 10) / 10 : null }));
+  },
+  setSharePest(on: boolean) {
+    mutate((s) => ({ ...s, sharePest: on }));
   },
 
   /* ── budget prices ── */

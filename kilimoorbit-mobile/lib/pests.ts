@@ -72,9 +72,9 @@ export const PROBLEMS: Problem[] = [
     symptoms: ["holes", "frass", "windows", "cobDamage"], key: ["frass", "windows"], seasons: ["masika", "vuli"],
     look: { en: "Caterpillars with a pale upside-down Y on the head, feeding deep in the funnel.", sw: "Viwavi wenye alama ya Y iliyopinduka kichwani, wakila ndani ya kikonyo." },
     act: [
-      { en: "Check 20 plants across the field every week.", sw: "Kagua mimea 20 shambani kote kila wiki." },
+      { en: "Scout every week with a W-walk: 5 stops, 10 plants each (Scout, at the top of this screen).", sw: "Kagua kila wiki kwa kutembea kwa umbo la W: vituo 5, mimea 10 kila kimoja (Kagua, juu ya skrini hii)." },
       { en: "Crush egg masses and young caterpillars by hand.", sw: "Ponda mayai na viwavi wachanga kwa mkono." },
-      { en: "If more than 1 plant in 5 is damaged, put an approved bio-pesticide or insecticide into the funnel, early morning or evening.", sw: "Iwapo zaidi ya mmea 1 kati ya 5 umeharibiwa, weka dawa iliyoidhinishwa ndani ya kikonyo asubuhi na mapema au jioni." },
+      { en: "If 1 plant in 5 is damaged while the maize is under 3 weeks old (2 in 5 after that), put an approved bio-pesticide or insecticide into the funnel, early morning or evening.", sw: "Iwapo mmea 1 kati ya 5 umeharibiwa mahindi yakiwa chini ya wiki 3 (2 kati ya 5 baada ya hapo), weka dawa iliyoidhinishwa ndani ya kikonyo asubuhi na mapema au jioni." },
     ],
     prevent: [
       { en: "Plant early, with the first rains.", sw: "Panda mapema, mvua za kwanza zikinyesha." },

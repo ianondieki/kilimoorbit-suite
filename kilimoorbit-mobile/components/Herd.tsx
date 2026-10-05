@@ -13,10 +13,12 @@ import { announce, focusRing, webCursor, type PressState } from "../lib/ui";
 import { pick } from "../lib/agronomy";
 import { addDays, dayMonth, daysBetween, todayKey } from "../lib/dates";
 import {
-  SPEC, SPECIES, TRAY, canLay, eggSeries, eggWeek, eventsFor, fill, groupReminders, layDropped, layRate, milkSeries, milkWeek,
-  openReminders, recordedDays, remindersOf, statusOf,
-  type Animal, type EventKind, type OpenReminder, type ReminderGroup, type Species,
+  HATCH_DAYS, JERRYCAN_L, NAPIER_KG, SPEC, SPECIES, TRAY, brooderTemp, canLay, dailyLitres, dairyMealFor, dueHatchSteps, eggSeries, eggWeek,
+  eventsFor, fill, groupReminders, hatchSteps, layDropped, layRate, milkSeries, milkWeek, monthStatement, openReminders, payslipGap,
+  recordedDays, remindersOf, statusOf, waterFor,
+  type Animal, type EventKind, type Hatch, type HatchDue, type OpenReminder, type ReminderGroup, type Species,
 } from "../lib/livestock";
+import { MONTHS } from "../lib/i18n";
 import { herdActions, useHerd } from "../lib/herd";
 import type { Key } from "../lib/i18n";
 import { Btn, Card, CheckRow, Chip, ChipRow, Empty, Eyebrow, Group, Sheet, Stepper, T, Tag, tint } from "./Kit";
@@ -49,7 +51,9 @@ const isMilker = (a: Animal) => a.female && !!SPEC[a.species].milk;
 const AGO = [0, 7, 30, 60, 180];
 const SERVED_AGO = [0, 30, 90, 180];
 
-export function AddAnimalSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+export function AddAnimalSheet({
+  visible, onClose, preset, onSaved,
+}: { visible: boolean; onClose: () => void; preset?: { species: Species; count?: number; born?: string }; onSaved?: () => void }) {
   const t = useTheme();
   const { t: tt } = useLang();
   const { herd } = useHerd();
@@ -62,7 +66,8 @@ export function AddAnimalSheet({ visible, onClose }: { visible: boolean; onClose
 
   useEffect(() => {
     if (!visible) return;
-    setSpecies("cow"); setName(""); setFemale(true); setCount("50"); setHatched(addDays(todayKey(), -7)); setServed(null);
+    setSpecies(preset?.species ?? "cow"); setName(""); setFemale(true); setCount(String(preset?.count ?? 50));
+    setHatched(preset?.born && preset.born <= todayKey() ? preset.born : addDays(todayKey(), -7)); setServed(null);
   }, [visible]);
 
   const today = todayKey();
@@ -77,6 +82,7 @@ export function AddAnimalSheet({ visible, onClose }: { visible: boolean; onClose
         : { species, name: finalName, female, ...(female && served ? { served } : null) },
     );
     announce(tt("herd.added", { name: finalName }));
+    onSaved?.();
     onClose();
   };
 
@@ -586,8 +592,302 @@ function MilkCard({ onAdd }: { onAdd: () => void }) {
           ? tt("milk.weekValue", { n: week.thisWeek, v: Math.round(week.thisWeek * herd.milkPrice).toLocaleString("en-KE") })
           : tt("milk.week", { n: week.thisWeek })}
       </Text>
+      <FeedWater />
       <Btn label={tt("milk.add")} onPress={onAdd} icon={(c) => <PlusGlyph size={14} color={c} />} style={{ marginTop: 12 }} testID="milk-add" />
     </Card>
+  );
+}
+
+/* ── each milking cow's water and dairy meal a day ── */
+function FeedWater() {
+  const t = useTheme();
+  const { t: tt } = useLang();
+  const { herd } = useHerd();
+  const today = todayKey();
+  const rows = herd.animals
+    .filter(isMilker)
+    .map((a) => ({ a, l: dailyLitres(herd.milk, a.id, today) }))
+    .filter((x): x is { a: Animal; l: number } => x.l != null);
+  if (!rows.length) return null;
+  return (
+    <View style={{ marginTop: 12, padding: 12, borderRadius: 12, backgroundColor: t.raised, gap: 6 }} testID="feed-water">
+      <Text style={{ color: t.ink, fontSize: 15, lineHeight: 20, fontWeight: "800" }}>{tt("feed.title")}</Text>
+      {rows.map(({ a, l }) => {
+        const w = waterFor(l);
+        return (
+          <Text key={a.id} style={{ color: t.ink, ...T.meta }} testID={`feed-${a.id}`}>
+            {tt("feed.row", { name: a.name, l, w, j: Math.ceil(w / JERRYCAN_L), kg: dairyMealFor(l) })}
+          </Text>
+        );
+      })}
+      <Text style={{ color: t.dim, fontSize: 12.5, lineHeight: 17 }}>{tt("feed.note", { lo: NAPIER_KG[0], hi: NAPIER_KG[1] })}</Text>
+    </View>
+  );
+}
+
+/* ── co-op deliveries and the payslip ── */
+const monthKey = (k: string) => k.slice(0, 7);
+const prevMonth = (m: string) => {
+  const [y, mo] = m.split("-").map(Number);
+  return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, "0")}`;
+};
+
+function DeliverySheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const t = useTheme();
+  const { t: tt } = useLang();
+  const { herd } = useHerd();
+  const [date, setDate] = useState(todayKey());
+  const [litres, setLitres] = useState(0);
+  const [price, setPrice] = useState("");
+  const [ded, setDed] = useState("");
+  const existing = (d: string) => herd.deliveries.find((x) => x.date === d)?.litres;
+  useEffect(() => {
+    if (!visible) return;
+    const today = todayKey();
+    setDate(today);
+    setLitres(existing(today) ?? [...herd.deliveries].sort((a, b) => (a.date < b.date ? 1 : -1))[0]?.litres ?? 10);
+    setPrice(herd.coop.price != null ? String(herd.coop.price) : "");
+    setDed(herd.coop.deduction != null ? String(herd.coop.deduction) : "");
+  }, [visible]);
+  const pickDate = (d: string) => { const k = d > todayKey() ? todayKey() : d; setDate(k); const x = existing(k); if (x != null) setLitres(x); };
+  const save = () => {
+    herdActions.setDelivery(date, litres);
+    const p = Number(price), d = Number(ded);
+    herdActions.setCoop({ price: price.trim() && p > 0 ? p : null, deduction: ded.trim() && d >= 0 ? d : null });
+    announce(tt("coop.saved"));
+    onClose();
+  };
+  const num = (v: string) => v.replace(/[^\d.]/g, "").slice(0, 6);
+  return (
+    <Sheet visible={visible} onClose={onClose} title={tt("coop.addTitle")} testID="sheet-delivery" footer={<Btn label={tt("rec.save")} onPress={save} style={{ flex: 1 }} testID="delivery-save" />}>
+      <Group label={tt("coop.litres")}>
+        <Stepper value={litres} onChange={setLitres} step={0.5} min={0} max={500} format={(v) => `${v} L`} label={tt("coop.litres")} />
+      </Group>
+      <Group label={tt("ev.date")}>
+        <ChipRow role="radiogroup" label={tt("ev.date")}>
+          <Chip role="radio" selected={date === todayKey()} onPress={() => pickDate(todayKey())} label={tt("common.today")} />
+          <Chip role="radio" selected={date === addDays(todayKey(), -1)} onPress={() => pickDate(addDays(todayKey(), -1))} label={tt("common.yesterday")} />
+        </ChipRow>
+        <DateNudge value={date} onChange={pickDate} label={tt("ev.date")} />
+      </Group>
+      <View style={{ flexDirection: "row", gap: 10 }}>
+        <Field label={tt("coop.price")} glyph={null} value={price} onChangeText={(v) => setPrice(num(v))} height={52} inputStyle={{ fontSize: 17, fontWeight: "700" }} status={null} statusMinHeight={0} style={{ flex: 1 }} inputProps={{ keyboardType: "numeric", inputMode: "decimal", testID: "coop-price" } as any} />
+        <Field label={tt("coop.ded")} glyph={null} value={ded} onChangeText={(v) => setDed(num(v))} height={52} inputStyle={{ fontSize: 17, fontWeight: "700" }} status={null} statusMinHeight={0} style={{ flex: 1 }} inputProps={{ keyboardType: "numeric", inputMode: "decimal", testID: "coop-ded" } as any} />
+      </View>
+      <Text style={{ color: t.dim, fontSize: 12.5, lineHeight: 17 }}>{tt("coop.dedNote")}</Text>
+    </Sheet>
+  );
+}
+
+function PayslipSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const t = useTheme();
+  const { lang, t: tt } = useLang();
+  const { herd } = useHerd();
+  const thisMonth = monthKey(todayKey());
+  const [month, setMonth] = useState(prevMonth(thisMonth));
+  const [slip, setSlip] = useState("");
+  useEffect(() => { if (visible) { setMonth(prevMonth(thisMonth)); setSlip(""); } }, [visible]);
+  const st = monthStatement(herd.deliveries, month, herd.coop);
+  const n = Number(slip);
+  const valid = slip.trim() !== "" && Number.isFinite(n) && n >= 0;
+  const g = valid ? payslipGap(st.litres, n, herd.coop) : null;
+  const name = (m: string) => `${MONTHS[lang][Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`;
+  return (
+    <Sheet visible={visible} onClose={onClose} title={tt("coop.slipTitle")} testID="sheet-payslip" footer={<Btn label={tt("common.close")} onPress={onClose} style={{ flex: 1 }} />}>
+      <ChipRow role="radiogroup" label={tt("coop.month")}>
+        {[prevMonth(thisMonth), thisMonth].map((m) => (
+          <Chip key={m} role="radio" selected={month === m} onPress={() => setMonth(m)} label={name(m)} testID={`slip-month-${m}`} />
+        ))}
+      </ChipRow>
+      <Text style={{ color: t.ink, ...T.body }} testID="slip-record">{tt(st.days === 1 ? "coop.record1" : "coop.record", { l: st.litres.toLocaleString("en-KE"), d: st.days })}</Text>
+      <Field label={tt("coop.slipLitres")} glyph={null} value={slip} onChangeText={(v) => setSlip(v.replace(/[^\d.]/g, "").slice(0, 7))} height={52} inputStyle={{ fontSize: 18, fontWeight: "700" }} status={null} statusMinHeight={0} inputProps={{ keyboardType: "numeric", inputMode: "decimal", testID: "slip-litres" } as any} />
+      {g ? (
+        <View testID="slip-result">
+          <Tag
+            block
+            tone={g.matches ? "ok" : g.gap > 0 ? "bad" : "warn"}
+            label={
+              g.matches ? tt("coop.match")
+              : g.gap > 0 ? tt(g.worth != null ? "coop.shortWorth" : "coop.short", { l: g.gap, v: (g.worth ?? 0).toLocaleString("en-KE") })
+              : tt("coop.extra", { l: -g.gap })
+            }
+          />
+        </View>
+      ) : null}
+      <Text style={{ color: t.dim, fontSize: 12.5, lineHeight: 17 }}>{tt("coop.slipNote")}</Text>
+    </Sheet>
+  );
+}
+
+function CoopCard() {
+  const t = useTheme();
+  const { lang, t: tt } = useLang();
+  const { herd } = useHerd();
+  const [sheet, setSheet] = useState<null | "delivery" | "slip">(null);
+  const month = monthKey(todayKey());
+  const st = monthStatement(herd.deliveries, month, herd.coop);
+  return (
+    <Card>
+      <Eyebrow text={tt("coop.eyebrow", { month: MONTHS[lang][Number(month.slice(5, 7)) - 1].toUpperCase() })} />
+      {herd.deliveries.length === 0 ? (
+        <Text style={{ color: t.ink, ...T.body }}>{tt("coop.empty")}</Text>
+      ) : (
+        <View testID="coop-month">
+          <Text style={{ color: t.ink, ...T.title }}>{tt(st.days === 1 ? "coop.month.l1" : "coop.month.l", { l: st.litres.toLocaleString("en-KE"), d: st.days })}</Text>
+          {st.net != null ? (
+            <Text style={{ color: t.dim, ...T.meta }}>{tt("coop.month.pay", { net: st.net.toLocaleString("en-KE"), gross: (st.gross ?? 0).toLocaleString("en-KE"), ded: st.deductions.toLocaleString("en-KE") })}</Text>
+          ) : (
+            <Text style={{ color: t.dim, ...T.meta }}>{tt("coop.noPrice")}</Text>
+          )}
+        </View>
+      )}
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12 }}>
+        <Btn label={tt("coop.add")} onPress={() => setSheet("delivery")} icon={(c) => <PlusGlyph size={14} color={c} />} style={{ flexGrow: 1 }} testID="delivery-add" />
+        {herd.deliveries.length > 0 && <Btn kind="secondary" label={tt("coop.check")} onPress={() => setSheet("slip")} style={{ flexGrow: 1 }} testID="payslip-open" />}
+      </View>
+      <DeliverySheet visible={sheet === "delivery"} onClose={() => setSheet(null)} />
+      <PayslipSheet visible={sheet === "slip"} onClose={() => setSheet(null)} />
+    </Card>
+  );
+}
+
+/* ── hatching eggs ── */
+const stepTitle = (tt: (k: Key, v?: Record<string, string | number>) => string, d: HatchDue) =>
+  tt(`hatch.step.${d.step.id}` as Key, { n: d.hatch.eggs });
+
+function HatchSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const t = useTheme();
+  const { t: tt } = useLang();
+  const [method, setMethod] = useState<Hatch["method"]>("hen");
+  const [eggs, setEggs] = useState("12");
+  const [set, setSet] = useState(todayKey());
+  useEffect(() => { if (visible) { setMethod("hen"); setEggs("12"); setSet(todayKey()); } }, [visible]);
+  const n = Number(eggs);
+  const valid = Number.isInteger(n) && n >= 1 && n <= 10000;
+  const save = () => {
+    if (!valid) return;
+    herdActions.addHatch({ set, eggs: n, method });
+    announce(tt("hatch.saved"));
+    onClose();
+  };
+  const today = todayKey();
+  return (
+    <Sheet visible={visible} onClose={onClose} title={tt("hatch.title")} testID="sheet-hatch" footer={<Btn label={tt("hatch.save")} onPress={save} disabled={!valid} style={{ flex: 1 }} testID="hatch-save" />}>
+      <Group label={tt("hatch.method")}>
+        <ChipRow role="radiogroup" label={tt("hatch.method")}>
+          <Chip role="radio" selected={method === "hen"} onPress={() => { setMethod("hen"); if (eggs === "50") setEggs("12"); }} label={tt("hatch.hen")} testID="hatch-hen" />
+          <Chip role="radio" selected={method === "incubator"} onPress={() => { setMethod("incubator"); if (eggs === "12") setEggs("50"); }} label={tt("hatch.incubator")} testID="hatch-incubator" />
+        </ChipRow>
+      </Group>
+      <Field label={tt("hatch.eggs")} glyph={null} value={eggs} onChangeText={(v) => setEggs(v.replace(/[^\d]/g, "").slice(0, 5))} height={52} inputStyle={{ fontSize: 18, fontWeight: "700" }} status={null} statusMinHeight={0} inputProps={{ keyboardType: "numeric", inputMode: "numeric", testID: "hatch-eggs" } as any} />
+      <Group label={tt("hatch.set")}>
+        <ChipRow role="radiogroup" label={tt("hatch.set")}>
+          <Chip role="radio" selected={set === today} onPress={() => setSet(today)} label={tt("common.today")} />
+          <Chip role="radio" selected={set === addDays(today, -1)} onPress={() => setSet(addDays(today, -1))} label={tt("common.yesterday")} />
+        </ChipRow>
+        <DateNudge value={set} onChange={(k) => setSet(k > today ? today : k)} label={tt("hatch.set")} />
+      </Group>
+      <View style={{ backgroundColor: t.raised, borderRadius: 14, padding: 14, gap: 6 }}>
+        {(method === "incubator" ? ["hatch.tip.temp", "hatch.tip.turn", "hatch.tip.candle"] : ["hatch.tip.hen", "hatch.tip.nest", "hatch.tip.candle"]).map((k) => (
+          <View key={k} style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
+            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: t.ok, marginTop: 8 }} />
+            <Text style={{ flex: 1, color: t.ink, ...T.meta }}>{tt(k as Key)}</Text>
+          </View>
+        ))}
+      </View>
+    </Sheet>
+  );
+}
+
+function HatchCard() {
+  const t = useTheme();
+  const { lang, t: tt } = useLang();
+  const { herd } = useHerd();
+  const [adding, setAdding] = useState<Hatch | null>(null);
+  const today = todayKey();
+  if (!herd.hatches.length) return null;
+  return (
+    <Card>
+      <Eyebrow text={tt("hatch.eyebrow")} />
+      {herd.hatches.map((h, i) => {
+        const day = daysBetween(h.set, today);
+        const next = hatchSteps(h).find((s) => addDays(h.set, s.day) >= today);
+        const due = day >= HATCH_DAYS;
+        return (
+          <View key={h.id} style={{ paddingVertical: 10, gap: 8, borderTopWidth: i ? 1 : 0, borderTopColor: t.line }} testID={`hatch-${h.id}`}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Text style={{ fontSize: 24 }}>🥚</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "800" }}>{tt("hatch.row", { n: h.eggs, how: tt(h.method === "hen" ? "hatch.hen" : "hatch.incubator") })}</Text>
+                <Text style={{ color: t.dim, ...T.meta }}>{tt("hatch.day", { n: Math.max(0, Math.min(day, HATCH_DAYS)), of: HATCH_DAYS, date: dayMonth(lang, addDays(h.set, HATCH_DAYS)) })}</Text>
+              </View>
+              <Pressable
+                onPress={() => herdActions.removeHatch(h.id)}
+                accessibilityRole="button"
+                accessibilityLabel={tt("hatch.remove")}
+                style={({ pressed, hovered, focused }: PressState) => [
+                  { width: 44, height: 44, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+                  (hovered || pressed) && { backgroundColor: t.raised },
+                  webCursor, focusRing(focused, t.accent),
+                ]}
+              >
+                <CrossGlyph size={12} color={t.dim} />
+              </Pressable>
+            </View>
+            <LevelBar pct={Math.max(0, Math.min(100, (day / HATCH_DAYS) * 100))} color={due ? t.accent : t.ok} track={t.raised} height={8} />
+            {due ? (
+              <>
+                <Text style={{ color: t.ink, ...T.meta }}>{tt("hatch.brooder", { w1: brooderTemp(1), w2: brooderTemp(2), w5: brooderTemp(5) })}</Text>
+                <Btn label={tt("hatch.addChicks")} onPress={() => setAdding(h)} icon={(c) => <PlusGlyph size={14} color={c} />} testID={`hatch-chicks-${h.id}`} />
+              </>
+            ) : next ? (
+              <Text style={{ color: t.dim, ...T.meta }}>{tt("hatch.next", { what: tt(`hatch.step.${next.id}` as Key, { n: h.eggs }), date: dayMonth(lang, addDays(h.set, next.day)) })}</Text>
+            ) : null}
+          </View>
+        );
+      })}
+      <AddAnimalSheet
+        visible={!!adding}
+        onClose={() => setAdding(null)}
+        preset={adding ? { species: "chicken", count: adding.eggs, born: addDays(adding.set, HATCH_DAYS) } : undefined}
+        onSaved={() => { if (adding) herdActions.removeHatch(adding.id); }}
+      />
+    </Card>
+  );
+}
+
+/** Today: hatch steps due (candling, stop turning, hatch day), with tick and undo. */
+export function HatchRows() {
+  const { t: tt } = useLang();
+  const { herd } = useHerd();
+  const today = todayKey();
+  const [ticked, setTicked] = useState<HatchDue[]>([]);
+  useFocusEffect(useCallback(() => () => setTicked([]), []));
+  const key = (d: HatchDue) => `${d.hatch.id}:${d.step.id}`;
+  const open = dueHatchSteps(herd.hatches, herd.done, today, 1);
+  const shown = [...ticked, ...open.filter((d) => !ticked.some((x) => key(x) === key(d)))].sort((a, b) => a.inDays - b.inDays);
+  if (!shown.length) return null;
+  return (
+    <View>
+      {shown.map((d) => {
+        const done = ticked.some((x) => key(x) === key(d));
+        return (
+          <CheckRow
+            key={key(d)}
+            testID={`hatch-step-${d.step.id}`}
+            checked={done}
+            onToggle={() => {
+              herdActions.toggleHatchStep(d.hatch.id, d.step.id);
+              setTicked((s) => (done ? s.filter((x) => key(x) !== key(d)) : [...s, d]));
+            }}
+            title={stepTitle(tt, d)}
+            meta={`${dueText(tt, d.inDays)} · ${tt("hatch.short")}`}
+            metaTone={d.inDays < 0 ? "late" : d.inDays <= 1 ? "soon" : undefined}
+            leading={<View style={{ width: 30, alignItems: "center" }}><Text style={{ fontSize: 20 }}>🥚</Text></View>}
+          />
+        );
+      })}
+    </View>
   );
 }
 
@@ -649,6 +949,7 @@ export function HerdSection() {
   const [eggsFor, setEggsFor] = useState<string | undefined | null>(null);
   const hasMilkers = herd.animals.some(isMilker);
   const hasLayers = herdHasLayers(herd.animals) || herd.eggs.length > 0;
+  const [hatching, setHatching] = useState(false);
 
   return (
     <View style={{ gap: 14 }}>
@@ -664,6 +965,7 @@ export function HerdSection() {
       ) : (
         <>
           {hasMilkers && <MilkCard onAdd={() => setMilkFor(undefined)} />}
+          {(hasMilkers || herd.deliveries.length > 0) && <CoopCard />}
           {hasLayers && <EggCard onAdd={() => setEggsFor(undefined)} />}
           {herd.animals.map((a) => (
             <AnimalCard key={a.id} a={a} onRecord={(kind) => setEvent({ animal: a, kind })} onMilk={() => setMilkFor(a.id)} onEggs={() => setEggsFor(a.id)} />
@@ -671,6 +973,9 @@ export function HerdSection() {
           <Btn kind="secondary" label={tt("herd.add")} onPress={() => setAdding(true)} icon={(c) => <PlusGlyph size={14} color={c} />} testID="herd-add" />
         </>
       )}
+      <HatchCard />
+      <Btn kind="ghost" small label={tt("hatch.open")} onPress={() => setHatching(true)} icon={(c) => <PlusGlyph size={13} color={c} />} style={{ alignSelf: "flex-start" }} testID="hatch-open" />
+      <HatchSheet visible={hatching} onClose={() => setHatching(false)} />
       <AddAnimalSheet visible={adding} onClose={() => setAdding(false)} />
       <EventSheet visible={!!event} onClose={() => setEvent(null)} animals={event ? [event.animal] : []} kind={event?.kind ?? null} />
       <MilkSheet visible={milkFor !== null} onClose={() => setMilkFor(null)} animalId={milkFor ?? undefined} />

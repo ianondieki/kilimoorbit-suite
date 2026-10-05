@@ -7,16 +7,19 @@
 import { test, expect } from "@playwright/test";
 import { addDays } from "../lib/dates";
 import {
-  canLay, currentService, eggWeek, groupReminders, layDropped, layRate, milkWeek, openReminders, recordedDays, remindersOf, statusOf,
-  type Animal, type AnimalEvent, type EggEntry, type MilkEntry,
+  brooderTemp, canLay, currentService, dailyLitres, dairyMealFor, dueHatchSteps, eggWeek, groupReminders, hatchSteps, layDropped, layRate,
+  milkWeek, monthStatement, openReminders, payslipGap, recordedDays, remindersOf, statusOf, waterFor,
+  type Animal, type AnimalEvent, type Delivery, type EggEntry, type Hatch, type MilkEntry,
 } from "../lib/livestock";
+import { pushPullPlan, stageOf, thresholdFor, verdict } from "../lib/scouting";
+import { limeAdvice, phBand } from "../lib/soil";
 import { bagsLabel, bagsOf, dueChecks, holdPlan, nextCheck, type Lot } from "../lib/postharvest";
 import { budgetFor, compareCrops } from "../lib/budget";
 import { alertHits, suggestTarget } from "../lib/pricewatch";
 import { taskHint } from "../lib/advice";
 import { CROPS, CROP_KEYS, acresFromSteps, bagsFor, inputsFor } from "../lib/agronomy";
 import { diagnose } from "../lib/pests";
-import { cleanArb, cleanFeed, cleanForecast, cleanListing } from "../lib/validate";
+import { cleanArb, cleanFeed, cleanForecast, cleanListing, cleanPestWatch } from "../lib/validate";
 import type { WxDay } from "../lib/api";
 
 const TODAY = "2026-10-05";
@@ -321,5 +324,90 @@ test.describe("eggs and field size", () => {
     expect(acresFromSteps(60, 45)).toBe(0.67);
     expect(acresFromSteps(0, 50)).toBeNull();
     expect(acresFromSteps(NaN, 50)).toBeNull();
+  });
+});
+
+test.describe("fall armyworm scouting and push-pull", () => {
+  test("thresholds by crop age: 20 % in the first 2½ weeks, 40 % to tasselling", () => {
+    expect(thresholdFor(10)).toBe(20);
+    expect(thresholdFor(17)).toBe(20);
+    expect(thresholdFor(18)).toBe(40);
+    expect(thresholdFor(null)).toBe(40);
+    expect([stageOf(5), stageOf(30), stageOf(75)]).toEqual(["early", "whorl", "late"]);
+  });
+
+  test("verdict: act, near or fine; after tasselling spraying is not advised", () => {
+    expect(verdict(50, 11, 12)).toMatchObject({ pct: 22, threshold: 20, act: true });
+    expect(verdict(50, 13, 25)).toMatchObject({ pct: 26, threshold: 40, act: false, near: false });
+    expect(verdict(50, 16, 25)).toMatchObject({ pct: 32, act: false, near: true });
+    expect(verdict(50, 30, 75)).toMatchObject({ pct: 60, stage: "late", act: false, near: false });
+    expect(verdict(50, 51, 20)).toBeNull();
+    expect(verdict(0, 0, 20)).toBeNull();
+  });
+
+  test("push-pull: plots of at most 50 × 50 m, desmodium 1 kg an acre, three border rows", () => {
+    const one = pushPullPlan(1)!;
+    expect(one.plots).toBe(2);
+    expect(one.side).toBe(45);
+    expect(one.desmodiumKg).toBe(1);
+    expect(one.brachiaria).toBeGreaterThan(one.napier); // 30 cm apart instead of 50
+    expect(pushPullPlan(0.04)).toBeNull(); // under 15 × 15 m
+    expect(pushPullPlan(NaN)).toBeNull();
+  });
+
+  test("pest watch answers are cleaned: junk gives null, numbers are clamped", () => {
+    expect(cleanPestWatch(null)).toBeNull();
+    expect(cleanPestWatch({ reports: 3 })).toBeNull();
+    const w = cleanPestWatch({ county: "Nyeri", reports: 2, over_threshold: 9, avg_pct: 250, max_pct: -4, level: "panic", source: "x", last_report: "soon" })!;
+    expect(w).toMatchObject({ county: "Nyeri", reports: 2, over_threshold: 2, avg_pct: 0, max_pct: 0, level: "low", source: "SAMPLE", last_report: null });
+    expect(cleanPestWatch({ county: "Nyeri", reports: 0, level: "high" })!.level).toBe("none");
+  });
+});
+
+test.describe("soil and lime", () => {
+  test("lime by pH: none from 5.5, about 1 t/ha below, 2 t/ha under 5.0", () => {
+    expect(limeAdvice(null, "maize", 1)).toEqual({ kind: "unknown" });
+    expect(limeAdvice(6.0, "maize", 1)).toEqual({ kind: "none", ph: 6.0 });
+    expect(limeAdvice(5.2, "maize", 1)).toMatchObject({ kind: "lime", kgPerAcre: 400, kg: 400, bags: 8, microKg: 100 });
+    expect(limeAdvice(4.8, "beans", 2)).toMatchObject({ kind: "lime", kgPerAcre: 800, kg: 1600, bags: 32 });
+  });
+
+  test("potatoes are limed only below pH 5.0 (scab risk)", () => {
+    expect(limeAdvice(5.2, "potatoes", 1).kind).toBe("none");
+    expect(limeAdvice(4.7, "potatoes", 1).kind).toBe("lime");
+    expect([phBand(4.6), phBand(5.3), phBand(6.2), phBand(7.9)]).toEqual(["veryAcid", "acid", "good", "alkaline"]);
+  });
+});
+
+test.describe("dairy and hatching", () => {
+  test("a cow's water and dairy meal from her litres", () => {
+    expect(waterFor(14)).toBe(128); // 65 L + 4.5 L a litre
+    expect(waterFor(0)).toBe(65);
+    expect(dairyMealFor(14)).toBe(5.5); // 1 kg per 2.5 L, to the half kilo
+    const milk: MilkEntry[] = [1, 2, 3].map((d) => ({ id: `m${d}`, animalId: "c1", date: addDays(TODAY, -d), litres: 10 + d }));
+    expect(dailyLitres(milk, "c1", TODAY)).toBe(12);
+    expect(dailyLitres(milk, "c2", TODAY)).toBeNull();
+  });
+
+  test("co-op month and payslip: expected pay after deductions, litres missing and their worth", () => {
+    const d = (date: string, litres: number): Delivery => ({ id: date, date, litres });
+    const ds = [d("2026-10-01", 12), d("2026-10-02", 11.5), d("2026-09-30", 20)];
+    const st = monthStatement(ds, "2026-10", { price: 50, deduction: 5 });
+    expect(st).toEqual({ month: "2026-10", litres: 23.5, days: 2, gross: 1175, deductions: 118, net: 1057 });
+    expect(monthStatement(ds, "2026-10", { price: null, deduction: null }).net).toBeNull();
+    expect(payslipGap(23.5, 20, { price: 50, deduction: 5 })).toEqual({ gap: 3.5, worth: 158, matches: false });
+    expect(payslipGap(23.5, 23, { price: 50, deduction: 5 }).matches).toBe(true);
+  });
+
+  test("hatching calendar: candling, lockdown and hatch day; ticked steps drop out", () => {
+    const set = addDays(TODAY, -7);
+    const hen: Hatch = { id: "h", set, eggs: 12, method: "hen" };
+    const inc: Hatch = { id: "i", set, eggs: 60, method: "incubator" };
+    expect(hatchSteps(hen).map((s) => s.day)).toEqual([7, 21]);
+    expect(hatchSteps(inc).map((s) => s.day)).toEqual([7, 14, 18, 21]);
+    const due = dueHatchSteps([hen, inc], {}, TODAY);
+    expect(due.map((d) => `${d.hatch.id}:${d.step.id}:${d.inDays}`)).toEqual(["h:candle1:0", "i:candle1:0"]);
+    expect(dueHatchSteps([hen], { "hatch:h:candle1": true }, TODAY)).toEqual([]);
+    expect([brooderTemp(1), brooderTemp(2), brooderTemp(5), brooderTemp(9)]).toEqual([35, 32, 23, 21]);
   });
 });

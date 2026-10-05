@@ -18,6 +18,7 @@ import { Btn, Chip, ChipRow, Group, Sheet, Stepper, T } from "./Kit";
 import { CropCoin } from "./ShambaPanel";
 import Field from "./Field";
 import Segmented from "./Segmented";
+import { GenuineNote, LimeLine, SoilPhField } from "./Soil";
 import { CheckGlyph, ChevronGlyph, LensGlyph } from "./Glyphs";
 
 const acresFmt = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/0$/, ""));
@@ -117,15 +118,16 @@ export function FarmProfileSheet({ visible, onClose }: { visible: boolean; onClo
   const { farm } = useFarm();
   const [county, setCounty] = useState<string | null>(farm.county);
   const [acres, setAcres] = useState<number>(farm.acres ?? 1);
+  const [ph, setPh] = useState<number | null>(farm.soilPh);
   const [q, setQ] = useState("");
   const searchRef = useRef<TextInput>(null);
 
   useEffect(() => {
-    if (visible) { setCounty(farm.county); setAcres(farm.acres ?? 1); setQ(""); }
+    if (visible) { setCounty(farm.county); setAcres(farm.acres ?? 1); setPh(farm.soilPh); setQ(""); }
   }, [visible]);
 
   const list = useMemo(() => searchCounties(q), [q]);
-  const save = () => { farmActions.setProfile(county, acres); onClose(); };
+  const save = () => { farmActions.setProfile(county, acres); farmActions.setSoilPh(ph); onClose(); };
 
   return (
     <Sheet
@@ -139,6 +141,7 @@ export function FarmProfileSheet({ visible, onClose }: { visible: boolean; onClo
         <Stepper value={acres} onChange={setAcres} step={0.25} min={0.25} max={500} format={acresFmt} label={tt("farm.size")} />
         <MeasureField onUse={(a) => setAcres(Math.min(500, a))} />
       </Group>
+      <SoilPhField ph={ph} onChange={setPh} />
       <View style={{ gap: 4 }}>
         <Field
           label={tt("farm.county")}
@@ -272,7 +275,9 @@ export function AddCropSheet({ visible, onClose, initialCrop }: { visible: boole
             </View>
           </View>
         ))}
+        <LimeLine crop={crop} acres={acres} ph={farm.soilPh} />
         <Text style={{ color: t.dim, fontSize: 12.5, lineHeight: 17 }}>{tt("plant.inputsNote")}</Text>
+        <GenuineNote />
       </View>
     </Sheet>
   );

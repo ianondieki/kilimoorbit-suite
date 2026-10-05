@@ -6,7 +6,7 @@
  * Each cleaner returns null when there's nothing usable.
  */
 import type {
-  ArbitrageResult, CommodityFeed, Forecast, Meta, PriceHistory, Sky, SokoListing, SokoStatus, Verdict, WxDay,
+  ArbitrageResult, CommodityFeed, Forecast, Meta, PestWatch, PriceHistory, Sky, SokoListing, SokoStatus, Verdict, WxDay,
 } from "./api";
 
 const obj = (v: unknown): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -140,5 +140,26 @@ export function cleanListing(l: unknown): SokoListing | null {
     status: STATUSES.includes(l.status) ? l.status : "open",
     created_at: str(l.created_at) && !Number.isNaN(Date.parse(l.created_at)) ? l.created_at : new Date().toISOString(),
     ...(str(l.owner_token) ? { owner_token: l.owner_token } : null),
+  };
+}
+
+const PEST_LEVELS = ["none", "low", "high"] as const;
+const pct = (v: unknown) => (num(v) && v >= 0 && v <= 100 ? Math.round(v) : 0);
+const count = (v: unknown) => (num(v) && v >= 0 && v < 1e6 ? Math.round(v) : 0);
+
+export function cleanPestWatch(w: unknown): PestWatch | null {
+  if (!obj(w) || !str(w.county) || !w.county.trim()) return null;
+  const reports = count(w.reports);
+  return {
+    county: w.county.slice(0, 40),
+    pest: "faw",
+    window_days: num(w.window_days) && w.window_days > 0 && w.window_days <= 60 ? Math.round(w.window_days) : 14,
+    source: w.source === "FARMERS" ? "FARMERS" : "SAMPLE",
+    reports,
+    over_threshold: Math.min(reports, count(w.over_threshold)),
+    avg_pct: pct(w.avg_pct),
+    max_pct: pct(w.max_pct),
+    last_report: str(w.last_report) && DAY.test(w.last_report) ? w.last_report : null,
+    level: reports === 0 ? "none" : PEST_LEVELS.includes(w.level as any) ? (w.level as PestWatch["level"]) : "low",
   };
 }

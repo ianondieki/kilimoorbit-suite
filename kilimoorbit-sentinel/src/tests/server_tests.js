@@ -188,6 +188,30 @@ await check("GET /api/prices/history?crop=beans → 14 days per market, board ag
   return { ok: h.status === 200 && h.body.source === "SAMPLE" && h.body.dates.length === 14 && m.length === 3 && m.every((x) => x.prices.length === 14 && typeof x.change_7d_pct === "number") && agrees, detail: m.map((x) => `${x.market} ${x.change_7d_pct}%`).join(" · ") };
 });
 
+await check("POST /api/pests/report → 201, stored anonymously; GET /api/pests/watch shows farmer reports", async () => {
+  const r = await post("/api/pests/report", { county: "Kakamega", crop: "maize", plants: 50, hit: 15, age_days: 12, phone: "+254712345678" });
+  const w = await get("/api/pests/watch?county=kakamega");
+  return {
+    ok: r.status === 201 && r.body.report.pct === 30 && r.body.report.over === true && !("phone" in r.body.report)
+      && w.status === 200 && w.body.source === "FARMERS" && w.body.reports >= 1 && w.body.county === "Kakamega",
+    detail: `${w.body?.reports} report(s), ${w.body?.level}`,
+  };
+});
+
+await check("pest watch: bad reports and counties → 400 with fields; sample elsewhere", async () => {
+  const a = await post("/api/pests/report", { county: "Meru", crop: "maize", plants: 50, hit: 60 });
+  const b = await post("/api/pests/report", "[1,2]", true);
+  const c = await get("/api/pests/watch?county=Atlantis");
+  const d = await get("/api/pests/watch");
+  const e = await get("/api/pests/watch?county[]=Meru");
+  const f = await get("/api/pests/watch?county=Turkana");
+  return {
+    ok: a.status === 400 && a.body.fields.includes("hit") && b.status === 400 && c.status === 400 && d.status === 400 && e.status === 400
+      && f.status === 200 && f.body.source === "SAMPLE",
+    detail: `${a.status}/${b.status}/${c.status}/${d.status}/${e.status} · Turkana ${f.body?.source}`,
+  };
+});
+
 await check("GET /api/prices/history unknown/missing crop → 400", async () => {
   const a = await get("/api/prices/history?crop=unobtainium");
   const b = await get("/api/prices/history");

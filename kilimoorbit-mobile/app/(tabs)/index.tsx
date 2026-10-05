@@ -11,8 +11,10 @@ import Header from "../../components/Header";
 import FAB from "../../components/FAB";
 import WeatherCard, { windowText, type Win } from "../../components/WeatherCard";
 import { Guard } from "../../components/ScreenError";
-import { AddAnimalSheet, EggSheet, HerdRows, MilkSheet, herdHasLayers, herdHasMilkers } from "../../components/Herd";
+import { AddAnimalSheet, EggSheet, HatchRows, HerdRows, MilkSheet, herdHasLayers, herdHasMilkers } from "../../components/Herd";
+import { dueHatchSteps } from "../../lib/livestock";
 import { StoreRows } from "../../components/Ghala";
+import { PestWatchCard } from "../../components/Scout";
 import { checkKind, dueChecks } from "../../lib/postharvest";
 import { AlertsCard } from "../../components/PriceAlerts";
 import { useAlerts } from "../../lib/alerts";
@@ -130,6 +132,8 @@ export default function Today() {
 
           <ProblemBanner />
           <Guard name="alerts"><AlertsCard /></Guard>
+          {/* Only when neighbours are finding fall armyworm above the threshold, and only for maize growers. */}
+          {farm.plantings.some((p) => p.crop === "maize") && <Guard name="pest-watch"><PestWatchCard county={county} compact /></Guard>}
 
           {wide ? (
             <View style={{ flexDirection: "row", gap: 14, alignItems: "flex-start" }}>
@@ -212,7 +216,8 @@ function TasksCard({ onAddCrop, onAddAnimal, days }: { onAddCrop: () => void; on
   const hasAnimals = herd.animals.length > 0;
   const herdDue = hasAnimals ? openReminders(herd.animals, herd.done, todayKey(), 7).length : 0;
   const storeDue = dueChecks(farm.store, todayKey(), 1).length;
-  const hasStore = farm.store.length > 0;
+  const hatchDue = dueHatchSteps(herd.hatches, herd.done, todayKey(), 1).length;
+  const hasStore = farm.store.length > 0 || herd.hatches.length > 0;
 
   return (
     <Card>
@@ -232,7 +237,8 @@ function TasksCard({ onAddCrop, onAddAnimal, days }: { onAddCrop: () => void; on
           {shown.length > 0 && <TaskRows tasks={shown} showCrop days={days} onToggled={(k) => setKept((s) => new Set(s).add(k))} />}
           <Guard name="herd-rows"><HerdRows max={3} /></Guard>
           <Guard name="store-rows"><StoreRows /></Guard>
-          {shown.length === 0 && herdDue === 0 && storeDue === 0 && (
+          <Guard name="hatch-rows"><HatchRows /></Guard>
+          {shown.length === 0 && herdDue === 0 && storeDue === 0 && hatchDue === 0 && (
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4 }}>
               <CheckCoin size={24} bg={t.ok} fg={t.field} />
               <Text style={{ flex: 1, color: t.ink, ...T.body }}>{tt("tasks.allDone")}</Text>

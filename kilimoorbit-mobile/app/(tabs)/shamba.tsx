@@ -17,6 +17,8 @@ import { Bounded } from "../../components/Bounded";
 import { AddCropSheet, FarmProfileSheet, RecordSheet } from "../../components/FarmSheets";
 import { LotSheet, StoreCard, StoreSheet } from "../../components/Ghala";
 import { BudgetSheet } from "../../components/Budget";
+import { LastScoutLine, ScoutSheet } from "../../components/Scout";
+import { GenuineNote, LimeLine } from "../../components/Soil";
 import { isStoreCrop, type Lot, type StoreCrop } from "../../lib/postharvest";
 import { Btn, Card, Chip, ChipRow, Empty, Eyebrow, T, Tag, tint } from "../../components/Kit";
 import { Enter, LevelBar } from "../../components/Motion";
@@ -46,11 +48,12 @@ export default function Shamba() {
   // ?tab=livestock (or records) opens that section directly.
   const params = useLocalSearchParams<{ tab?: string }>();
   const [tab, setTab] = useState<Tab>(params.tab === "livestock" || params.tab === "records" ? params.tab : "calendar");
-  const [sheet, setSheet] = useState<null | "county" | "crop" | "record" | "store" | "budget" | "sale">(null);
+  const [sheet, setSheet] = useState<null | "county" | "crop" | "record" | "store" | "budget" | "sale" | "scout">(null);
   const [preset, setPreset] = useState<CropKey | undefined>(undefined);
   const [storeFor, setStoreFor] = useState<{ crop?: StoreCrop; kg?: number; acres?: number }>({});
   const [budgetPreset, setBudgetPreset] = useState<{ crop?: CropKey; acres?: number }>({});
   const [lot, setLot] = useState<Lot | null>(null);
+  const [scoutFor, setScoutFor] = useState<string | undefined>(undefined);
 
   const addCrop = (k?: CropKey) => { setPreset(k); setSheet("crop"); };
   const actions: CropActions = {
@@ -63,6 +66,7 @@ export default function Shamba() {
     onStore: () => { setStoreFor({}); setSheet("store"); },
     onSell: setLot,
     onBudget: (crop, acres) => { setBudgetPreset({ crop, acres }); setSheet("budget"); },
+    onScout: (p) => { setScoutFor(p.id); setSheet("scout"); },
   };
 
   return (
@@ -122,6 +126,7 @@ export default function Shamba() {
       <StoreSheet visible={sheet === "store"} onClose={() => setSheet(null)} crop={storeFor.crop} kg={storeFor.kg} acres={storeFor.acres} />
       <BudgetSheet visible={sheet === "budget"} onClose={() => setSheet(null)} crop={budgetPreset.crop} acres={budgetPreset.acres} onPlant={addCrop} />
       <LotSheet lot={lot} onClose={() => setLot(null)} />
+      <ScoutSheet visible={sheet === "scout"} onClose={() => setSheet(null)} plantingId={scoutFor} />
     </SafeAreaView>
   );
 }
@@ -133,6 +138,7 @@ type CropActions = {
   onStore: () => void;
   onSell: (l: Lot) => void;
   onBudget: (crop?: CropKey, acres?: number) => void;
+  onScout: (p: Planting) => void;
 };
 
 function Calendar({ actions }: { actions: CropActions }) {
@@ -217,6 +223,10 @@ function PlantingCard({ p, days, actions }: { p: Planting; days?: WxDay[]; actio
       </View>
 
       <Outlook p={p} />
+      {/* Maize: the last fall armyworm walk, from emergence to tasselling (or once scouted). */}
+      {p.crop === "maize" && ((day >= 7 && day <= 90) || farm.scouts.some((x) => x.plantingId === p.id)) ? (
+        <LastScoutLine p={p} onScout={() => actions.onScout(p)} />
+      ) : null}
 
       {harvesting && (
         <Btn
@@ -252,9 +262,11 @@ function PlantingCard({ p, days, actions }: { p: Planting; days?: WxDay[]; actio
                 </View>
               </View>
             ))}
+            <LimeLine crop={p.crop} acres={p.acres} ph={farm.soilPh} planted={day >= 0} />
             <Text style={{ color: t.dim, fontSize: 12.5, lineHeight: 17 }}>
               {tt("plant.spacing", { s: plan.spacing })} · {tt("plant.inputsNote")}
             </Text>
+            <GenuineNote />
             <Btn
               kind="ghost"
               small
