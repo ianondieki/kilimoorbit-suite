@@ -9,6 +9,8 @@
  *   POST /api/suite      → runs the catalogue, returns results
  *   POST /api/autopilot  → agentic chain SENSE → A → gate → C → brief
  *   POST /api/signin     → { name, email } | { name, phone } → welcome email (SMTP or SIMULATED) | phone profile (SIMULATED, no SMS)
+ *   GET  /api/weather    → ?county= → 7-day farm forecast + spray / plant / dry windows (see src/agro/weather.js)
+ *   GET  /api/prices/history → ?crop= → 14 daily prices per market + 7-day change (see src/agro/prices.js)
  *   /api/soko/*          → produce marketplace (see src/soko/routes.js)
  *
  * `createApp()` is exported so the HTTP test-suite can boot the server on an
@@ -22,6 +24,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 import { callApex, engineMode, MODEL } from "./apex_client.js";
 import { createSokoRouter } from "./soko/routes.js";
+import { findCounty, forecastFor } from "./agro/weather.js";
+import { boardFor, historyFor } from "./agro/prices.js";
 import { SUITE, runSuite, loadPayload } from "./suite.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -126,16 +130,13 @@ export function createApp() {
     return p;
   }
 
+  // Board prices follow the deterministic daily levels in src/agro/prices.js
+  // (so the board, its 14-day history and Soko's fair price agree, and ▲/▼ is
+  // the change since yesterday), with ±1 % intraday movement on top.
   function liveCommodityFeed() {
     const feed = loadPayload("commodity_feed.json");
     feed.data_age_minutes = 3 + Math.floor(Math.random() * 40);
-    for (const c of feed.commodities)
-      for (const q of c.quotes) {
-        const np = Math.max(1, Math.round(q.price + (Math.random() * 2 - 1) * q.price * 0.03));
-        q.delta = np - q.price;
-        q.price = np;
-      }
-    return feed;
+    return boardFor(feed, { jitter: 0.01 });
   }
 
   app.get("/api/health", (_req, res) =>
@@ -145,6 +146,35 @@ export function createApp() {
   // Soko marketplace — listings + claims, priced off the live commodity feed.
   app.use("/api/soko", rateLimit({ windowMs: 60_000, max: 120, name: "marketplace" }),
     createSokoRouter({ liveFeed: liveCommodityFeed }));
+
+  // Farm weather: 7-day forecast for a county plus the spray / plant / dry
+  // windows. SAMPLE by default (deterministic); WEATHER_PROVIDER=open-meteo for real data.
+  app.get("/api/weather", rateLimit({ windowMs: 60_000, max: 120, name: "weather" }), async (req, res) => {
+    // Only a plain string: ?county[]=… or repeated keys arrive as arrays/objects.
+    const name = typeof req.query.county === "string" ? req.query.county.trim().slice(0, 40) : "";
+    if (!name)
+      return res.status(400).json({ error: "A county is required, e.g. ?county=Meru.", error_type: "MISSING_COUNTY", fields: ["county"] });
+    const county = findCounty(name);
+    if (!county)
+      return res.status(400).json({ error: `Unknown county: ${name}.`, error_type: "UNKNOWN_COUNTY", fields: ["county"] });
+    try {
+      res.json(await forecastFor(county));
+    } catch (err) {
+      res.status(500).json({ error: "Forecast unavailable.", error_type: "SERVER_ERROR" });
+    }
+  });
+
+  // Price history for one crop: 14 daily closes per market (sample data, same
+  // levels as the live board) and the change over the last week.
+  app.get("/api/prices/history", rateLimit({ windowMs: 60_000, max: 120, name: "price history" }), (req, res) => {
+    const crop = typeof req.query.crop === "string" ? req.query.crop.trim().slice(0, 40) : "";
+    if (!crop)
+      return res.status(400).json({ error: "A crop is required, e.g. ?crop=maize.", error_type: "MISSING_CROP", fields: ["crop"] });
+    const h = historyFor(loadPayload("commodity_feed.json"), crop);
+    if (!h)
+      return res.status(400).json({ error: `No prices for crop: ${crop}.`, error_type: "UNKNOWN_CROP", fields: ["crop"] });
+    res.json({ ...h, source: "SAMPLE", currency: "KES", unit: "kg" });
+  });
 
   app.get("/api/meta", (_req, res) => {
     const payloads = {};
@@ -294,8 +324,12 @@ export function createApp() {
 
   app.post("/api/apex", apexLimiter, async (req, res) => {
     const t0 = Date.now();
-    const result = await callApex(req.body?.payload ?? {});
-    res.json({ result, latency_ms: Date.now() - t0, engine: engineMode() });
+    try {
+      const result = await callApex(req.body?.payload ?? {});
+      res.json({ result, latency_ms: Date.now() - t0, engine: engineMode() });
+    } catch (err) {
+      res.status(500).json({ error: "Apex failed unexpectedly.", error_type: "SERVER_ERROR" });
+    }
   });
 
   // ── verification suite (shared catalogue: src/suite.js)
@@ -430,6 +464,12 @@ if (isMain) {
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 3000).unref();
   };
+  // Safety net: Node exits on an unhandled promise rejection by default. Every
+  // route catches its own errors; anything that still slips through is logged
+  // and the server keeps serving farmers rather than going down.
+  process.on("unhandledRejection", (reason) => {
+    console.error("[unhandledRejection]", reason instanceof Error ? reason.stack : reason);
+  });
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
 }

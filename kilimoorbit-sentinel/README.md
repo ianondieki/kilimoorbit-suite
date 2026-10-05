@@ -1,6 +1,6 @@
 # KilimoOrbit Sentinel
 
-An AI agri-logistics decision engine for Kenyan smallholder farmers, powered by Google Gemini (APEX core). It routes JSON payloads through five execution modes — market arbitrage, farmer chat, alert broadcast, onboarding, and logistics replanning — and ships with a Mission Control web dashboard, an investor one-pager at `/pitch`, and three verification suites (30 APEX contract checks, 12 Soko store checks, 27 HTTP integration checks).
+An AI agri-logistics decision engine for Kenyan smallholder farmers, powered by Google Gemini (APEX core). It routes JSON payloads through five execution modes — market arbitrage, farmer chat, alert broadcast, onboarding, and logistics replanning — and ships with a Mission Control web dashboard, an investor one-pager at `/pitch`, farm-weather and price-history APIs, and five verification suites (30 APEX contract checks, 12 Soko store checks, 21 farm-weather and price checks, 39 HTTP integration checks, 7 LIVE→MOCK fallback checks).
 
 ## Prerequisites
 
@@ -12,7 +12,7 @@ An AI agri-logistics decision engine for Kenyan smallholder farmers, powered by 
 ```bash
 npm install
 cp .env.example .env       # then paste your GEMINI_API_KEY into .env
-npm test                   # APEX (30) + Soko (12) + HTTP (27) suites
+npm test                   # APEX (30) + Soko (12) + weather & prices (21) + HTTP (39) + fallback (7)
 npm start                  # launches Mission Control → http://localhost:4517
 npm run dev                # same, with auto-restart on file changes
 ```
@@ -61,7 +61,9 @@ kilimoorbit-sentinel/
 │   ├── server.js             # Mission Control API (Express) — exports createApp()
 │   ├── routes/               # one runnable script per route (npm run route:*)
 │   ├── soko/                 # Soko marketplace: flat-file store + API router
-│   └── tests/                # run_all_tests.js · soko_tests.js · server_tests.js
+│   ├── agro/weather.js       # farm weather: 47 counties, sample/Open-Meteo forecast, farming windows
+│   ├── agro/prices.js        # daily price levels: live board, 14-day history, day-over-day ▲/▼
+│   └── tests/                # run_all_tests.js · soko_tests.js · agro_tests.js · server_tests.js · fallback_tests.js
 ├── payloads/                 # the five canonical test payloads + commodity feed
 ├── docs/                     # FUNDING_ROADMAP.md + funding_deadlines.ics
 ├── data/                     # Soko runtime store (gitignored, created on first listing)
@@ -90,11 +92,30 @@ Persistence is a single gitignored flat file (`data/soko_store.json`) — no DB.
 
 Listings move through **open → claimed → delivered** (or **open → cancelled**). The `owner_token` is returned once, in the `POST /listings` response, and is never exposed on reads — keep it client-side to allow cancellation. Unknown ids return 404, a missing/wrong token 403, validation failures 400 with a `fields` array. Writes are atomic (write-then-rename) and a corrupt store file is quarantined rather than overwritten. Run the marketplace suite with `npm run test:soko` (12/12, no LLM, no server).
 
+## Farm weather — forecast + farming windows
+
+`GET /api/weather?county=Meru` returns a 7-day forecast for any of Kenya's 47 counties (case-, space- and apostrophe-insensitive: `muranga` finds Murang'a), and on every day the three verdicts smallholders act on:
+
+| Window | Good when | Why |
+|---|---|---|
+| `spray` | rain chance < 40 %, rain < 2 mm, wind ≤ 15 km/h | a washed-off or drifting spray is wasted money and a safety risk (`reason`: `rain` / `wind`) |
+| `plant` | ≥ 20 mm over that day and the next two | the usual extension rule for "the rains have established" (`rain_3d_mm` included) |
+| `dry` | rain chance < 30 %, rain < 1 mm | safe to harvest and sun-dry grain; wet grain is how aflatoxin starts |
+
+By default the forecast is **SAMPLE** data: deterministic per county and date (altitude, rainfall region and the Kenyan season drive it), so a refresh never changes the forecast, and the apps label it DEMO / MAJARIBIO. Set `WEATHER_PROVIDER=open-meteo` for real forecasts from [Open-Meteo](https://open-meteo.com) (free, no key, cached 30 min per county); any failure falls back to SAMPLE with a `fallback` reason. Unknown or missing county → `400` `UNKNOWN_COUNTY` / `MISSING_COUNTY` with `fields`. `npm run test:agro` covers it (15/15, no network).
+
+## Market prices — live board + 14-day history
+
+The commodity board (`/api/meta` → `commodity_feed`) is sample data with market behaviour: every crop × market has a daily price level (a slow 18–41 day swing plus a few days of wobble, within about ±15 % of `payloads/commodity_feed.json`) that depends only on the date. So the board, its history and Soko's fair price always agree, a board's ▲/▼ `delta` is the real change since yesterday, and a refresh never rewrites the past; the live board adds ±1 % intraday movement.
+
+`GET /api/prices/history?crop=maize` → `{ crop, dates[14], markets: [{ market, prices[14], change_7d_pct }], source: "SAMPLE" }`, oldest first, ending today (East Africa Time). Unknown or missing crop → `400` `UNKNOWN_CROP` / `MISSING_CROP`. The apps label it DEMO / MAJARIBIO until a real feed (e.g. KAMIS) replaces `src/agro/prices.js`.
+
 ## API hardening
 
-- Per-IP rate limits (dependency-free): APEX 60/min, Autopilot 20/min, suite 6/min, marketplace 120/min, sign-in 5/hour (the sign-in endpoint sends email, so it is capped hardest). `429` responses carry `Retry-After`. Set `RATE_LIMIT_DISABLED=1` for load tests.
+- Per-IP rate limits (dependency-free): APEX 60/min, Autopilot 20/min, suite 6/min, marketplace 120/min, weather 120/min, price history 120/min, sign-in 5/hour (the sign-in endpoint sends email, so it is capped hardest). `429` responses carry `Retry-After`. Set `RATE_LIMIT_DISABLED=1` for load tests.
 - Malformed JSON bodies → `400 {"error_type":"BAD_JSON"}`; unknown `/api/*` routes → `404` JSON; bodies over 256 KB → `413`.
 - `GET /api/health` reports engine, model, version and uptime for uptime monitors and the Docker healthcheck.
+- Every async route catches its own errors (`500` JSON, never a hung request), query parameters must be plain strings (`?crop[]=` or repeated keys → `400`), and a process-level `unhandledRejection` handler logs anything that still slips through instead of letting Node exit: one bad request never takes the server down for every farmer.
 
 ## The Apex v2.0 system prompt
 
@@ -114,10 +135,11 @@ The governing prompt is loaded verbatim from **`src/apex_system_prompt.md`** (yo
 
 | Command                  | What it does                                  |
 |--------------------------|-----------------------------------------------|
-| `npm test`               | All three suites: APEX contract (30) + Soko store (12) + HTTP (27) |
+| `npm test`               | All five suites: APEX contract (30) + Soko store (12) + farm weather & prices (21) + HTTP (39) + fallback (7) |
 | `npm run test:apex`      | Cold start + integrity + all 5 routes + climate + guardrails (30/30) |
 | `npm run test:soko`      | Soko marketplace store + fair-price suite (12/12)             |
-| `npm run test:server`    | Boots the real server on a random port, hits every endpoint (27/27) |
+| `npm run test:agro`      | Farm weather (counties, sample forecast, farming windows, Open-Meteo mapping + fallback) and market prices (levels, history, board consistency) (21/21) |
+| `npm run test:server`    | Boots the real server on a random port, hits every endpoint, including hostile query shapes and payloads (39/39) |
 | `npm run check`          | Syntax-check every module (fast CI gate)      |
 | `npm start` / `npm run dev` | Mission Control dashboard on port 4517 (dev = auto-restart) |
 | `npm run docker:build`   | Build the production image                    |

@@ -26,8 +26,9 @@ import type { Key } from "../lib/i18n";
 import { useMenu, type CloseOpts } from "./MenuContext";
 import Segmented from "./Segmented";
 import {
-  ArrowGlyph, ChatGlyph, CheckCoin, CheckGlyph, ChevronGlyph, CrossGlyph, ExitGlyph, GridGlyph,
-  LeafGlyph, MoonGlyph, PersonGlyph, PhoneGlyph, PlusGlyph, RouteGlyph, SignalOffGlyph, SpeakerGlyph, SunGlyph,
+  ArrowGlyph, BarsGlyph, ChatGlyph, CheckCoin, CheckGlyph, ChevronGlyph, CrossGlyph, ExitGlyph,
+  LeafGlyph, LensGlyph, MoonGlyph, PersonGlyph, PhoneGlyph, PlusGlyph, RouteGlyph, SignalOffGlyph, SpeakerGlyph,
+  SproutGlyph, SunGlyph,
 } from "./Glyphs";
 
 type Variant = "drawer" | "docked";
@@ -167,9 +168,10 @@ function SidebarBody({ variant, open }: { variant: Variant; open: boolean }) {
   // Read-aloud preference: one shared store with Apex Chat (lib/voice.ts).
   const [voice, toggleVoice] = useVoicePref();
 
-  const isActive = (route: "/" | "/chat" | "/autopilot") =>
+  type Route = "/" | "/shamba" | "/masoko" | "/daktari" | "/chat" | "/autopilot";
+  const isActive = (route: Route) =>
     route === "/" ? pathname === "/" || pathname === "/index" : pathname === route;
-  const go = (route: "/" | "/chat" | "/autopilot") => {
+  const go = (route: Route) => {
     // Navigating to another screen: focus goes to that screen, not back to the
     // menu button of the screen being left (hidden under aria-hidden on web).
     const leaving = !isActive(route);
@@ -228,8 +230,14 @@ function SidebarBody({ variant, open }: { variant: Variant; open: boolean }) {
 
         {/* 3. Nenda */}
         <Eyebrow text={tt("eyebrow.nav")} />
-        <NavRow label={tt("nav.dashboard")} active={isActive("/")} drawer={drawer}
-          glyph={(c) => <GridGlyph size={22} color={c} />} onPress={() => go("/")} />
+        <NavRow label={tt("nav.today")} active={isActive("/")} drawer={drawer}
+          glyph={(c) => <SunGlyph size={22} color={c} />} onPress={() => go("/")} />
+        <NavRow label={tt("nav.farm")} active={isActive("/shamba")} drawer={drawer}
+          glyph={(c) => <SproutGlyph size={24} color={c} />} onPress={() => go("/shamba")} />
+        <NavRow label={tt("nav.markets")} active={isActive("/masoko")} drawer={drawer}
+          glyph={(c) => <BarsGlyph size={22} color={c} />} onPress={() => go("/masoko")} />
+        <NavRow label={tt("nav.doctor")} active={isActive("/daktari")} drawer={drawer}
+          glyph={(c) => <LensGlyph size={22} color={c} />} onPress={() => go("/daktari")} />
         <NavRow label={tt("nav.chat")} active={isActive("/chat")} drawer={drawer}
           glyph={(c) => <ChatGlyph size={24} color={c} />} onPress={() => go("/chat")} />
         <NavRow label={tt("nav.autopilot")} active={isActive("/autopilot")} drawer={drawer}

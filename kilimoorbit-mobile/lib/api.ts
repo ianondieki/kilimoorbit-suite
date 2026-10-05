@@ -1,4 +1,5 @@
 import { API_BASE } from "./config";
+import { cleanForecast, cleanHistory, cleanListing, cleanMeta } from "./validate";
 
 /* ── Apex v2.0 result types (the fields the app renders) ── */
 export type ArbitrageResult = {
@@ -12,7 +13,8 @@ export type ArbitrageResult = {
     transit_cost_kes: number | null; net_profit_projection_kes: number | null;
     logistics_risk_flag: "CLEAR" | "WEATHER_DELAY" | "BATTERY_RISK" | "ROAD_IMPASSABLE";
   };
-  climate_risk_sentinel: {
+  /** Absent when Apex sent no usable climate block (see lib/validate.ts). */
+  climate_risk_sentinel?: {
     current_kenyan_season: string; farm_altitude_zone: string;
     pre_farming_risk_level: "Low" | "Medium" | "High" | "Critical";
     frost_risk: boolean; drought_risk: boolean; flood_risk: boolean;
@@ -105,7 +107,13 @@ const post = <T,>(path: string, body: unknown, timeoutMs?: number) =>
     body: JSON.stringify(body),
   }, timeoutMs);
 
-export const getMeta = (timeoutMs = 15000) => request<Meta>("/api/meta", undefined, timeoutMs);
+/** A malformed answer is an error the callers already handle (offline / cache paths). */
+const must = <T,>(v: T | null, what: string): T => {
+  if (v == null) throw new Error(`Sentinel server sent an unusable ${what}`);
+  return v;
+};
+
+export const getMeta = async (timeoutMs = 15000) => must(cleanMeta(await request<unknown>("/api/meta", undefined, timeoutMs)), "meta");
 // A LIVE Gemini apex call (esp. the structured arbitrage compile) can take
 // 20s+, and the server's own cap is 30s — so the client must wait longer than
 // that. MOCK returns instantly, so this only matters live.
@@ -133,3 +141,42 @@ export const signIn = (input: { name: string; phone?: string; email?: string }) 
 
 export const fmtKES = (n: number | null | undefined) =>
   n == null ? "— suppressed" : `KES ${Number(n).toLocaleString("en-KE")}`;
+
+/* ── Farm weather (GET /api/weather) ── */
+export type Sky = "sunny" | "partly" | "cloudy" | "showers" | "rain" | "heavy" | "storm";
+export type Verdict = { ok: boolean; reason: string; rain_3d_mm?: number };
+export type WxDay = {
+  date: string; tmax: number; tmin: number; rain_mm: number; rain_chance: number; wind_kmh: number; sky: Sky;
+  spray: Verdict; plant: Verdict; dry: Verdict;
+};
+export type Forecast = {
+  county: string; altitude_m: number; season: string; generated_at: string;
+  source: "SAMPLE" | "OPEN_METEO"; fallback?: { from: string; reason: string };
+  days: WxDay[];
+};
+export const getWeather = async (county: string) =>
+  must(cleanForecast(await request<unknown>(`/api/weather?county=${encodeURIComponent(county)}`, undefined, 10000)), "forecast");
+
+/* ── Price history (GET /api/prices/history) ── */
+export type PriceHistory = {
+  crop: string; dates: string[]; source: "SAMPLE";
+  markets: { market: string; prices: number[]; change_7d_pct: number }[];
+};
+export const getPriceHistory = async (crop: string) =>
+  must(cleanHistory(await request<unknown>(`/api/prices/history?crop=${encodeURIComponent(crop)}`, undefined, 10000)), "price history");
+
+/* ── Soko marketplace (/api/soko) ── */
+export type SokoStatus = "open" | "claimed" | "delivered" | "cancelled";
+export type SokoListing = {
+  id: string; farmer_name: string; crop: string; county: string; qty_kg: number; ask_per_kg: number;
+  fair_price_per_kg: number | null; best_market: string | null; status: SokoStatus; created_at: string;
+  /** Returned once, by the create call only. */
+  owner_token?: string;
+};
+const listingOf = (r: any) => ({ listing: must(cleanListing(r?.listing), "listing") });
+export const createSokoListing = async (input: { farmer_name: string; crop: string; county: string; qty_kg: number; ask_per_kg: number }) =>
+  listingOf(await post<unknown>("/api/soko/listings", input, 12000));
+export const getSokoListing = async (id: string) =>
+  listingOf(await request<unknown>(`/api/soko/listings/${encodeURIComponent(id)}`, undefined, 8000));
+export const cancelSokoListing = async (id: string, owner_token: string) =>
+  listingOf(await post<unknown>(`/api/soko/listings/${encodeURIComponent(id)}/cancel`, { owner_token }, 8000));

@@ -345,3 +345,103 @@ export function CheckCoin({ size = 28, bg, fg, style }: { size?: number; bg: str
     </View>
   );
 }
+
+/* ── v1.2: farm navigation and weather ── */
+
+export function SproutGlyph({ size = 24, color, style }: GlyphProps) {
+  const s = strokeFor(size);
+  const leaf = r(size * 0.36);
+  return (
+    <Root size={size} style={style}>
+      <View style={{ position: "absolute", left: r((size - s) / 2), top: r(size * 0.42), width: s, height: r(size * 0.48), borderRadius: s / 2, backgroundColor: color }} />
+      <View style={{ position: "absolute", left: r(size * 0.5) - leaf, top: r(size * 0.18), width: leaf, height: leaf, backgroundColor: color, borderTopLeftRadius: leaf, borderBottomRightRadius: leaf }} />
+      <View style={{ position: "absolute", left: r(size * 0.5), top: r(size * 0.08), width: leaf, height: leaf, backgroundColor: color, borderTopRightRadius: leaf, borderBottomLeftRadius: leaf }} />
+    </Root>
+  );
+}
+
+export function BarsGlyph({ size = 24, color, style }: GlyphProps) {
+  const w = Math.max(3, r(size * 0.18));
+  return (
+    <Root size={size} style={style}>
+      <View style={{ flexDirection: "row", alignItems: "flex-end", gap: Math.max(2, r(size * 0.1)), height: r(size * 0.72) }}>
+        {[0.38, 0.62, 1].map((f, i) => (
+          <View key={i} style={{ width: w, height: r(size * 0.72 * f), borderRadius: 2, backgroundColor: color }} />
+        ))}
+      </View>
+    </Root>
+  );
+}
+
+export function LensGlyph({ size = 24, color, style }: GlyphProps) {
+  const s = strokeFor(size);
+  const d = r(size * 0.56);
+  const handle = r(size * 0.34);
+  return (
+    <Root size={size} style={style}>
+      <View style={{ position: "absolute", left: r(size * 0.1), top: r(size * 0.1), width: d, height: d, borderRadius: d / 2, borderWidth: s, borderColor: color }} />
+      <View
+        style={{
+          position: "absolute", width: handle, height: Math.max(3, r(s * 1.3)), borderRadius: s, backgroundColor: color,
+          left: r(size * 0.56), top: r(size * 0.7), transform: [{ rotate: "45deg" }],
+        }}
+      />
+    </Root>
+  );
+}
+
+export function CloudGlyph({ size = 24, color, style }: GlyphProps) {
+  return (
+    <Root size={size} style={style}>
+      <View style={{ position: "absolute", left: r(size * 0.08), top: r(size * 0.46), width: r(size * 0.84), height: r(size * 0.3), borderRadius: r(size * 0.15), backgroundColor: color }} />
+      <View style={{ position: "absolute", left: r(size * 0.16), top: r(size * 0.3), width: r(size * 0.36), height: r(size * 0.36), borderRadius: size, backgroundColor: color }} />
+      <View style={{ position: "absolute", left: r(size * 0.36), top: r(size * 0.18), width: r(size * 0.46), height: r(size * 0.46), borderRadius: size, backgroundColor: color }} />
+    </Root>
+  );
+}
+
+export type SkyKind = "sunny" | "partly" | "cloudy" | "showers" | "rain" | "heavy" | "storm";
+
+/** Forecast pictogram from the glyph kit: sun, cloud and rain drops. */
+export function WeatherGlyph({
+  sky, size = 32, sun, cloud, water, alert, style,
+}: { sky: SkyKind; size?: number; sun: string; cloud: string; water: string; alert?: string; style?: StyleProp<ViewStyle> }) {
+  if (sky === "sunny") return <SunGlyph size={size} color={sun} style={style} />;
+  if (sky === "partly")
+    return (
+      <Root size={size} style={style}>
+        <SunGlyph size={r(size * 0.62)} color={sun} style={{ position: "absolute", left: 0, top: 0 }} />
+        <CloudGlyph size={r(size * 0.8)} color={cloud} style={{ position: "absolute", right: 0, bottom: r(size * 0.02) }} />
+      </Root>
+    );
+  if (sky === "cloudy") return <CloudGlyph size={size} color={cloud} style={style} />;
+  const drops = sky === "showers" ? 2 : 3;
+  const dw = Math.max(2, r(size * 0.08));
+  const dh = r(size * (sky === "heavy" || sky === "storm" ? 0.24 : 0.18));
+  return (
+    <Root size={size} style={style}>
+      <CloudGlyph size={r(size * 0.86)} color={cloud} style={{ position: "absolute", left: r(size * 0.07), top: -r(size * 0.12) }} />
+      <View style={{ position: "absolute", left: 0, right: 0, top: r(size * 0.66), flexDirection: "row", justifyContent: "center", gap: r(size * 0.14) }}>
+        {Array.from({ length: drops }, (_, i) => (
+          <View
+            key={i}
+            style={{
+              width: dw, height: dh, borderRadius: dw, transform: [{ rotate: "18deg" }],
+              backgroundColor: sky === "storm" && i === 1 ? alert ?? sun : water,
+            }}
+          />
+        ))}
+      </View>
+    </Root>
+  );
+}
+
+export function MinusGlyph({ size = 24, color, style }: GlyphProps) {
+  const s = strokeFor(size);
+  const len = r(size * 0.7);
+  return (
+    <Root size={size} style={style}>
+      <View style={[center(size, len, s), { backgroundColor: color, borderRadius: s / 2 }]} />
+    </Root>
+  );
+}

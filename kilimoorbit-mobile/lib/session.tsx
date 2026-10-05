@@ -7,6 +7,10 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { tr, type Key, type Lang, type Vars } from "./i18n";
+import { FARM_KEY, clearFarmMemory } from "./farm";
+import { SOKO_KEY, clearSokoMemory } from "./soko";
+import { HERD_KEY, clearHerdMemory } from "./herd";
+import { ALERTS_KEY, clearAlertsMemory } from "./alerts";
 
 export type Profile = {
   v: 2;
@@ -67,8 +71,18 @@ function readProfile(raw: string | null | undefined, lang: Lang): [Profile | nul
     } else return [null, false];
   }
   const name = typeof p.name === "string" ? p.name.trim() : "";
-  if (!name || !(p.phone || p.email)) return [null, false];
-  return [p as Profile, migrated];
+  // Only strings reach the UI (a hand-edited or corrupted store must not crash the sidebar).
+  const phone = typeof p.phone === "string" && p.phone ? p.phone : undefined;
+  const email = typeof p.email === "string" && p.email ? p.email : undefined;
+  if (!name || !(phone || email)) return [null, false];
+  return [{
+    v: 2, name: name.slice(0, 80), phone, email,
+    method: phone ? (p.method === "email" && email ? "email" : "phone") : "email",
+    lang: p.lang === "en" ? "en" : p.lang === "sw" ? "sw" : lang,
+    signedInAt: typeof p.signedInAt === "string" ? p.signedInAt : new Date().toISOString(),
+    serverAck: p.serverAck === true,
+    ...(p.delivery === "SENT" || p.delivery === "SIMULATED" ? { delivery: p.delivery } : null),
+  }, migrated];
 }
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
@@ -122,19 +136,19 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const activate = useCallback(async (p: Profile) => {
     touched.current = true;
     // A different person signing in on this phone (e.g. after "Si mimi")
-    // replaces the remembered farmer: their name, number and Apex chat log are
-    // not kept (the chat log has no owner field, and a shared phone must not
-    // show one farmer's conversation to the next). Cached prices are not
-    // personal and stay for offline use.
+    // replaces the remembered farmer: their name, number, Apex chat log and
+    // farm (crops, tasks, money records) are not kept (none has an owner field,
+    // and a shared phone must not show one farmer's data to the next). Cached
+    // prices and weather are not personal and stay for offline use.
     const last = lastRef.current;
     const replaceLast = !!last && !sameIdentity(last, p);
     try {
       await AsyncStorage.setItem(K.profile, JSON.stringify(p));
       await AsyncStorage.removeItem(K.guest);
-      if (replaceLast) await AsyncStorage.multiRemove([K.last, "ko-chat-log"]);
+      if (replaceLast) await AsyncStorage.multiRemove([K.last, "ko-chat-log", FARM_KEY, SOKO_KEY, HERD_KEY, ALERTS_KEY]);
     } catch {}
     setGuest(false);
-    if (replaceLast) setLastProfile(null);
+    if (replaceLast) { setLastProfile(null); clearFarmMemory(); clearSokoMemory(); clearHerdMemory(); clearAlertsMemory(); }
     setProfile(p);
   }, []);
 
@@ -149,12 +163,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     const current = profile;
     try {
       await AsyncStorage.removeItem(K.profile);
-      if (forget) await AsyncStorage.multiRemove([K.last, "ko-chat-log", "ko-dash-cache", K.guest]);
+      if (forget) await AsyncStorage.multiRemove([K.last, "ko-chat-log", "ko-dash-cache", "ko-weather-cache", FARM_KEY, SOKO_KEY, HERD_KEY, ALERTS_KEY, K.guest]);
       else if (current) await AsyncStorage.setItem(K.last, JSON.stringify(current));
       // ko-theme, ko-lang and ko-voice are kept.
     } catch {}
     setProfile(null);
-    if (forget) { setLastProfile(null); setGuest(false); }
+    if (forget) { setLastProfile(null); setGuest(false); clearFarmMemory(); clearSokoMemory(); clearHerdMemory(); clearAlertsMemory(); }
     else if (current) setLastProfile(current);
   }, [profile]);
 
@@ -165,10 +179,14 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   const forgetLast = useCallback(async () => {
     touched.current = true;
-    // "Ondoa kwenye simu hii": the remembered farmer's chat goes with them, as
-    // with sign-out's "forget" box, so the next person never inherits it.
-    try { await AsyncStorage.multiRemove([K.last, "ko-chat-log"]); } catch {}
+    // "Ondoa kwenye simu hii": the remembered farmer's chat and farm go with
+    // them, as with sign-out's "forget" box, so the next person never inherits them.
+    try { await AsyncStorage.multiRemove([K.last, "ko-chat-log", FARM_KEY, SOKO_KEY, HERD_KEY, ALERTS_KEY]); } catch {}
     setLastProfile(null);
+    clearFarmMemory();
+    clearSokoMemory();
+    clearHerdMemory();
+    clearAlertsMemory();
   }, []);
 
   const status: SessionStatus = !hydrated ? "loading" : profile ? "signedIn" : guest ? "guest" : "signedOut";

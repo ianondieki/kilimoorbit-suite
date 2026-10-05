@@ -163,6 +163,52 @@ await check("POST /api/signin phone-only still 200 after email limiter trips (CG
   return { ok: r.status === 200 && r.body.channel === "phone", detail: String(r.status) };
 });
 
+await check("GET /api/weather?county=Meru → 7 days + farming windows", async () => {
+  const r = await get("/api/weather?county=Meru");
+  const d = r.body?.days ?? [];
+  return { ok: r.status === 200 && r.body.county === "Meru" && r.body.source === "SAMPLE" && d.length === 7 && d.every((x) => typeof x.spray?.ok === "boolean" && typeof x.plant?.ok === "boolean" && typeof x.dry?.ok === "boolean"), detail: `${r.body?.season} · ${d.map((x) => x.sky).join(",")}` };
+});
+
+await check("GET /api/weather?county=muranga → Murang'a (forgiving match)", async () => {
+  const r = await get("/api/weather?county=muranga");
+  return r.status === 200 && r.body.county === "Murang'a";
+});
+
+await check("GET /api/weather bad/missing county → 400 with fields", async () => {
+  const a = await get("/api/weather?county=Atlantis");
+  const b = await get("/api/weather");
+  return a.status === 400 && a.body.error_type === "UNKNOWN_COUNTY" && b.status === 400 && b.body.error_type === "MISSING_COUNTY" && b.body.fields?.[0] === "county";
+});
+
+await check("GET /api/prices/history?crop=beans → 14 days per market, board agrees", async () => {
+  const h = await get("/api/prices/history?crop=beans");
+  const board = (await get("/api/meta")).body.commodity_feed.commodities.find((c) => c.crop === "beans");
+  const m = h.body?.markets ?? [];
+  const agrees = board.quotes.every((q) => { const x = m.find((y) => y.market === q.market); return x && Math.abs(x.prices[13] - q.price) <= Math.max(1, q.price * 0.011); });
+  return { ok: h.status === 200 && h.body.source === "SAMPLE" && h.body.dates.length === 14 && m.length === 3 && m.every((x) => x.prices.length === 14 && typeof x.change_7d_pct === "number") && agrees, detail: m.map((x) => `${x.market} ${x.change_7d_pct}%`).join(" · ") };
+});
+
+await check("GET /api/prices/history unknown/missing crop → 400", async () => {
+  const a = await get("/api/prices/history?crop=unobtainium");
+  const b = await get("/api/prices/history");
+  return a.status === 400 && a.body.error_type === "UNKNOWN_CROP" && b.status === 400 && b.body.error_type === "MISSING_CROP";
+});
+
+await check("Odd query shapes (arrays, very long, unicode) → 400, never 500", async () => {
+  const r = await Promise.all([
+    get("/api/weather?county=a&county=b"),
+    get("/api/weather?county=" + "x".repeat(5000)),
+    get("/api/prices/history?crop[]=maize"),
+    get("/api/prices/history?crop=%F0%9F%8C%BD"),
+  ]);
+  return { ok: r.every((x) => x.status === 400 && typeof x.body?.error_type === "string"), detail: r.map((x) => x.status).join(",") };
+});
+
+await check("POST /api/apex with a hostile payload (huge history, wrong types) → structured answer, not 500", async () => {
+  const r = await post("/api/apex", { payload: { execution_mode: "user_chat", user_message: 42, chat_history: Array(500).fill({ role: "x", text: {} }) } });
+  return { ok: r.status === 200 && typeof r.body?.result?.execution_mode === "string", detail: r.body?.result?.execution_mode };
+});
+
 await check("GET /api/nope → 404 JSON", async () => {
   const r = await get("/api/nope");
   return { ok: r.status === 404 && r.body?.error_type === "NOT_FOUND" };
