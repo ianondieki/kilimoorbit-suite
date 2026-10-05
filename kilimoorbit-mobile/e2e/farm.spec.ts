@@ -8,6 +8,8 @@
  * or a crashed screen (ErrorBoundary): "it rendered" is not enough.
  */
 import { test as base, expect, type Page } from "@playwright/test";
+import { byId, pickDaily } from "../lib/trivia";
+import { todayKey } from "../lib/dates";
 
 const test = base.extend<{ noCrash: void }>({
   noCrash: [async ({ page }, use) => {
@@ -293,6 +295,11 @@ const CORRUPT: Record<string, string> = {
     prices: { dap: "cheap", hack: 5, can: -1, toString: 5 },
     scouts: [{ id: "s", date: "2026-10-01", plants: 50, hit: 99 }, { id: "t", date: "bad", plants: 50, hit: 2 }, "x"], soilPh: "acid", sharePest: "yes",
   }),
+  "ko-quiz": JSON.stringify({ answered: { "faw-threshold": { ok: "yes", date: "2026-10-01" }, nope: { ok: true, date: "2026-10-01" }, "maize-spacing": { ok: true, date: "soon" } }, day: { date: "2026-13-01", ids: [1, "x"] }, streak: -4, right: "9", total: 2 }),
+  "ko-bookings": JSON.stringify({ bookings: [{ id: "b", token: "t", event_id: "e", name: "x", start: "2026-10-01", end: "bad", calendar_url: "javascript:1" }, 7] }),
+  "ko-news-cache": JSON.stringify({ county: "Nakuru", ts: "now", data: { items: [{ title: 5 }, { id: "a", title: "ok", link: "ftp://x" }] } }),
+  "ko-shows-cache": JSON.stringify({ ts: -1, data: { county: "Nakuru", events: [{ id: "x", start: "2026-99-99" }] } }),
+  "ko-api-base": "javascript:alert(1)",
   "ko-herd": JSON.stringify({
     animals: [{ id: "a", species: "cow", events: [{ id: "e", kind: "served", date: "bad" }, { kind: "birth" }] }, { id: 5 }, { id: "b", species: "dragon" }, { id: "f", species: "chicken", count: "many" }],
     milk: [{ animalId: "a", litres: "x" }], done: "x", milkPrice: -3,
@@ -349,9 +356,13 @@ test("A server answering garbage degrades to 'no data', never a crash", async ({
   await context.route("http://localhost:4517/api/prices/history**", (r) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ crop: "maize", markets: [{ market: "X", prices: [1] }] }) }));
   await context.route("http://localhost:4517/api/soko/**", (r) => r.fulfill({ status: 500, contentType: "application/json", body: "{}" }));
   await context.route("http://localhost:4517/api/pests/**", (r) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ county: 7, level: "high" }) }));
+  await context.route("http://localhost:4517/api/news**", (r) => r.fulfill({ status: 200, contentType: "text/html", body: "<html>502</html>" }));
+  await context.route("http://localhost:4517/api/events**", (r) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ county: 5, events: "none" }) }));
   await start(page, "/");
   await expect(page.getByText("Can't reach KilimoOrbit right now.")).toBeVisible();
   await expect(page.getByText("The forecast will show when you're online.")).toBeVisible();
+  await expect(page.getByText("News will show when you're online.")).toBeVisible();
+  await expect(page.getByText("Shows will appear when you're online.")).toBeVisible();
   await page.goto("/masoko");
   await expect(page.getByText("Prices will show when you're online.")).toBeVisible();
 });
@@ -557,4 +568,150 @@ test("Hatching: candling shows on Today; on hatch day the chicks become a flock"
   await page.getByTestId("animal-save").click();
   await expect(page.getByTestId("hatch-h2")).toHaveCount(0);
   await expect(page.getByText("10 birds · 0 weeks old")).toBeVisible();
+});
+
+const NEWS = {
+  county: "Nakuru", fetched_at: "2026-10-05T06:00:00.000Z", source: "LIVE",
+  items: [
+    { id: "n1", title: "Nakuru farmers warned over counterfeit pesticides", source: "The Standard", link: "https://example.com/n1", published: new Date(Date.now() - 3 * 3600_000).toISOString(), summary: "Farmers in Nakuru have been asked to check labels.", image: null, scope: "county", county: "Nakuru" },
+    { id: "n2", title: "Maize prices ease as the harvest starts", source: "Kilimo News", link: "https://example.com/n2", published: new Date(Date.now() - 2 * 86400_000).toISOString(), summary: "", image: null, scope: "national", county: null },
+  ],
+};
+const SHOWS = {
+  county: "Nakuru", today: todayKey(), theme: "", source: "ASK 2026 calendar",
+  events: [
+    { id: "ask-kitale-2026", name: "Kitale National Show", organiser: "Agricultural Society of Kenya", town: "Kitale", county: "Trans Nzoia", venue: "Kitale Showground", start: "2026-10-07", end: "2026-10-10", kind: "show", url: "https://ask.co.ke/calendar-of-events1/", estimated: false, days_until: 2, distance_km: 127 },
+    { id: "ask-nakuru-2026", name: "Nakuru National Agricultural Show", organiser: "Agricultural Society of Kenya", town: "Nakuru", county: "Nakuru", venue: "Nakuru Showground", start: "2027-07-01", end: "2027-07-05", kind: "show", url: null, estimated: true, days_until: 269, distance_km: 0 },
+  ],
+};
+const BOOKING = {
+  booking_id: "bk1", token: "tok", status: "BOOKED", event: SHOWS.events[0], email: "SIMULATED", remind_on: "2026-10-04",
+  calendar_url: "https://calendar.google.com/calendar/render?action=TEMPLATE&text=Kitale+National+Show", ics: "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n",
+  steps: [
+    { agent: "Scout", action: "Found Kitale National Show", latency_ms: 1 },
+    { agent: "Planner", action: "Prepared the calendar entry (.ics and a Google Calendar link)", latency_ms: 2 },
+    { agent: "Messenger", action: "Simulated (no SMTP configured) the confirmation email to w•••@example.com", latency_ms: 3 },
+    { agent: "Reminder", action: "Reminder email scheduled for 2026-10-04 (3 days before)", latency_ms: 4 },
+  ],
+};
+const json = (body: unknown, status = 200) => ({ status, contentType: "application/json", body: JSON.stringify(body) });
+
+test("Trivia: the day's five questions on a slider; a right answer explains itself, the score persists", async ({ page }) => {
+  await start(page, "/", "en", { county: "Nakuru" });
+  const ids = pickDaily(todayKey(), {});
+  const first = byId(ids[0])!;
+  const card = page.getByTestId("trivia-card");
+  await card.scrollIntoViewIfNeeded();
+  await expect(page.getByText("0/5 today")).toBeVisible();
+  await expect(card.getByText(first.q.en)).toBeVisible();
+  await page.getByTestId(`trivia-option-1-${first.answer}`).click();
+  await expect(page.getByTestId("trivia-why").first()).toContainText("Correct!");
+  await expect(page.getByTestId("trivia-why").first()).toContainText(first.why.en);
+  await expect(page.getByText("1/5 today")).toBeVisible();
+  await page.getByTestId("trivia-next").first().click();
+  await expect(page.getByTestId("trivia-dot-1")).toHaveAttribute("aria-selected", "true");
+
+  await page.reload();
+  await expect(page.getByText("1/5 today")).toBeVisible(); // kept on the phone
+  const wrong = (first.answer + 1) % first.options.length;
+  await expect(page.getByTestId(`trivia-option-1-${wrong}`)).toBeDisabled(); // already answered today
+});
+
+test("Farm news: the county's story comes first and opens; a sample tip opens the app screen it is about", async ({ page, context }) => {
+  await context.route("http://localhost:4517/api/news**", (r) => r.fulfill(json(NEWS)));
+  await context.route("https://example.com/**", (r) => r.fulfill({ status: 200, contentType: "text/html", body: "<html>story</html>" })); // the test browser has no internet
+  await start(page, "/", "en", { county: "Nakuru" });
+  const card = page.getByTestId("news-card");
+  await card.scrollIntoViewIfNeeded();
+  await expect(card).toContainText("Nakuru farmers warned over counterfeit pesticides");
+  await expect(card).toContainText("The Standard · 3 h ago");
+  await expect(card.getByText("Nakuru", { exact: true })).toBeVisible(); // the county tag
+  const popup = page.waitForEvent("popup");
+  await page.getByTestId("news-open-n1").click();
+  expect((await popup).url()).toBe("https://example.com/n1");
+  await page.getByTestId("news-dot-1").click();
+  await expect(page.getByTestId("news-dot-1")).toHaveAttribute("aria-selected", "true");
+  await expect(card).toContainText("2 days ago");
+
+  await context.unroute("http://localhost:4517/api/news**");
+  await context.route("http://localhost:4517/api/news**", (r) => r.fulfill(json({
+    county: "Nakuru", fetched_at: NEWS.fetched_at, source: "SAMPLE",
+    items: [{ id: "tip-faw", title: "Scout maize weekly for fall armyworm", title_sw: "Kagua mahindi", source: "KilimoOrbit", link: null, route: "/daktari?crop=maize", published: null, summary: "", image: null, scope: "tip", county: null }],
+  })));
+  await page.reload();
+  await page.getByTestId("news-card").scrollIntoViewIfNeeded();
+  await expect(page.getByTestId("news-card")).toContainText("KilimoOrbit tips, not today's news");
+  await page.getByTestId("news-open-tip-faw").click();
+  await expect(page.getByTestId("scout-open")).toBeVisible();
+});
+
+test("Farm shows: the nearest shows slide; booking runs the agent, offers Google Calendar, and can be cancelled", async ({ page, context }) => {
+  await context.route("http://localhost:4517/api/events?**", (r) => r.fulfill(json(SHOWS)));
+  await context.route("http://localhost:4517/api/events/book", (r) => r.fulfill(json(BOOKING, 201)));
+  await start(page, "/", "en", { county: "Nakuru" });
+  const card = page.getByTestId("shows-card");
+  await card.scrollIntoViewIfNeeded();
+  await expect(card).toContainText("Kitale National Show");
+  await expect(card).toContainText("7–10 Oct · Kitale · 127 km away");
+  await expect(card).toContainText("In 2 days");
+  await page.getByTestId("shows-dot-1").click();
+  await expect(card.getByText("Estimated", { exact: true })).toBeVisible();
+
+  await page.getByTestId("show-open-ask-kitale-2026").click();
+  await page.getByTestId("show-email").fill("wanjiru@example.com");
+  await page.getByTestId("show-remind-7").click();
+  await page.getByTestId("show-book").click();
+  await expect(page.getByTestId("agent-step-3")).toContainText("Reminder email scheduled");
+  await expect(page.getByTestId("show-done")).toContainText("no email (SMTP) set up yet");
+  await expect(page.getByTestId("show-calendar")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(card.getByText("You're going ✓")).toBeVisible();
+
+  await page.getByTestId("show-open-ask-kitale-2026").click();
+  await expect(page.getByTestId("show-mine")).toContainText("reminder is logged on the server");
+  await page.getByTestId("show-cancel").click();
+  await expect(card.getByText("You're going ✓")).toHaveCount(0);
+});
+
+test("Farm shows: when the server can't be reached, booking fails politely and the calendar link still works", async ({ page, context }) => {
+  await context.route("http://localhost:4517/api/events?**", (r) => r.fulfill(json(SHOWS)));
+  await context.route("http://localhost:4517/api/events/book", (r) => r.abort());
+  await context.route("https://calendar.google.com/**", (r) => r.fulfill({ status: 200, contentType: "text/html", body: "<html>calendar</html>" }));
+  await start(page, "/", "en", { county: "Nakuru" });
+  await page.getByTestId("shows-card").scrollIntoViewIfNeeded();
+  await page.getByTestId("show-open-ask-kitale-2026").click();
+  await page.getByTestId("show-book").click();
+  await expect(page.getByTestId("show-failed")).toContainText("Couldn't reach the KilimoOrbit server");
+  const popup = page.waitForEvent("popup");
+  await page.getByTestId("show-calendar").click();
+  expect((await popup).url()).toContain("calendar.google.com/calendar/render?action=TEMPLATE");
+});
+
+test("Connection: the offline banner opens the server screen; a typed address is tested, saved and shown in settings", async ({ page, context }) => {
+  await context.route("http://localhost:4517/**", (r) => r.abort());
+  await start(page, "/", "en", { county: "Nakuru" });
+  await page.getByTestId("fix-connection").click();
+  await expect(page.getByTestId("conn-status")).toContainText(/did not answer|cannot reach/);
+  await expect(page.getByText("Is the server running on the computer?")).toBeVisible();
+  await context.unroute("http://localhost:4517/**");
+
+  await page.getByTestId("conn-input").fill("127.0.0.1:4517"); // the test server, by another name
+  await page.getByTestId("conn-test").click();
+  await expect(page.getByTestId("conn-status")).toContainText("Connected");
+  await page.getByTestId("conn-save").click();
+  await expect(page.getByText("Can't reach KilimoOrbit right now.")).toHaveCount(0);
+
+  // The sidebar is a drawer on phones (menu button) and docked on desktop.
+  const menu = page.locator('[data-ko-menu-button="1"]');
+  if (await menu.count()) await menu.first().click();
+  await expect(page.getByTestId("settings-server")).toContainText("127.0.0.1:4517");
+  await page.getByTestId("settings-server").click();
+  await page.getByTestId("conn-auto").click();
+  await expect(page.getByTestId("conn-status")).toContainText("localhost:4517");
+});
+
+test("Markets: each crop chip carries today's best price; there is no ticker", async ({ page }) => {
+  await start(page, "/masoko");
+  await expect(page.getByTestId("mk-crop-maize")).toContainText(/KES \d+/);
+  await expect(page.getByText(/E-BODA/)).toHaveCount(0);
 });

@@ -6,7 +6,7 @@
  * Each cleaner returns null when there's nothing usable.
  */
 import type {
-  ArbitrageResult, CommodityFeed, Forecast, Meta, PestWatch, PriceHistory, Sky, SokoListing, SokoStatus, Verdict, WxDay,
+  ArbitrageResult, Booking, CommodityFeed, Forecast, Meta, News, NewsItem, PestWatch, PriceHistory, Show, Shows, Sky, SokoListing, SokoStatus, Verdict, WxDay,
 } from "./api";
 
 const obj = (v: unknown): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -161,5 +161,92 @@ export function cleanPestWatch(w: unknown): PestWatch | null {
     max_pct: pct(w.max_pct),
     last_report: str(w.last_report) && DAY.test(w.last_report) ? w.last_report : null,
     level: reports === 0 ? "none" : PEST_LEVELS.includes(w.level as any) ? (w.level as PestWatch["level"]) : "low",
+  };
+}
+
+/* ── farm news ── */
+const NEWS_SCOPES = ["county", "national", "tip"] as const;
+const NEWS_SOURCES = ["LIVE", "CACHED", "SAMPLE"] as const;
+const httpUrl = (v: unknown): v is string => str(v) && /^https?:\/\/\S+$/.test(v);
+
+function cleanNewsItem(i: unknown): NewsItem | null {
+  if (!obj(i) || !str(i.title) || !i.title.trim()) return null;
+  const link = httpUrl(i.link) ? i.link.slice(0, 500) : null;
+  const route = str(i.route) && i.route.startsWith("/") ? i.route.slice(0, 80) : undefined;
+  if (!link && !route) return null;
+  const published = str(i.published) && Number.isFinite(Date.parse(i.published)) ? i.published : null;
+  return {
+    id: str(i.id) && i.id ? i.id.slice(0, 40) : i.title.slice(0, 40),
+    title: i.title.trim().slice(0, 160),
+    ...(str(i.title_sw) && i.title_sw.trim() ? { title_sw: i.title_sw.trim().slice(0, 160) } : null),
+    source: str(i.source) && i.source.trim() ? i.source.trim().slice(0, 60) : "",
+    link, ...(route ? { route } : null), published,
+    summary: str(i.summary) ? i.summary.trim().slice(0, 240) : "",
+    image: httpUrl(i.image) ? i.image.slice(0, 500) : null,
+    scope: NEWS_SCOPES.includes(i.scope as any) ? (i.scope as NewsItem["scope"]) : "national",
+    county: str(i.county) && i.county.trim() ? i.county.slice(0, 40) : null,
+  };
+}
+
+export function cleanNews(n: unknown): News | null {
+  if (!obj(n)) return null;
+  const items = arr(n.items).map(cleanNewsItem).filter((i): i is NewsItem => !!i).slice(0, 12);
+  if (!items.length) return null;
+  return {
+    county: str(n.county) && n.county.trim() ? n.county.slice(0, 40) : null,
+    fetched_at: str(n.fetched_at) && Number.isFinite(Date.parse(n.fetched_at)) ? n.fetched_at : new Date().toISOString(),
+    source: NEWS_SOURCES.includes(n.source as any) ? (n.source as News["source"]) : "SAMPLE",
+    items,
+  };
+}
+
+/* ── farm shows ── */
+const SHOW_KINDS = ["show", "expo", "contest"] as const;
+
+function cleanShowBase(e: unknown): Omit<Show, "days_until" | "distance_km"> | null {
+  if (!obj(e) || !str(e.id) || !str(e.name) || !str(e.town) || !str(e.county) || !str(e.start) || !str(e.end)) return null;
+  if (!DAY.test(e.start) || !DAY.test(e.end) || e.end < e.start) return null;
+  return {
+    id: e.id.slice(0, 60), name: e.name.slice(0, 120), organiser: str(e.organiser) ? e.organiser.slice(0, 80) : "",
+    town: e.town.slice(0, 40), county: e.county.slice(0, 40), venue: str(e.venue) && e.venue ? e.venue.slice(0, 80) : e.town.slice(0, 40),
+    start: e.start, end: e.end,
+    kind: SHOW_KINDS.includes(e.kind as any) ? (e.kind as Show["kind"]) : "show",
+    url: httpUrl(e.url) ? e.url.slice(0, 300) : null,
+    estimated: e.estimated === true,
+  };
+}
+
+export function cleanShows(s: unknown): Shows | null {
+  if (!obj(s) || !str(s.county)) return null;
+  const events = arr(s.events)
+    .map((e) => {
+      const base = cleanShowBase(e);
+      if (!base || !obj(e)) return null;
+      return { ...base, days_until: num(e.days_until) ? Math.round(e.days_until) : 0, distance_km: num(e.distance_km) && e.distance_km >= 0 ? Math.round(e.distance_km) : 0 };
+    })
+    .filter((e): e is Show => !!e)
+    .slice(0, 12);
+  return {
+    county: s.county.slice(0, 40),
+    today: str(s.today) && DAY.test(s.today) ? s.today : new Date().toISOString().slice(0, 10),
+    theme: str(s.theme) ? s.theme.slice(0, 200) : "",
+    source: str(s.source) ? s.source.slice(0, 60) : "",
+    events,
+  };
+}
+
+const EMAIL_STATES = ["SENT", "SIMULATED", "NONE", "FAILED"] as const;
+export function cleanBooking(b: unknown): Booking | null {
+  if (!obj(b) || !str(b.booking_id) || !str(b.token) || !httpUrl(b.calendar_url) || !str(b.ics) || !str(b.remind_on) || !DAY.test(b.remind_on)) return null;
+  const event = cleanShowBase(b.event);
+  if (!event) return null;
+  const steps = arr(b.steps)
+    .filter((x) => obj(x) && str(x.agent) && str(x.action))
+    .map((x) => ({ agent: x.agent.slice(0, 20), action: x.action.slice(0, 200), latency_ms: num(x.latency_ms) ? x.latency_ms : 0 }));
+  return {
+    booking_id: b.booking_id.slice(0, 64), token: b.token.slice(0, 64), status: "BOOKED", event,
+    calendar_url: b.calendar_url.slice(0, 1500), ics: b.ics.slice(0, 4000),
+    email: EMAIL_STATES.includes(b.email as any) ? (b.email as Booking["email"]) : "NONE",
+    remind_on: b.remind_on, steps,
   };
 }

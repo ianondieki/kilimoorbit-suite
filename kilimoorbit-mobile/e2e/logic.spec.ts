@@ -13,13 +13,16 @@ import {
 } from "../lib/livestock";
 import { pushPullPlan, stageOf, thresholdFor, verdict } from "../lib/scouting";
 import { limeAdvice, phBand } from "../lib/soil";
+import { BANK, EMPTY_QUIZ, answer, liveStreak, pickDaily, seededShuffle, todayScore, withDay } from "../lib/trivia";
+import { googleCalendarUrl, onNow, sanitizeBookings, upcomingBookings, whenText } from "../lib/shows";
+import { cleanBase, hostOf } from "../lib/connection";
 import { bagsLabel, bagsOf, dueChecks, holdPlan, nextCheck, type Lot } from "../lib/postharvest";
 import { budgetFor, compareCrops } from "../lib/budget";
 import { alertHits, suggestTarget } from "../lib/pricewatch";
 import { taskHint } from "../lib/advice";
 import { CROPS, CROP_KEYS, acresFromSteps, bagsFor, inputsFor } from "../lib/agronomy";
 import { diagnose } from "../lib/pests";
-import { cleanArb, cleanFeed, cleanForecast, cleanListing, cleanPestWatch } from "../lib/validate";
+import { cleanArb, cleanBooking, cleanFeed, cleanForecast, cleanListing, cleanNews, cleanPestWatch, cleanShows } from "../lib/validate";
 import type { WxDay } from "../lib/api";
 
 const TODAY = "2026-10-05";
@@ -409,5 +412,121 @@ test.describe("dairy and hatching", () => {
     expect(due.map((d) => `${d.hatch.id}:${d.step.id}:${d.inDays}`)).toEqual(["h:candle1:0", "i:candle1:0"]);
     expect(dueHatchSteps([hen], { "hatch:h:candle1": true }, TODAY)).toEqual([]);
     expect([brooderTemp(1), brooderTemp(2), brooderTemp(5), brooderTemp(9)]).toEqual([35, 32, 23, 21]);
+  });
+});
+
+test.describe("farm trivia", () => {
+  test("the bank is sound: unique ids, 3–4 options, the answer in range, both languages", () => {
+    const ids = new Set(BANK.map((t) => t.id));
+    expect(ids.size).toBe(BANK.length);
+    expect(BANK.length).toBeGreaterThanOrEqual(30);
+    for (const t of BANK) {
+      expect(t.options.length).toBeGreaterThanOrEqual(3);
+      expect(t.options.length).toBeLessThanOrEqual(4);
+      expect(t.answer).toBeGreaterThanOrEqual(0);
+      expect(t.answer).toBeLessThan(t.options.length);
+      expect(t.q.sw.length).toBeGreaterThan(10);
+      expect(t.q.en.length).toBeGreaterThan(10);
+      expect(t.why.sw.length).toBeGreaterThan(10);
+    }
+  });
+
+  test("the day's five are the same on every phone, differ by day, and skip questions already answered", () => {
+    const a = pickDaily("2026-10-05", {});
+    const b = pickDaily("2026-10-05", {});
+    const c = pickDaily("2026-10-06", {});
+    expect(a).toEqual(b);
+    expect(a).toHaveLength(5);
+    expect(a).not.toEqual(c);
+    const answered = Object.fromEntries(a.map((id) => [id, { ok: true, date: "2026-10-04" }]));
+    const d = pickDaily("2026-10-05", answered);
+    expect(d.some((id) => a.includes(id))).toBe(false);
+    expect(seededShuffle([1, 2, 3, 4, 5], "x")).toEqual(seededShuffle([1, 2, 3, 4, 5], "x"));
+    expect([...seededShuffle([1, 2, 3, 4, 5], "x")].sort()).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  test("answers move the score and the streak; answering twice changes nothing", () => {
+    let s = withDay(EMPTY_QUIZ, TODAY);
+    const [q1, q2] = s.day!.ids;
+    s = answer(s, q1, true, TODAY);
+    s = answer(s, q2, false, TODAY);
+    s = answer(s, q1, false, TODAY); // already answered today: ignored
+    expect(todayScore(s, TODAY)).toEqual({ done: 2, right: 1, of: 5 });
+    expect(s.right).toBe(1);
+    expect(s.total).toBe(2);
+    expect(s.streak).toBe(1);
+    expect(liveStreak(s, TODAY)).toBe(1);
+    const tomorrow = addDays(TODAY, 1);
+    const t = answer(withDay(s, tomorrow), withDay(s, tomorrow).day!.ids[0], true, tomorrow);
+    expect(t.streak).toBe(2);
+    expect(liveStreak(t, addDays(TODAY, 3))).toBe(0); // a gap breaks the streak
+    expect(withDay(t, tomorrow).day!.date).toBe(tomorrow);
+  });
+});
+
+test.describe("farm shows", () => {
+  test("dates read naturally and the calendar link carries the show", () => {
+    expect(whenText("en", "2026-10-07", "2026-10-10")).toBe("7–10 Oct");
+    expect(whenText("en", "2026-09-28", "2026-10-04")).toBe("28 Sep – 4 Oct");
+    expect(whenText("sw", "2026-10-07", "2026-10-07")).toBe("7 Okt");
+    expect(onNow({ start: "2026-10-03", end: "2026-10-07" }, "2026-10-05")).toBe(true);
+    expect(onNow({ start: "2026-10-06", end: "2026-10-07" }, "2026-10-05")).toBe(false);
+    const url = googleCalendarUrl({ name: "Kitale National Show", start: "2026-10-07", end: "2026-10-10", venue: "Kitale Showground", town: "Kitale", organiser: "ASK", url: null, estimated: false });
+    expect(url).toContain("calendar.google.com/calendar/render?action=TEMPLATE");
+    expect(url).toContain("dates=20261007%2F20261011");
+    expect(url).toContain("location=Kitale+Showground%2C+Kitale%2C+Kenya");
+  });
+
+  test("the bookings store drops junk and lists upcoming ones soonest first", () => {
+    const good = { id: "b1", token: "t", event_id: "e1", name: "Show", start: "2026-12-01", end: "2026-12-02", town: "Nakuru", calendar_url: "https://calendar.google.com/x", remind_on: "2026-11-28", email: "SENT", created: "x" };
+    const s = sanitizeBookings({ bookings: [good, { ...good, id: "b2", start: "2026-10-01", end: "2026-10-02" }, { ...good, id: "b3", calendar_url: "javascript:alert(1)" }, { id: 5 }, null, { ...good, id: "b4", email: "maybe", start: "2026-11-01", end: "2026-11-01" }] });
+    expect(s.bookings.map((b) => b.id)).toEqual(["b1", "b2", "b4"]);
+    expect(s.bookings[2].email).toBe("NONE");
+    expect(upcomingBookings(s.bookings, "2026-10-05").map((b) => b.id)).toEqual(["b4", "b1"]);
+    expect(sanitizeBookings("junk").bookings).toEqual([]);
+  });
+});
+
+test.describe("server connection", () => {
+  test("a typed address becomes a base URL; junk is refused", () => {
+    expect(cleanBase("192.168.0.12:4517")).toBe("http://192.168.0.12:4517");
+    expect(cleanBase("192.168.0.12")).toBe("http://192.168.0.12:4517");
+    expect(cleanBase("  HTTP://My-Laptop.local:4517/ ")).toBe("http://my-laptop.local:4517");
+    expect(cleanBase("https://sentinel.example.com")).toBe("https://sentinel.example.com");
+    expect(cleanBase("")).toBeNull();
+    expect(cleanBase("not an address")).toBeNull();
+    expect(cleanBase("http://x:99999")).toBeNull();
+    expect(cleanBase("ftp://x")).toBeNull();
+    expect(hostOf("http://192.168.0.12:4517/")).toBe("192.168.0.12:4517");
+  });
+});
+
+test.describe("news and shows answers are cleaned", () => {
+  test("news: items need a title and a link or an in-app route; the rest is defaulted or dropped", () => {
+    const n = cleanNews({ county: "Nakuru", source: "LIVE", items: [
+      { id: "a", title: "Good story", link: "https://x.test/a", source: "The Standard", published: "2026-10-03T03:00:00.000Z", summary: "s", image: "https://x.test/i.jpg", scope: "county", county: "Nakuru" },
+      { id: "b", title: "Tip", route: "/daktari?crop=maize", title_sw: "Dondoo", scope: "tip" },
+      { id: "c", title: "No link" }, { title: "" }, "x", { id: "d", title: "Bad link", link: "javascript:alert(1)" },
+      { id: "e", title: "Weird", link: "https://x.test/e", scope: "galaxy", published: "yesterday" },
+    ] })!;
+    expect(n.items.map((i) => i.id)).toEqual(["a", "b", "e"]);
+    expect(n.items[2]).toMatchObject({ scope: "national", published: null, source: "", summary: "" });
+    expect(cleanNews({ items: [] })).toBeNull();
+    expect(cleanNews({ items: [{ id: "a", title: "x", link: "https://x" }], source: "???" })!.source).toBe("SAMPLE");
+  });
+
+  test("shows: dates must be real days; a booking needs its calendar link and .ics", () => {
+    const s = cleanShows({ county: "Nakuru", events: [
+      { id: "ok", name: "Show", town: "Nakuru", county: "Nakuru", start: "2026-10-07", end: "2026-10-10", kind: "show", distance_km: 12.4, days_until: 2, estimated: true },
+      { id: "bad", name: "Show", town: "Nakuru", county: "Nakuru", start: "2026-10-10", end: "2026-10-07" },
+      { id: "junk", name: "Show", town: "Nakuru", county: "Nakuru", start: "soon", end: "later" },
+    ] })!;
+    expect(s.events.map((e) => e.id)).toEqual(["ok"]);
+    expect(s.events[0]).toMatchObject({ distance_km: 12, days_until: 2, estimated: true, venue: "Nakuru", url: null });
+    const b = cleanBooking({ booking_id: "b", token: "t", calendar_url: "https://calendar.google.com/x", ics: "BEGIN:VCALENDAR", remind_on: "2026-10-04", email: "SIMULATED",
+      event: { id: "ok", name: "Show", town: "Nakuru", county: "Nakuru", start: "2026-10-07", end: "2026-10-10" }, steps: [{ agent: "Scout", action: "Found it", latency_ms: 3 }, { agent: 1 }] })!;
+    expect(b.steps).toHaveLength(1);
+    expect(b.email).toBe("SIMULATED");
+    expect(cleanBooking({ booking_id: "b", token: "t", calendar_url: "data:text/html", ics: "x", remind_on: "2026-10-04", event: {} })).toBeNull();
   });
 });

@@ -27,6 +27,9 @@ import { createSokoRouter } from "./soko/routes.js";
 import { findCounty, forecastFor } from "./agro/weather.js";
 import { boardFor, historyFor } from "./agro/prices.js";
 import { createPestWatch, validateReport } from "./agro/pests.js";
+import { createNews } from "./agro/news.js";
+import { createBookings, eventsNear, reminderMessage, validateBooking } from "./agro/events.js";
+import { networkInterfaces } from "node:os";
 import { SUITE, runSuite, loadPayload } from "./suite.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -64,8 +67,39 @@ function rateLimit({ windowMs, max, name }) {
   };
 }
 
-export function createApp() {
+/**
+ * Sends every reminder email that is due (bookings from /api/events/book).
+ * Without SMTP the reminder is SIMULATED (logged); the calendar entry the
+ * farmer saved still rings on its own. Exported for the test suite.
+ */
+export async function runReminders(bookings, mailer, now = new Date()) {
+  let sent = 0;
+  for (const b of bookings.due(now)) {
+    try {
+      if (mailer) { await mailer(reminderMessage(b)); bookings.markReminder(b.id, "SENT"); }
+      else { console.log(`[events] SIMULATED reminder for ${b.event_name} to ${b.email[0]}•••${b.email.slice(b.email.indexOf("@"))}`); bookings.markReminder(b.id, "SIMULATED"); }
+      sent++;
+    } catch (err) {
+      console.error(`[events] reminder failed for ${b.id}: ${err?.message ?? err}`);
+      bookings.markReminder(b.id, "FAILED");
+    }
+  }
+  return sent;
+}
+
+/** Addresses a phone on the same Wi-Fi can use to reach this server. */
+export function lanAddresses() {
+  const out = [];
+  for (const list of Object.values(networkInterfaces()))
+    for (const i of list ?? []) if (i.family === "IPv4" && !i.internal) out.push(i.address);
+  return out;
+}
+
+export function createApp(opts = {}) {
   const app = express();
+  // Injected by the test suite (stubbed feeds, a temp bookings file, no timers).
+  const news = opts.news ?? createNews();
+  const bookings = opts.bookings ?? createBookings({ storePath: process.env.EVENTS_STORE_PATH || join(root, "data", "events_bookings.json") });
   app.disable("x-powered-by");
   app.set("trust proxy", process.env.TRUST_PROXY === "1"); // set when behind Render/Fly/nginx
 
@@ -195,6 +229,55 @@ export function createApp() {
     if (!w) return res.status(400).json({ error: `Unknown county: ${name}.`, error_type: "UNKNOWN_COUNTY", fields: ["county"] });
     res.json(w);
   });
+
+  // Farm news: the county's headlines first, then national; SAMPLE tips when no feed can be read.
+  app.get("/api/news", rateLimit({ windowMs: 60_000, max: 60, name: "news" }), async (req, res) => {
+    const county = typeof req.query.county === "string" ? req.query.county.trim().slice(0, 40) : "";
+    try {
+      res.json(await news.newsFor(county));
+    } catch (err) {
+      res.status(500).json({ error: "News unavailable.", error_type: "SERVER_ERROR" });
+    }
+  });
+
+  // Farm shows near a county (ASK calendar + Nairobi expos), and the booking agent.
+  app.get("/api/events", rateLimit({ windowMs: 60_000, max: 120, name: "events" }), (req, res) => {
+    const name = typeof req.query.county === "string" ? req.query.county.trim().slice(0, 40) : "";
+    if (!name)
+      return res.status(400).json({ error: "A county is required, e.g. ?county=Nakuru.", error_type: "MISSING_COUNTY", fields: ["county"] });
+    const near = eventsNear(name);
+    if (!near) return res.status(400).json({ error: `Unknown county: ${name}.`, error_type: "UNKNOWN_COUNTY", fields: ["county"] });
+    res.json(near);
+  });
+  const bookingMailer = () => {
+    const transport = mailTransport();
+    return transport
+      ? (msg) => transport.sendMail({ from: process.env.SMTP_FROM || `KilimoOrbit Sentinel <${process.env.SMTP_USER}>`, ...msg })
+      : null;
+  };
+  // Sends email, so it is capped like sign-in.
+  app.post("/api/events/book", rateLimit({ windowMs: 60 * 60_000, max: 10, name: "booking" }), async (req, res) => {
+    const v = validateBooking(req.body);
+    if (v.error) return res.status(400).json({ error: v.error, error_type: "VALIDATION_ERROR", fields: v.fields });
+    try {
+      res.status(201).json(await bookings.book(v.input, { mailer: bookingMailer() }));
+    } catch (err) {
+      res.status(500).json({ error: "Booking failed.", error_type: "SERVER_ERROR" });
+    }
+  });
+  app.delete("/api/events/book/:id", rateLimit({ windowMs: 60_000, max: 60, name: "booking" }), (req, res) => {
+    const token = typeof req.query.token === "string" ? req.query.token : "";
+    const r = bookings.cancel(String(req.params.id).slice(0, 64), token);
+    if (r === "missing") return res.status(404).json({ error: "No such booking.", error_type: "NOT_FOUND" });
+    if (r === "forbidden") return res.status(403).json({ error: "Wrong token.", error_type: "FORBIDDEN", fields: ["token"] });
+    res.json({ ok: true });
+  });
+  if (opts.scheduler !== false) {
+    const sweep = () => runReminders(bookings, bookingMailer()).catch((err) => console.error("[events] sweep failed", err));
+    const timer = setInterval(sweep, 60_000);
+    timer.unref?.();
+    setTimeout(sweep, 5_000).unref?.();
+  }
 
   app.get("/api/meta", (_req, res) => {
     const payloads = {};
@@ -474,11 +557,15 @@ export function createApp() {
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
   const PORT = Number(process.env.PORT) || 4517;
-  const server = createApp().listen(PORT, () =>
+  const server = createApp().listen(PORT, () => {
     console.log(
       `KilimoOrbit Sentinel v${VERSION} · Mission Control on http://localhost:${PORT}  (engine: ${engineMode()} · model: ${MODEL})`
-    )
-  );
+    );
+    // The mobile app on a phone reaches the server by one of these; the app's
+    // Connection screen shows which one it is trying.
+    const lan = lanAddresses();
+    if (lan.length) console.log(`  From a phone on this Wi-Fi: ${lan.map((ip) => `http://${ip}:${PORT}`).join("  or  ")}`);
+  });
   const shutdown = (sig) => {
     console.log(`\n[${sig}] shutting down…`);
     server.close(() => process.exit(0));

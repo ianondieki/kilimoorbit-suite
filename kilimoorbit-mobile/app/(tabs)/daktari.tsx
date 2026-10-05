@@ -58,11 +58,17 @@ export default function Daktari() {
   // On a phone the answers sit below a long list of signs: offer a jump to them
   // while they are out of view.
   const scroller = useRef<ScrollView>(null);
-  const [resultsY, setResultsY] = useState(0);
-  const [scrollY, setScrollY] = useState(0);
-  const [viewH, setViewH] = useState(0);
   const { height } = useWindowDimensions();
-  const showJump = picked.length > 0 && resultsY > 0 && scrollY + (viewH || height) - 80 < resultsY;
+  // Scroll geometry lives in refs; only the yes/no "results are below the fold" answer is state,
+  // so scrolling re-renders nothing until that answer changes.
+  const geo = useRef({ resultsY: 0, scrollY: 0, viewH: 0 });
+  const [below, setBelow] = useState(false);
+  const recalc = () => {
+    const g = geo.current;
+    const next = g.resultsY > 0 && g.scrollY + (g.viewH || height) - 80 < g.resultsY;
+    setBelow((b) => (b === next ? b : next));
+  };
+  const showJump = picked.length > 0 && below;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]} {...webLang(lang)}>
@@ -72,8 +78,8 @@ export default function Daktari() {
         contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}
         keyboardShouldPersistTaps="handled"
         scrollEventThrottle={64}
-        onScroll={(e) => setScrollY(e.nativeEvent.contentOffset.y)}
-        onLayout={(e) => setViewH(e.nativeEvent.layout.height)}
+        onScroll={(e) => { geo.current.scrollY = e.nativeEvent.contentOffset.y; recalc(); }}
+        onLayout={(e) => { geo.current.viewH = e.nativeEvent.layout.height; recalc(); }}
       >
         <Bounded style={{ padding: 16, gap: 14 }}>
           {/* Maize: fall armyworm scouting and the county pest watch first. */}
@@ -120,7 +126,7 @@ export default function Daktari() {
             accessibilityLiveRegion="polite"
             aria-live="polite"
             style={{ gap: 12 }}
-            onLayout={(e) => setResultsY(e.nativeEvent.layout.y)}
+            onLayout={(e) => { geo.current.resultsY = e.nativeEvent.layout.y; recalc(); }}
           >
             {picked.length > 0 ? (
               <>
@@ -160,7 +166,7 @@ export default function Daktari() {
         <View style={{ position: "absolute", left: 0, right: 0, bottom: 16, alignItems: "center", pointerEvents: "box-none" }}>
           <Btn
             label={matches.length ? tt("dr.jump", { n: matches.length }) : tt("dr.jumpNone")}
-            onPress={() => scroller.current?.scrollTo({ y: Math.max(0, resultsY - 8), animated: true })}
+            onPress={() => scroller.current?.scrollTo({ y: Math.max(0, geo.current.resultsY - 8), animated: true })}
             icon={(c) => <ChevronGlyph size={12} color={c} dir="down" />}
             style={[{ flexDirection: "row-reverse", borderRadius: 999, paddingHorizontal: 22, elevation: 6 }, Platform.OS === "web" ? ({ boxShadow: "0 4px 14px rgba(0,0,0,0.35)" } as object) : { shadowColor: "#000", shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } }]}
             testID="dr-jump"

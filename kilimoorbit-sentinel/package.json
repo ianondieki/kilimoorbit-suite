@@ -10,7 +10,7 @@
     "test:soko": "node src/tests/soko_tests.js",
     "test:agro": "node src/tests/agro_tests.js",
     "test:server": "node src/tests/server_tests.js",
-    "check": "node --check src/server.js && node --check src/apex_client.js && node --check src/suite.js && node --check src/soko/store.js && node --check src/soko/routes.js && node --check src/agro/weather.js && node --check src/agro/prices.js && node --check src/agro/pests.js",
+    "check": "node --check src/server.js && node --check src/apex_client.js && node --check src/suite.js && node --check src/soko/store.js && node --check src/soko/routes.js && node --check src/agro/weather.js && node --check src/agro/prices.js && node --check src/agro/pests.js && node --check src/agro/news.js && node --check src/agro/events.js",
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "route:arbitrage": "node src/routes/arbitrage.js",

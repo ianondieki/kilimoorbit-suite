@@ -18,6 +18,9 @@ import { useVoicePref } from "../lib/voice";
 import Constants from "expo-constants";
 import { router, usePathname } from "expo-router";
 import { useTheme, useThemeControls } from "../lib/theme-context";
+import { useApiBase } from "../lib/config";
+import { hostOf } from "../lib/connection";
+import { ConnectionSheet } from "./Connection";
 import { THEMES, type Theme } from "../lib/themes";
 import { useLang, useSession } from "../lib/session";
 import { maskEmail, maskPhone, initials } from "../lib/phone";
@@ -25,11 +28,7 @@ import { focusElement, focusRing, radioKeys, spaceActivates, webCursor, isWeb, t
 import type { Key } from "../lib/i18n";
 import { useMenu, type CloseOpts } from "./MenuContext";
 import Segmented from "./Segmented";
-import {
-  ArrowGlyph, BarsGlyph, ChatGlyph, CheckCoin, CheckGlyph, ChevronGlyph, CrossGlyph, ExitGlyph,
-  LeafGlyph, LensGlyph, MoonGlyph, PersonGlyph, PhoneGlyph, PlusGlyph, RouteGlyph, SignalOffGlyph, SpeakerGlyph,
-  SproutGlyph, SunGlyph,
-} from "./Glyphs";
+import { ArrowGlyph, BarsGlyph, ChatGlyph, CheckCoin, CheckGlyph, ChevronGlyph, CrossGlyph, ExitGlyph, LeafGlyph, LensGlyph, MoonGlyph, PersonGlyph, PhoneGlyph, PlusGlyph, RouteGlyph, SignalOffGlyph, SpeakerGlyph, SproutGlyph, SunGlyph } from "./Glyphs";
 
 type Variant = "drawer" | "docked";
 
@@ -156,6 +155,8 @@ function SidebarBody({ variant, open }: { variant: Variant; open: boolean }) {
   const closeRef = useRef<View>(null);
   const scrollRef = useRef<ScrollView>(null);
   const tileRefs = useRef<(View | null)[]>([]);
+  const [conn, setConn] = useState(false);
+  const { base: apiBase } = useApiBase();
 
   useEffect(() => {
     if (!drawer) return;
@@ -292,6 +293,27 @@ function SidebarBody({ variant, open }: { variant: Variant; open: boolean }) {
           <Text style={{ flex: 1, color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "600" }}>{tt("settings.voice")}</Text>
           <SwitchVisual value={voice} />
         </Pressable>
+
+        <Pressable
+          onPress={() => setConn(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`${tt("settings.server")}: ${hostOf(apiBase)}`}
+          testID="settings-server"
+          style={({ pressed, hovered, focused }: PressState) => [
+            { minHeight: 56, paddingHorizontal: 20, flexDirection: "row", alignItems: "center", gap: 14 },
+            hovered && { backgroundColor: drawer ? t.raised : t.bg },
+            pressed && { opacity: 0.7 },
+            webCursor, focusRing(focused, t.accent),
+          ]}
+        >
+          <SignalOffGlyph size={22} color={t.ink} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "600" }}>{tt("settings.server")}</Text>
+            <Text numberOfLines={1} style={{ color: t.dim, fontSize: 12, lineHeight: 16, fontFamily: "monospace" }}>{hostOf(apiBase)}</Text>
+          </View>
+          <ChevronGlyph size={12} color={t.dim} dir="right" />
+        </Pressable>
+        <ConnectionSheet visible={conn} onClose={() => setConn(false)} />
 
         {/* 6. Footer: its own line at the end of the scrolling body, for
             everyone. It never shares the sign-out row, and the pinned block
