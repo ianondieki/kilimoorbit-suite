@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator } from "react-native";
 import { webLang } from "../../lib/ui";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { MenuButton } from "../../components/Header";
+import Header from "../../components/Header";
+import { useLang } from "../../lib/session";
 import Pill from "../../components/Pill";
 import { Enter, PressScale } from "../../components/Motion";
 import { Bounded } from "../../components/Bounded";
@@ -11,6 +12,7 @@ import { runAutopilot, type AutopilotStep } from "../../lib/api";
 
 export default function Autopilot() {
   const t = useTheme();
+  const { t: tt } = useLang();
   const [steps, setSteps] = useState<AutopilotStep[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -31,15 +33,14 @@ export default function Autopilot() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]} {...webLang("en")}>
-      <View style={[s.top, { borderBottomColor: t.line }]}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-          <MenuButton style={{ marginLeft: -12, marginVertical: -8 }} />
-          <Text style={[s.title, { color: t.ink }]}>SENTINEL <Text style={{ color: t.accent }}>AUTOPILOT</Text></Text>
-        </View>
-        <PressScale onPress={engage} disabled={busy} accessibilityLabel={busy ? "Autopilot running" : "Engage autopilot"} style={[s.engage, { backgroundColor: t.accent, opacity: busy ? 0.5 : 1 }]}>
-          <Text style={{ color: t.bg, fontWeight: "800" }}>{busy ? "Running…" : "Engage"}</Text>
-        </PressScale>
-      </View>
+      <Header
+        title={tt("nav.autopilot")}
+        right={
+          <PressScale onPress={engage} disabled={busy} accessibilityLabel={busy ? "Autopilot running" : "Engage autopilot"} focusColor={t.accent} style={[s.engage, { backgroundColor: t.accent, opacity: busy ? 0.5 : 1 }]}>
+            <Text style={{ color: t.field, fontWeight: "800" }}>{busy ? "Running…" : "Engage"}</Text>
+          </PressScale>
+        }
+      />
       <Text style={[s.sub, { color: t.dim }]}>sense → arbitrage → weather gate → broadcast → brief</Text>
 
       <ScrollView contentContainerStyle={s.scroll}>
@@ -126,15 +127,20 @@ function StepSummary({ step }: { step: AutopilotStep }) {
         {o.farm} · {o.crop} · {o.vehicle} · rain {o.rainfall_24h_mm}mm
       </Text>
     );
+  if (step.agent === "MISSION-BRIEF")
+    return (
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+        {o.broadcast ? <Pill label={`BROADCAST ${o.broadcast}`} tone={o.broadcast === "FAILED" ? "bad" : o.broadcast === "SENT" ? "warn" : "ok"} /> : null}
+        {o.confidence ? <Pill label={`CONFIDENCE ${o.confidence}`} tone="dim" /> : null}
+      </View>
+    );
   return <Text style={{ color: t.dim, fontSize: 12.5 }} numberOfLines={3}>{JSON.stringify(o)}</Text>;
 }
 
 const s = StyleSheet.create({
   scroll: { flexGrow: 1 },
   body: { padding: 14, paddingBottom: 40 },
-  top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 8, minHeight: 56, borderBottomWidth: 1 },
-  title: { fontSize: 14, fontWeight: "800", letterSpacing: 2 },
-  engage: { borderRadius: 10, paddingHorizontal: 18, paddingVertical: 9 },
+  engage: { borderRadius: 12, paddingHorizontal: 18, minHeight: 40, justifyContent: "center", marginVertical: -4 },
   sub: { fontFamily: "monospace", fontSize: 10, paddingHorizontal: 16, paddingTop: 8, letterSpacing: 0.5 },
   emptyBox: { borderWidth: 1, borderStyle: "dashed", borderRadius: 14, padding: 22, marginTop: 24 },
   stepRow: { flexDirection: "row", gap: 12 },

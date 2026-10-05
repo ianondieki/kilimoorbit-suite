@@ -9,6 +9,7 @@
  *   POST /api/suite      → runs the catalogue, returns results
  *   POST /api/autopilot  → agentic chain SENSE → A → gate → C → brief
  *   POST /api/signin     → { name, email } | { name, phone } → welcome email (SMTP or SIMULATED) | phone profile (SIMULATED, no SMS)
+ *   GET  /api/weather    → ?county= → 7-day farm forecast + spray / plant / dry windows (see src/agro/weather.js)
  *   /api/soko/*          → produce marketplace (see src/soko/routes.js)
  *
  * `createApp()` is exported so the HTTP test-suite can boot the server on an
@@ -22,6 +23,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 import { callApex, engineMode, MODEL } from "./apex_client.js";
 import { createSokoRouter } from "./soko/routes.js";
+import { findCounty, forecastFor } from "./agro/weather.js";
 import { SUITE, runSuite, loadPayload } from "./suite.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -145,6 +147,18 @@ export function createApp() {
   // Soko marketplace — listings + claims, priced off the live commodity feed.
   app.use("/api/soko", rateLimit({ windowMs: 60_000, max: 120, name: "marketplace" }),
     createSokoRouter({ liveFeed: liveCommodityFeed }));
+
+  // Farm weather: 7-day forecast for a county plus the spray / plant / dry
+  // windows. SAMPLE by default (deterministic); WEATHER_PROVIDER=open-meteo for real data.
+  app.get("/api/weather", rateLimit({ windowMs: 60_000, max: 120, name: "weather" }), async (req, res) => {
+    const name = String(req.query.county ?? "").trim().slice(0, 40);
+    if (!name)
+      return res.status(400).json({ error: "A county is required, e.g. ?county=Meru.", error_type: "MISSING_COUNTY", fields: ["county"] });
+    const county = findCounty(name);
+    if (!county)
+      return res.status(400).json({ error: `Unknown county: ${name}.`, error_type: "UNKNOWN_COUNTY", fields: ["county"] });
+    res.json(await forecastFor(county));
+  });
 
   app.get("/api/meta", (_req, res) => {
     const payloads = {};

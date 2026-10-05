@@ -133,3 +133,18 @@ export const signIn = (input: { name: string; phone?: string; email?: string }) 
 
 export const fmtKES = (n: number | null | undefined) =>
   n == null ? "— suppressed" : `KES ${Number(n).toLocaleString("en-KE")}`;
+
+/* ── Farm weather (GET /api/weather) ── */
+export type Sky = "sunny" | "partly" | "cloudy" | "showers" | "rain" | "heavy" | "storm";
+export type Verdict = { ok: boolean; reason: string; rain_3d_mm?: number };
+export type WxDay = {
+  date: string; tmax: number; tmin: number; rain_mm: number; rain_chance: number; wind_kmh: number; sky: Sky;
+  spray: Verdict; plant: Verdict; dry: Verdict;
+};
+export type Forecast = {
+  county: string; altitude_m: number; season: string; generated_at: string;
+  source: "SAMPLE" | "OPEN_METEO"; fallback?: { from: string; reason: string };
+  days: WxDay[];
+};
+export const getWeather = (county: string) =>
+  request<Forecast>(`/api/weather?county=${encodeURIComponent(county)}`, undefined, 10000);

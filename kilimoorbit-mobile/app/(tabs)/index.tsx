@@ -1,321 +1,270 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  View, Text, ScrollView, RefreshControl, StyleSheet, Pressable,
-} from "react-native";
-import { webLang } from "../../lib/ui";
+/**
+ * Leo / Today: the farmer's morning glance. Weather and the work windows for
+ * their county, this week's farm tasks, where their crop sells best, and the
+ * season's climate watch. Detail lives one tap away (Shamba, Masoko).
+ */
+import React, { useCallback, useState } from "react";
+import { View, Text, ScrollView, RefreshControl, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { router, useFocusEffect } from "expo-router";
 import Header from "../../components/Header";
-import Ticker from "../../components/Ticker";
 import FAB from "../../components/FAB";
-import Pill from "../../components/Pill";
-import { Bounded } from "../../components/Bounded";
-import { Enter, PressScale, CountUp, Skeleton, LevelBar, Thinking } from "../../components/Motion";
+import WeatherCard from "../../components/WeatherCard";
+import TaskRows from "../../components/TaskRows";
+import { useMenu } from "../../components/MenuContext";
+import { AddCropSheet, FarmProfileSheet, RecordSheet } from "../../components/FarmSheets";
+import { Btn, Card, Eyebrow, T, Tag } from "../../components/Kit";
+import { Enter, CountUp, Skeleton } from "../../components/Motion";
+import { DemoTag } from "../../components/ShambaPanel";
+import { ArrowGlyph, BarsGlyph, ChatGlyph, CheckCoin, LensGlyph, PlusGlyph, SignalOffGlyph, SproutGlyph } from "../../components/Glyphs";
 import { useTheme } from "../../lib/theme-context";
-import { SAFE_EMOJI } from "../../lib/prices";
-import { CropCoin } from "../../components/ShambaPanel";
-import {
-  getMeta, callApex, fmtKES, type Meta, type ArbitrageResult, type ApexError,
-} from "../../lib/api";
+import { useLang, useSession } from "../../lib/session";
+import { webLang } from "../../lib/ui";
+import { cropName, isDemoBoard } from "../../lib/prices";
+import { seasonFor } from "../../lib/season";
+import { longDay, todayKey } from "../../lib/dates";
+import { useFarm, upcomingTasks } from "../../lib/farm";
+import { useForecast } from "../../lib/weather";
+import { useSentinel } from "../../lib/sentinel";
+import { DEMO_COUNTY } from "../../lib/counties";
+import type { Key } from "../../lib/i18n";
 
-type Engine = "LIVE" | "MOCK" | "OFFLINE";
+const SHOWN_TASKS = 4;
 
-const CACHE_KEY = "ko-dash-cache";
-
-export default function Dashboard() {
+export default function Today() {
   const t = useTheme();
-  const [engine, setEngine] = useState<Engine>("OFFLINE");
-  const [meta, setMeta] = useState<Meta | null>(null);
-  const [arb, setArb] = useState<ArbitrageResult | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { lang, t: tt } = useLang();
+  const { profile } = useSession();
+  const { farm } = useFarm();
+  const sentinel = useSentinel();
+  const county = farm.county ?? DEMO_COUNTY;
+  const wx = useForecast(county);
+  const { width } = useWindowDimensions();
+  const { isDocked } = useMenu();
+  const [sheet, setSheet] = useState<null | "county" | "crop" | "record">(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
-    setErr(null);
-    try {
-      const m = await getMeta();
-      setMeta(m);
-      setEngine(m.engine);
-      const res = await callApex<ArbitrageResult | ApexError>(m.payloads.arbitrage);
-      if ((res.result as ApexError).execution_mode === "error") {
-        setErr((res.result as ApexError).error_message ?? "Apex returned an error");
-      } else {
-        setArb(res.result as ArbitrageResult);
-        AsyncStorage.setItem(
-          CACHE_KEY,
-          JSON.stringify({ meta: m, arb: res.result, ts: Date.now() })
-        ).catch(() => {});
-      }
-    } catch (e: any) {
-      setEngine("OFFLINE");
-      // Rural connectivity drops are normal — fall back to the last good snapshot.
-      let restored = false;
-      const cached = await AsyncStorage.getItem(CACHE_KEY).catch(() => null);
-      if (cached) {
-        try {
-          const { meta: cm, arb: ca, ts } = JSON.parse(cached);
-          setMeta(cm);
-          setArb(ca);
-          const mins = Math.max(1, Math.round((Date.now() - ts) / 60000));
-          setErr(`Offline — showing data cached ${mins} min ago. (${e.message})`);
-          restored = true;
-        } catch {}
-      }
-      if (!restored)
-        setErr(`Cannot reach the Sentinel server — check API_BASE in lib/config.ts. (${e.message})`);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+  // Two columns once the content area (window minus the docked sidebar) is wide enough.
+  const contentW = width - (isDocked ? 280 : 0);
+  const wide = contentW >= 980;
 
-  useEffect(() => { load(); }, [load]);
+  const hour = new Date().getHours();
+  const hello = tt(hour < 12 ? "today.morning" : hour < 17 ? "today.afternoon" : "today.evening");
+  const first = profile?.name.trim().split(/\s+/)[0];
+  const season = seasonFor();
 
-  const ticker = useMemo(() => {
-    const p = meta?.payloads?.arbitrage;
-    if (!p) return ["CONNECTING TO SENTINEL…"];
-    const items: string[] = [];
-    for (const cF of meta?.commodity_feed?.commodities ?? []) {
-      const best = [...cF.quotes].sort((a, b) => b.price - a.price)[0];
-      // Only emoji every phone can draw (the feed's newer ones, e.g. beans, show as boxes).
-      items.push(`${SAFE_EMOJI[cF.crop] ? SAFE_EMOJI[cF.crop] + " " : ""}${cF.crop.toUpperCase()} ${best.market} KES ${best.price}/kg ${best.delta >= 0 ? "▲" : "▼"}${Math.abs(best.delta)}`);
-    }
-    if (arb?.cargo_optimized_route.logistics_risk_flag !== "CLEAR" && arb)
-      items.push(`⚠ ${arb.cargo_optimized_route.logistics_risk_flag} ON OPTIMAL CORRIDOR`);
-    items.push(`E-BODA ${p.vehicle_telemetry?.vehicle_id} BATTERY ${p.vehicle_telemetry?.battery_level}%`);
-    items.push(`SOIL ${p.iot_telemetry?.soil_moisture}% · RAIN 24H ${p.iot_telemetry?.rainfall_mm_last_24h}mm`);
-    return items;
-  }, [meta, arb]);
+  const refresh = async () => {
+    setRefreshing(true);
+    await Promise.all([sentinel.reload(), Promise.resolve(wx.reload())]);
+    setRefreshing(false);
+  };
 
-  const c = arb?.cargo_optimized_route;
-  const s9 = arb?.climate_risk_sentinel;
-  const riskTone = (lvl?: string) =>
-    lvl === "Low" ? "ok" : lvl === "Medium" ? "warn" : "bad";
+  const weather = (
+    <WeatherCard wx={wx} county={county} countySet={!!farm.county} onChooseCounty={() => setSheet("county")} />
+  );
+  const tasks = <TasksCard onAddCrop={() => setSheet("crop")} />;
+  const market = <MarketCard />;
+  const climate = <ClimateCard />;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]} {...webLang("en")}>
-      <Header engine={engine} />
-      <Ticker items={ticker} />
+    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]} {...webLang(lang)}>
+      <Header brand title={tt("nav.today")} engine={sentinel.engine} />
       <ScrollView
-        contentContainerStyle={st.scroll}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={t.accent} />}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 110 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={t.accent} />}
       >
-        <Bounded style={st.body}>
-        {loading && (
-          <View style={[st.card, { backgroundColor: t.panel, borderColor: t.line }]}>
-            <Thinking
-              color={t.accent}
-              messages={[
-                "Reading masoko prices…",
-                "Checking the weather window…",
-                "Comparing market routes…",
-                "Projecting your net profit…",
-              ]}
-            />
-            <Skeleton height={10} width={120} color={t.raised} style={{ marginTop: 14 }} />
-            <Skeleton height={36} width={210} color={t.raised} style={{ marginTop: 14 }} />
-            <View style={[st.statRow, { marginTop: 16 }]}>
-              <Skeleton height={52} width={"31%"} color={t.raised} radius={10} />
-              <Skeleton height={52} width={"31%"} color={t.raised} radius={10} />
-              <Skeleton height={52} width={"31%"} color={t.raised} radius={10} />
-            </View>
-            <Skeleton height={12} width={"85%"} color={t.raised} style={{ marginTop: 16 }} />
-          </View>
-        )}
-
-        {err && (
-          <View style={[st.card, { backgroundColor: t.panel, borderColor: t.alert }]}>
-            <Text style={[st.cardHead, { color: t.alert }]}>CONNECTION</Text>
-            <Text style={{ color: t.ink }}>{err}</Text>
-            <PressScale onPress={load} accessibilityLabel="Retry connection" style={[st.btn, { backgroundColor: t.accent, marginTop: 12 }]}>
-              <Text style={{ color: t.bg, fontWeight: "700" }}>Retry</Text>
-            </PressScale>
-          </View>
-        )}
-
-        {/* ── Route Optimizer (hero) ── */}
-        {c && (
+        <View style={{ width: "100%", maxWidth: wide ? 1120 : 760, alignSelf: "center", padding: 16, gap: 14 }}>
           <Enter index={0}>
-          <View style={[st.card, { backgroundColor: t.panel, borderColor: t.line }]}>
-            <View style={st.rowBetween}>
-              <Text style={[st.cardHead, { color: t.dim }]}>ROUTE OPTIMIZER</Text>
-              <View style={{ flexDirection: "row", gap: 6 }}>
-                <Pill label={arb!.price_status} tone={arb!.price_status === "LIVE" ? "ok" : "bad"} />
-                <Pill label={arb!.data_confidence} tone={arb!.data_confidence === "HIGH" ? "ok" : arb!.data_confidence === "MEDIUM" ? "warn" : "bad"} />
+            <View style={{ paddingTop: 4, paddingBottom: 2 }}>
+              <Text accessibilityRole="header" style={{ color: t.ink, fontSize: 24, lineHeight: 30, fontWeight: "800" }}>
+                {first ? `${hello}, ${first}` : hello}
+              </Text>
+              <Text style={{ color: t.dim, ...T.body, marginTop: 2 }}>
+                {longDay(lang, todayKey())} · {tt(`season.${season.key}.name` as Key)}
+              </Text>
+            </View>
+          </Enter>
+
+          <ProblemBanner />
+
+          {wide ? (
+            <View style={{ flexDirection: "row", gap: 14, alignItems: "flex-start" }}>
+              <View style={{ flex: 1, gap: 14 }}>
+                <Enter index={1}>{weather}</Enter>
+                <Enter index={3}>{climate}</Enter>
+              </View>
+              <View style={{ flex: 1, gap: 14 }}>
+                <Enter index={2}>{tasks}</Enter>
+                <Enter index={4}>{market}</Enter>
               </View>
             </View>
-            <Text style={[st.kesLabel, { color: t.dim }]}>
-              PROJECTED NET · {c.optimal_market_destination}
-            </Text>
-            <CountUp value={c.net_profit_projection_kes} style={[st.kesBig, { color: t.accent }]} />
-            <View style={st.statRow}>
-              <Stat label="EST. YIELD" value={`${c.estimated_yield_kg?.toLocaleString("en-KE") ?? "—"} kg`} />
-              <Stat label="LIVE PRICE" value={c.live_market_wholesale_price_per_kg != null ? `KES ${c.live_market_wholesale_price_per_kg}/kg` : "—"} />
-              <Stat label={`TRANSIT · ${c.distance_km ?? "—"} KM`} value={fmtKES(c.transit_cost_kes)} />
-            </View>
-            <View style={{ flexDirection: "row", marginTop: 10 }}>
-              <Pill
-                label={c.logistics_risk_flag}
-                tone={c.logistics_risk_flag === "CLEAR" ? "ok" : c.logistics_risk_flag === "WEATHER_DELAY" ? "warn" : "bad"}
-                pulse={c.logistics_risk_flag !== "CLEAR"}
-              />
-            </View>
-            <Text style={[st.insight, { color: t.dim }]}>🛣 {arb!.widget_insights.routing_profit_summary}</Text>
-          </View>
-          </Enter>
-        )}
-
-        {/* ── Climate Sentinel ── */}
-        {s9 && (
-          <Enter index={1}>
-          <View style={[st.card, { backgroundColor: t.panel, borderColor: t.line }]}>
-            <Text style={[st.cardHead, { color: t.dim }]}>CLIMATE SENTINEL</Text>
-            <Text style={{ color: t.ink, fontWeight: "700", marginBottom: 8 }}>
-              {s9.current_kenyan_season} · {s9.farm_altitude_zone}
-            </Text>
-            <View style={st.pillRow}>
-              <Pill label={`FROST ${s9.frost_risk ? "RISK" : "OK"}`} tone={s9.frost_risk ? "bad" : "ok"} pulse={s9.frost_risk} />
-              <Pill label={`DROUGHT ${s9.drought_risk ? "RISK" : "OK"}`} tone={s9.drought_risk ? "bad" : "ok"} pulse={s9.drought_risk} />
-              <Pill label={`FLOOD ${s9.flood_risk ? "RISK" : "OK"}`} tone={s9.flood_risk ? "bad" : "ok"} pulse={s9.flood_risk} />
-              <Pill label={`${s9.pre_farming_risk_level.toUpperCase()} RISK`} tone={riskTone(s9.pre_farming_risk_level)} pulse={s9.pre_farming_risk_level === "High" || s9.pre_farming_risk_level === "Critical"} />
-            </View>
-            <View style={[st.caution, { borderLeftColor: t.alert, backgroundColor: t.raised }]}>
-              <Text style={{ color: t.ink, fontSize: 13 }}>⚠ {s9.climate_caution_alert}</Text>
-            </View>
-            <View style={{ marginTop: 10 }}>
-              <LevelBar
-                pct={{ Low: 25, Medium: 50, High: 75, Critical: 100 }[s9.pre_farming_risk_level] ?? 50}
-                color={s9.pre_farming_risk_level === "Low" ? t.ok : s9.pre_farming_risk_level === "Medium" ? t.accent : t.alert}
-                track={t.raised}
-              />
-            </View>
-            {s9.recommended_seed_variety_adjustment && (
-              <Text style={[st.insight, { color: t.dim }]}>🌱 {s9.recommended_seed_variety_adjustment}</Text>
-            )}
-          </View>
-          </Enter>
-        )}
-
-        {/* ── Market Pricing Matrix ── */}
-        {meta && (
-          <Enter index={2}>
-          <View style={[st.card, { backgroundColor: t.panel, borderColor: t.line }]}>
-            <Text style={[st.cardHead, { color: t.dim }]}>MARKET PRICING MATRIX</Text>
-            {(meta.payloads.arbitrage?.market_data?.available_markets ?? []).map((m: any) => {
-              const winner = m.market_name === c?.optimal_market_destination;
-              return (
-                <View key={m.market_name} style={[st.marketRow, { borderBottomColor: t.line }]}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: winner ? t.accent : t.ink, fontWeight: winner ? "800" : "500" }}>
-                      {winner ? "★ " : ""}{m.market_name}
-                    </Text>
-                    <Text style={{ color: t.dim, fontSize: 11, fontFamily: "monospace" }}>
-                      {m.distance_km} km · transit {fmtKES(m.transit_cost_kes)}
-                    </Text>
-                  </View>
-                  <Text style={{ color: winner ? t.accent : t.ok, fontFamily: "monospace", fontWeight: "700" }}>
-                    KES {m.wholesale_price_per_kg}/kg
-                  </Text>
-                </View>
-              );
-            })}
-            {arb && <Text style={[st.insight, { color: t.dim }]}>📈 {arb.widget_insights.market_price_summary}</Text>}
-
-            {meta.commodity_feed && (
-              <>
-                <Text style={[st.cardHead, { color: t.dim, marginTop: 18 }]}>
-                  COMMODITY BOARD · {meta.commodity_feed.data_age_minutes} MIN OLD
-                </Text>
-                {meta.commodity_feed.commodities.map((cm) => {
-                  const best = [...cm.quotes].sort((a, b) => b.price - a.price)[0];
-                  const up = best.delta >= 0;
-                  return (
-                    <View key={cm.crop} style={[st.marketRow, { borderBottomColor: t.line }]}>
-                      <CropCoin cropKey={cm.crop} size={28} letters={cm.crop.slice(0, 2).toUpperCase()} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ color: t.ink, fontWeight: "600", textTransform: "capitalize" }}>{cm.crop}</Text>
-                        <Text style={{ color: t.dim, fontSize: 11, fontFamily: "monospace" }}>
-                          best: {best.market}
-                        </Text>
-                      </View>
-                      <View style={{ alignItems: "flex-end" }}>
-                        <Text style={{ color: t.ok, fontFamily: "monospace", fontWeight: "700" }}>
-                          KES {best.price}/kg
-                        </Text>
-                        <Text style={{ color: up ? t.ok : t.alert, fontFamily: "monospace", fontSize: 11 }}>
-                          {up ? "▲" : "▼"} {Math.abs(best.delta)}
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                })}
-              </>
-            )}
-          </View>
-          </Enter>
-        )}
-
-        {/* ── Active Deliveries ── */}
-        {meta && (
-          <Enter index={3}>
-          <View style={[st.card, { backgroundColor: t.panel, borderColor: t.line, marginBottom: 110 }]}>
-            <Text style={[st.cardHead, { color: t.dim }]}>ACTIVE DELIVERIES</Text>
-            <View style={st.rowBetween}>
-              <View>
-                <Text style={{ color: t.ink, fontWeight: "700" }}>
-                  {meta.payloads.replan?.active_delivery?.delivery_id} · {meta.payloads.replan?.active_delivery?.crop_type}
-                </Text>
-                <Text style={{ color: t.dim, fontSize: 12 }}>
-                  {meta.payloads.replan?.active_delivery?.origin} → {meta.payloads.replan?.active_delivery?.original_destination}
-                </Text>
-              </View>
-              <Pill label="IN TRANSIT" tone="warn" />
-            </View>
-            <PressScale onPress={() => router.push("/autopilot")} accessibilityLabel="Open Autopilot for disruption replanning" style={[st.btn, { borderColor: t.accent, borderWidth: 1, marginTop: 12 }]}>
-              <Text style={{ color: t.accent, fontWeight: "700" }}>Open Autopilot for disruption replanning</Text>
-            </PressScale>
-          </View>
-          </Enter>
-        )}
-        </Bounded>
+          ) : (
+            <>
+              <Enter index={1}>{weather}</Enter>
+              <Enter index={2}>{tasks}</Enter>
+              <Enter index={3}>{market}</Enter>
+              <Enter index={4}>{climate}</Enter>
+            </>
+          )}
+        </View>
       </ScrollView>
 
       <FAB
         actions={[
-          { label: "💬  Ask Apex (chat)", onPress: () => router.push("/chat") },
-          { label: "🧭  Engage Autopilot", onPress: () => router.push("/autopilot") },
-          { label: "🔄  Refresh telemetry", onPress: load },
+          { label: tt("fab.record"), glyph: (c) => <BarsGlyph size={20} color={c} />, onPress: () => setSheet("record"), testID: "fab-record" },
+          { label: tt("fab.addCrop"), glyph: (c) => <SproutGlyph size={22} color={c} />, onPress: () => setSheet("crop"), testID: "fab-add-crop" },
+          { label: tt("fab.diagnose"), glyph: (c) => <LensGlyph size={20} color={c} />, onPress: () => router.navigate("/daktari") },
+          { label: tt("fab.ask"), glyph: (c) => <ChatGlyph size={20} color={c} />, onPress: () => router.navigate("/chat") },
         ]}
       />
+
+      <FarmProfileSheet visible={sheet === "county"} onClose={() => setSheet(null)} />
+      <AddCropSheet visible={sheet === "crop"} onClose={() => setSheet(null)} />
+      <RecordSheet visible={sheet === "record"} onClose={() => setSheet(null)} />
     </SafeAreaView>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+/* ── Offline / Apex problem: one quiet line, not a red card ── */
+function ProblemBanner() {
   const t = useTheme();
+  const { t: tt } = useLang();
+  const { problem, reload, refreshing } = useSentinel();
+  if (!problem) return null;
+  const text = problem.kind === "cached" ? tt("sentinel.cached", { n: problem.mins }) : problem.kind === "offline" ? tt("sentinel.offline") : tt("sentinel.apex");
   return (
-    <View style={[st.stat, { backgroundColor: t.raised, borderColor: t.line }]}>
-      <Text style={{ color: t.accent, fontFamily: "monospace", fontWeight: "700", fontSize: 13 }}>{value}</Text>
-      <Text style={{ color: t.dim, fontFamily: "monospace", fontSize: 8.5, letterSpacing: 0.5, marginTop: 2 }}>{label}</Text>
+    <View
+      accessibilityRole="alert"
+      style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6, paddingLeft: 14, paddingRight: 6, borderRadius: 14, backgroundColor: t.raised, borderWidth: 1, borderColor: t.line }}
+    >
+      <SignalOffGlyph size={18} color={t.ink} />
+      <Text style={{ flex: 1, color: t.ink, ...T.meta, fontWeight: "600" }}>{text}</Text>
+      <Btn kind="ghost" small label={tt("result.retry")} onPress={reload} disabled={refreshing} />
     </View>
   );
 }
 
-const st = StyleSheet.create({
-  scroll: { flexGrow: 1 },
-  body: { padding: 14, gap: 14 },
-  card: { borderWidth: 1, borderRadius: 14, padding: 16 },
-  cardHead: { fontFamily: "monospace", fontSize: 11, fontWeight: "700", letterSpacing: 2, marginBottom: 10 },
-  rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 },
-  kesLabel: { fontFamily: "monospace", fontSize: 10, letterSpacing: 1, marginTop: 6 },
-  kesBig: { fontSize: 34, fontWeight: "800", marginVertical: 2 },
-  statRow: { flexDirection: "row", gap: 8, marginTop: 12 },
-  stat: { flex: 1, borderWidth: 1, borderRadius: 10, padding: 9, alignItems: "center" },
-  pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 10 },
-  caution: { borderLeftWidth: 3, borderRadius: 8, padding: 10 },
-  insight: { fontSize: 13, lineHeight: 19, marginTop: 10 },
-  marketRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, borderBottomWidth: 1, gap: 10 },
-  btn: { borderRadius: 10, paddingVertical: 12, alignItems: "center" },
-});
+/* ── This week's tasks ── */
+function TasksCard({ onAddCrop }: { onAddCrop: () => void }) {
+  const t = useTheme();
+  const { t: tt } = useLang();
+  const { farm, ready } = useFarm();
+  // Ticked on this visit: kept in the list, struck through, until the screen is left.
+  const [kept, setKept] = useState<ReadonlySet<string>>(new Set());
+  useFocusEffect(useCallback(() => () => setKept(new Set()), []));
+  const due = upcomingTasks(farm, 7, undefined, kept);
+  const open = due.filter((x) => !x.done);
+  const shown = due.slice(0, SHOWN_TASKS);
+
+  return (
+    <Card>
+      <Eyebrow text={tt("tasks.eyebrow")} />
+      {!ready ? (
+        <Skeleton height={48} color={t.raised} radius={12} />
+      ) : farm.plantings.length === 0 ? (
+        <View style={{ gap: 12 }}>
+          <Text style={{ color: t.dim, ...T.body }}>{tt("tasks.empty")}</Text>
+          <Btn kind="secondary" label={tt("tasks.addCrop")} onPress={onAddCrop} icon={(c) => <PlusGlyph size={14} color={c} />} testID="today-add-crop" />
+        </View>
+      ) : open.length === 0 && shown.length === 0 ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4 }}>
+          <CheckCoin size={24} bg={t.ok} fg={t.field} />
+          <Text style={{ flex: 1, color: t.ink, ...T.body }}>{tt("tasks.allDone")}</Text>
+        </View>
+      ) : (
+        <TaskRows tasks={shown} showCrop onToggled={(k) => setKept((s) => new Set(s).add(k))} />
+      )}
+      {due.length > SHOWN_TASKS || (farm.plantings.length > 0 && shown.length === 0) ? (
+        <Btn
+          kind="ghost"
+          small
+          label={due.length > SHOWN_TASKS ? tt("tasks.more", { n: due.length - SHOWN_TASKS }) : tt("nav.farm")}
+          onPress={() => router.navigate("/shamba")}
+          icon={(c) => <ArrowGlyph size={14} color={c} />}
+          style={{ marginTop: 4, flexDirection: "row-reverse", alignSelf: "flex-start" }}
+        />
+      ) : null}
+    </Card>
+  );
+}
+
+/* ── Best market for the planned harvest (Route A) ── */
+function MarketCard() {
+  const t = useTheme();
+  const { lang, t: tt } = useLang();
+  const { status, arb, meta, engine } = useSentinel();
+  const c = arb?.cargo_optimized_route;
+
+  if (status !== "ready" && !arb)
+    return (
+      <Card>
+        <Eyebrow text={tt("nav.markets").toUpperCase()} />
+        <Skeleton height={14} width={180} color={t.raised} />
+        <Skeleton height={36} width={220} color={t.raised} style={{ marginTop: 12 }} />
+        <Skeleton height={26} width={160} color={t.raised} radius={999} style={{ marginTop: 12 }} />
+      </Card>
+    );
+  if (!c) return null;
+
+  const flag = c.logistics_risk_flag;
+  const tone = flag === "CLEAR" ? "ok" : flag === "WEATHER_DELAY" ? "warn" : "bad";
+  const demo = isDemoBoard({ engine: meta?.engine ?? (engine === "OFFLINE" ? undefined : engine) });
+
+  return (
+    <Card>
+      <Eyebrow text={tt("market.eyebrow", { crop: cropName(lang, c.crop_type).toUpperCase() })} right={demo ? <DemoTag /> : null} />
+      <Text style={{ color: t.ink, ...T.title }} {...webLang("en")}>{c.optimal_market_destination}</Text>
+      {c.live_market_wholesale_price_per_kg != null && (
+        <Text style={{ color: t.dim, ...T.meta, fontFamily: "monospace" }}>KES {c.live_market_wholesale_price_per_kg}/kg</Text>
+      )}
+      {c.net_profit_projection_kes != null ? (
+        <View style={{ marginTop: 10 }}>
+          <CountUp value={c.net_profit_projection_kes} style={{ color: t.accent, ...T.big }} />
+          <Text style={{ color: t.dim, ...T.meta }}>{tt("market.net")}</Text>
+        </View>
+      ) : (
+        <Text style={{ color: t.ink, ...T.body, marginTop: 10 }}>{tt("market.suppressed")}</Text>
+      )}
+      <View style={{ marginTop: 12 }}>
+        <Tag label={tt(`risk.${flag}` as Key)} tone={tone} />
+      </View>
+      <Btn
+        kind="ghost"
+        small
+        label={tt("market.open")}
+        onPress={() => router.navigate("/masoko")}
+        icon={(col) => <ArrowGlyph size={14} color={col} />}
+        style={{ marginTop: 6, flexDirection: "row-reverse", alignSelf: "flex-start" }}
+        testID="open-markets"
+      />
+    </Card>
+  );
+}
+
+/* ── Climate watch for the season (Apex climate sentinel) ── */
+function ClimateCard() {
+  const t = useTheme();
+  const { t: tt } = useLang();
+  const { arb } = useSentinel();
+  const s = arb?.climate_risk_sentinel;
+  if (!s) return null;
+  const risks = [s.frost_risk && tt("climate.frost"), s.drought_risk && tt("climate.drought"), s.flood_risk && tt("climate.flood")].filter(Boolean) as string[];
+  const lvl = s.pre_farming_risk_level;
+  const tone = lvl === "Low" ? "ok" : lvl === "Medium" ? "warn" : "bad";
+  return (
+    <Card tone={lvl === "High" || lvl === "Critical" ? "alert" : "plain"}>
+      <Eyebrow text={tt("climate.eyebrow")} right={<Tag label={tt(`climate.level.${lvl}` as Key)} tone={tone} />} />
+      <Text style={{ color: t.ink, ...T.title }}>
+        {risks.length ? tt("climate.watch", { list: risks.join(", ") }) : tt("climate.calm")}
+      </Text>
+      {/* Apex writes these two in English (v1). */}
+      <Text {...webLang("en")} style={{ color: t.ink, ...T.body, marginTop: 6 }}>{s.climate_caution_alert}</Text>
+      {s.recommended_seed_variety_adjustment ? (
+        <View style={{ marginTop: 12, padding: 12, borderRadius: 12, backgroundColor: t.raised, gap: 2 }}>
+          <Text style={{ color: t.dim, ...T.meta, fontWeight: "700" }}>{tt("climate.seed")}</Text>
+          <Text {...webLang("en")} style={{ color: t.ink, ...T.meta }}>{s.recommended_seed_variety_adjustment}</Text>
+        </View>
+      ) : null}
+    </Card>
+  );
+}

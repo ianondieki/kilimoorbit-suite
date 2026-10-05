@@ -1,76 +1,68 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Animated, Pressable, Text, View, Modal, StyleSheet, Platform } from "react-native";
+import React, { useState } from "react";
+import { Pressable, Text, View, StyleSheet, Platform } from "react-native";
 import { useTheme } from "../lib/theme-context";
+import { useLang } from "../lib/session";
+import { focusRing, webCursor, type PressState } from "../lib/ui";
+import { PlusGlyph } from "./Glyphs";
+import { Sheet } from "./Kit";
 
-// RN core types only expose `pressed`; react-native-web also provides `hovered`.
-type PressState = { pressed: boolean; hovered?: boolean };
+export type FabAction = { label: string; glyph: (color: string) => React.ReactNode; onPress: () => void; testID?: string };
 
-/** Apex §4.1 pulsing FAB → quick-action modal. */
-export default function FAB({ actions }: { actions: { label: string; onPress: () => void }[] }) {
+/**
+ * Apex §4.1 floating action button → quick-action sheet. Still (no looping
+ * pulse): it sits on every visit, so motion there would only distract.
+ */
+export default function FAB({ actions }: { actions: FabAction[] }) {
   const t = useTheme();
-  const pulse = useRef(new Animated.Value(0)).current;
+  const { t: tt } = useLang();
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 900, useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, []);
-
-  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
   return (
     <>
-      <Animated.View style={[s.fab, { backgroundColor: t.accent, transform: [{ scale }] }]}>
-        <Pressable
-          onPress={() => setOpen(true)}
-          hitSlop={10}
-          accessibilityLabel="Open quick actions"
-          accessibilityRole="button"
-          style={({ pressed, hovered }: PressState) => [
-            Platform.OS === "web" && { cursor: "pointer" as const },
-            (hovered || pressed) && { opacity: 0.8 },
-          ]}
-        >
-          <Text style={[s.plus, { color: t.bg }]}>＋</Text>
-        </Pressable>
-      </Animated.View>
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable
-          style={s.scrim}
-          onPress={() => setOpen(false)}
-          accessibilityRole="button"
-          accessibilityLabel="Close quick actions"
-        >
-          <View style={[s.sheet, { backgroundColor: t.panel, borderColor: t.line }]}>
-            <Text style={[s.head, { color: t.dim }]}>QUICK ACTIONS</Text>
-            {actions.map((a) => (
-              <Pressable key={a.label} onPress={() => { setOpen(false); a.onPress(); }}
-                accessibilityRole="button"
-                accessibilityLabel={a.label}
-                style={({ pressed, hovered }: PressState) => [
-                  s.action,
-                  { borderColor: hovered ? t.accent : t.line, opacity: pressed ? 0.6 : 1 },
-                  Platform.OS === "web" && { cursor: "pointer" as const },
-                ]}>
-                <Text style={{ color: t.ink, fontSize: 15 }}>{a.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </Pressable>
-      </Modal>
+      <Pressable
+        testID="fab"
+        onPress={() => setOpen(true)}
+        accessibilityRole="button"
+        accessibilityLabel={tt("fab.open")}
+        style={({ pressed, hovered, focused }: PressState) => [
+          s.fab,
+          { backgroundColor: t.accent, opacity: pressed ? 0.85 : hovered ? 0.92 : 1, transform: [{ scale: pressed ? 0.95 : 1 }] },
+          webCursor, focusRing(focused, t.ink),
+        ]}
+      >
+        <PlusGlyph size={24} color={t.field} />
+      </Pressable>
+      <Sheet visible={open} onClose={() => setOpen(false)} title={tt("fab.open")}>
+        <View style={{ gap: 4 }}>
+          {actions.map((a) => (
+            <Pressable
+              key={a.label}
+              testID={a.testID}
+              onPress={() => { setOpen(false); a.onPress(); }}
+              accessibilityRole="button"
+              accessibilityLabel={a.label}
+              style={({ pressed, hovered, focused }: PressState) => [
+                s.action,
+                (hovered || pressed) && { backgroundColor: t.raised },
+                webCursor, focusRing(focused, t.accent),
+              ]}
+            >
+              <View style={[s.coin, { backgroundColor: t.raised, borderColor: t.line }]}>{a.glyph(t.accent)}</View>
+              <Text style={{ flex: 1, color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "700" }}>{a.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </Sheet>
     </>
   );
 }
 const s = StyleSheet.create({
-  fab: { position: "absolute", right: 20, bottom: 26, width: 58, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", elevation: 6 },
-  plus: { fontSize: 28, fontWeight: "800", lineHeight: 32 },
-  scrim: { flex: 1, backgroundColor: "rgba(0,0,0,.45)", justifyContent: "flex-end" },
-  sheet: { margin: 14, marginBottom: 100, borderRadius: 16, borderWidth: 1, padding: 16, gap: 10 },
-  head: { fontFamily: "monospace", fontSize: 10, letterSpacing: 2, marginBottom: 4 },
-  action: { borderWidth: 1, borderRadius: 12, paddingVertical: 13, paddingHorizontal: 14 },
+  fab: {
+    position: "absolute", right: 20, bottom: 24, width: 58, height: 58, borderRadius: 29,
+    alignItems: "center", justifyContent: "center", elevation: 6,
+    ...(Platform.OS === "web"
+      ? ({ boxShadow: "0 4px 14px rgba(0,0,0,0.35)" } as object)
+      : { shadowColor: "#000", shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } }),
+  },
+  action: { minHeight: 60, borderRadius: 14, paddingHorizontal: 8, flexDirection: "row", alignItems: "center", gap: 14, marginHorizontal: -8 },
+  coin: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, alignItems: "center", justifyContent: "center" },
 });

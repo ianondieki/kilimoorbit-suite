@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, Pressable, Animated, Easing, AccessibilityInfo, StyleSheet, type StyleProp, type ViewStyle } from "react-native";
+import { View, Text, Pressable, Animated, Easing, AccessibilityInfo, StyleSheet, Platform, type StyleProp, type ViewStyle } from "react-native";
 import { useTheme } from "../lib/theme-context";
 import { useLang } from "../lib/session";
 import { focusRing, webCursor, webLang, type PressState } from "../lib/ui";
@@ -34,17 +34,43 @@ export function MenuButton({ style }: { style?: StyleProp<ViewStyle> }) {
   );
 }
 
-export default function Header({ engine }: { engine: "LIVE" | "MOCK" | "OFFLINE" }) {
+export type Engine = "LIVE" | "MOCK" | "OFFLINE";
+
+/**
+ * Screen header: menu button (phone/medium), the title, and on the right either
+ * a custom slot or the connection status. `brand` shows the KilimoOrbit
+ * wordmark on phones (the home screen); docked, the sidebar already shows it,
+ * so the header names the page instead.
+ */
+export default function Header({
+  engine, title, brand = false, right,
+}: { engine?: Engine; title: string; brand?: boolean; right?: React.ReactNode }) {
   const t = useTheme();
   const { lang, t: tt } = useLang();
-  // Docked: the sidebar beside this header already shows the wordmark, so the
-  // header names the page instead of repeating the brand.
   const { isDocked } = useMenu();
+  return (
+    <View style={[s.row, { borderBottomColor: t.line, backgroundColor: t.bg }]}>
+      <MenuButton style={{ marginLeft: -12, marginVertical: -8 }} />
+      {brand && !isDocked ? (
+        <Text style={[s.brand, { color: t.ink }]} numberOfLines={1}>
+          KILIMO<Text style={{ color: t.accent }}>ORBIT</Text>
+        </Text>
+      ) : (
+        <Text accessibilityRole="header" {...webLang(lang)} numberOfLines={1} style={[s.brand, { color: t.ink }]}>{title.toUpperCase()}</Text>
+      )}
+      {right ?? (engine ? <EngineStatus engine={engine} /> : null)}
+    </View>
+  );
+}
+
+/** Connection heartbeat: a halo when connected, a slow blink when offline. */
+export function EngineStatus({ engine }: { engine: Engine }) {
+  const t = useTheme();
+  const { lang, t: tt } = useLang();
   const dot = engine === "LIVE" ? t.ok : engine === "MOCK" ? t.accent : t.alert;
   const online = engine === "LIVE" || engine === "MOCK";
 
-  // Status heartbeat: an expanding halo when connected (the engine is alive and
-  // watching), a slow blink when offline. Respects the OS reduce-motion switch.
+  // Respects the OS reduce-motion switch.
   const pulse = useRef(new Animated.Value(0)).current;
   const [reduced, setReduced] = useState(false);
   useEffect(() => {
@@ -71,30 +97,25 @@ export default function Header({ engine }: { engine: "LIVE" | "MOCK" | "OFFLINE"
   const haloScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 2.8] });
   const haloOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] });
   const dotOpacity = online ? 1 : pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.25] });
+  const label = tt(`engine.${engine}`);
 
   return (
-    <View style={[s.row, { borderBottomColor: t.line, backgroundColor: t.bg }]}>
-      <MenuButton style={{ marginLeft: -12, marginVertical: -8 }} />
-      {isDocked ? (
-        <Text accessibilityRole="header" {...webLang(lang)} style={[s.brand, { color: t.ink }]}>{tt("nav.dashboard").toUpperCase()}</Text>
-      ) : (
-        <Text style={[s.brand, { color: t.ink }]}>
-          KILIMO<Text style={{ color: t.accent }}>ORBIT</Text> SENTINEL
-        </Text>
-      )}
-      <View style={s.status}>
-        <View style={s.dotWrap}>
-          {online && !reduced && (
-            <Animated.View
-              style={[s.halo, { backgroundColor: dot, opacity: haloOpacity, transform: [{ scale: haloScale }] }]}
-            />
-          )}
-          <Animated.View style={[s.dot, { backgroundColor: dot, opacity: dotOpacity }]} />
-        </View>
-        <Text style={[s.statusTxt, { color: t.dim }]}>
-          {engine === "LIVE" ? "APEX LIVE" : engine === "MOCK" ? "MOCK" : "OFFLINE"}
-        </Text>
+    <View
+      style={s.status}
+      accessible
+      accessibilityLabel={tt("engine.a11y", { state: label })}
+      {...webLang(lang)}
+      {...(Platform.OS === "web" ? ({ role: "status" } as any) : null)}
+    >
+      <View style={s.dotWrap}>
+        {online && !reduced && (
+          <Animated.View
+            style={[s.halo, { backgroundColor: dot, opacity: haloOpacity, transform: [{ scale: haloScale }] }]}
+          />
+        )}
+        <Animated.View style={[s.dot, { backgroundColor: dot, opacity: dotOpacity }]} />
       </View>
+      <Text style={[s.statusTxt, { color: t.dim }]}>{label.toUpperCase()}</Text>
     </View>
   );
 }

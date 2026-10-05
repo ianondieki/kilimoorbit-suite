@@ -1,11 +1,12 @@
 {
   "name": "kilimoorbit-mobile",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
@@ -27,6 +28,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",
+    "@playwright/test": "^1.56.1",
     "@types/react": "~19.1.0",
     "babel-preset-expo": "~54.0.0",
     "typescript": "~5.9.2"

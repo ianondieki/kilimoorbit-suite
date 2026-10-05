@@ -163,6 +163,23 @@ await check("POST /api/signin phone-only still 200 after email limiter trips (CG
   return { ok: r.status === 200 && r.body.channel === "phone", detail: String(r.status) };
 });
 
+await check("GET /api/weather?county=Meru → 7 days + farming windows", async () => {
+  const r = await get("/api/weather?county=Meru");
+  const d = r.body?.days ?? [];
+  return { ok: r.status === 200 && r.body.county === "Meru" && r.body.source === "SAMPLE" && d.length === 7 && d.every((x) => typeof x.spray?.ok === "boolean" && typeof x.plant?.ok === "boolean" && typeof x.dry?.ok === "boolean"), detail: `${r.body?.season} · ${d.map((x) => x.sky).join(",")}` };
+});
+
+await check("GET /api/weather?county=muranga → Murang'a (forgiving match)", async () => {
+  const r = await get("/api/weather?county=muranga");
+  return r.status === 200 && r.body.county === "Murang'a";
+});
+
+await check("GET /api/weather bad/missing county → 400 with fields", async () => {
+  const a = await get("/api/weather?county=Atlantis");
+  const b = await get("/api/weather");
+  return a.status === 400 && a.body.error_type === "UNKNOWN_COUNTY" && b.status === 400 && b.body.error_type === "MISSING_COUNTY" && b.body.fields?.[0] === "county";
+});
+
 await check("GET /api/nope → 404 JSON", async () => {
   const r = await get("/api/nope");
   return { ok: r.status === 404 && r.body?.error_type === "NOT_FOUND" };

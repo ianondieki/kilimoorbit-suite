@@ -1,16 +1,28 @@
 # KilimoOrbit Sentinel — Android App (Expo / React Native)
 
-The farmer-facing mobile client for the KilimoOrbit Sentinel platform, implementing the Apex v2.0 §4.1 UI architecture: header bar with live connection status, scrolling marquee price/alert ticker, hamburger sidebar (Settings · Notification Profiles · Quick Access · Sign Out), dashboard cards (Market Pricing Matrix, Climate Sentinel, Route Optimizer, Active Deliveries), and a pulsing FAB with a quick-action modal.
+The farmer-facing mobile client for the KilimoOrbit Sentinel platform. Kiswahili first (English one tap away), built for rural connectivity: every screen works from the last good snapshot when the network drops, and everything the farmer records stays on the phone.
 
-## Tabs
+## Screens
+
+Five tabs on a phone; at 900px and wider the sidebar docks and replaces the tab bar.
 
 | Tab | What it does |
 |---|---|
-| **Dashboard** | Live arbitrage hero (projected net KES), climate risk pills + seasonal caution, market matrix with the ★ optimal destination, e-boda telemetry in the ticker, pull-to-refresh |
-| **Apex Chat** | Conversational advisory with intent pills, Swahili/English aware **spoken replies** (expo-speech TTS, toggleable), quick prompts |
-| **Autopilot** | Engages the agentic chain on the server and renders the step-by-step timeline + mission brief |
+| **Leo / Today** | Greeting and season, the county's 7-day forecast with plain-language **farming windows** (good day to spray / plant / harvest & dry, and the next good day if not today), this week's farm tasks to tick off, the best market for the planned harvest, and the season's climate watch. Quick actions: record money, add a crop, check a sick plant, ask Apex. |
+| **Shamba / My farm** | **Calendar**: add crops (maize, beans, tomatoes, potatoes, cabbage, kale) with acreage and planting date; each gets growth stages, a progress bar, dated tasks (land prep, planting, weeding, top-dressing, scouting, harvest, storage) and an **input calculator** (seed / seedlings, DAP and CAN in kg and 50 kg bags for its size). Season suggestions for what to plant now. **Records (daftari)**: income and costs by category and crop, profit for this season or all time, profit per crop. |
+| **Masoko / Markets** | Live price ticker; pick a crop to compare today's wholesale price across markets, type your harvest in kg to see what it is worth at each and how much more the best market pays; the planned harvest run (Apex Route A: net profit after transport, route risk) with **Autopilot** one tap away; deliveries on the road. |
+| **Daktari / Crop doctor** | Offline symptom checker: pick the crop, tick what you see (leaves, stem, fruit / pods / cobs / tubers) and get ranked likely causes among 15 common Kenyan crop problems (fall armyworm, MLN, Tuta absoluta, late blight, bacterial wilt, bean fly, diamondback moth, …), each with what to do now (IPM first, sprays by the label), how to prevent it next season, spraying safety, and "Ask Apex about this". |
+| **Uliza Apex / Ask Apex** | Conversational advisory with intent pills, Swahili/English aware **spoken replies** (expo-speech TTS, toggleable), quick prompts. |
 
-Three themes (Loam · Nyota · Savanna) switchable from the sidebar, persisted with AsyncStorage.
+**Autopilot** (from Markets or the sidebar) engages the agentic chain on the server and renders the step-by-step timeline + mission brief.
+
+Three themes (Loam · Nyota · Savanna for bright sun) switchable from the sidebar, persisted with AsyncStorage.
+
+### Data honesty
+
+- Prices and (by default) weather are **sample data** and always carry the DEMO / MAJARIBIO tag until real feeds are wired in (`SAMPLE_PRICE_FEED` in `lib/prices.ts`; `WEATHER_PROVIDER=open-meteo` on the server for real forecasts).
+- Crop calendars, input rates and the crop doctor are typical extension guidance, not prescriptions; the app says so where the numbers appear. Kiswahili and agronomy content should be reviewed by a native speaker and an extension agronomist before release.
+- The farm (crops, tasks, money records) lives in `ko-farm` on the phone. Signing out with "forget", or a different farmer signing in on a shared phone, removes it.
 
 ## Prerequisites
 
@@ -33,6 +45,14 @@ npm start                    # scan the QR with Expo Go on Android
 ```
 
 `npm run typecheck` runs the strict TypeScript check (passes clean).
+
+## End-to-end tests (Playwright)
+
+```bash
+npm run e2e        # boots the Sentinel server (mock engine) + a static web export, then runs the farmer flows
+```
+
+`e2e/farm.spec.ts` drives Today (weather windows, county picker, adding a crop, ticking a task), Shamba (calendar stage + input calculator, records validation and profit), Masoko (harvest value, Autopilot), the crop doctor (diagnosis → Apex handoff), offline with nothing cached, and Kiswahili, each at phone (390px) and desktop (1280px) widths. CI runs it on every PR that touches the app or the server (`.github/workflows/mobile-ci.yml`).
 
 ## Build an installable APK
 

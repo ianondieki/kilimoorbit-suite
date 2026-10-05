@@ -7,6 +7,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { tr, type Key, type Lang, type Vars } from "./i18n";
+import { FARM_KEY, clearFarmMemory } from "./farm";
 
 export type Profile = {
   v: 2;
@@ -122,19 +123,19 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const activate = useCallback(async (p: Profile) => {
     touched.current = true;
     // A different person signing in on this phone (e.g. after "Si mimi")
-    // replaces the remembered farmer: their name, number and Apex chat log are
-    // not kept (the chat log has no owner field, and a shared phone must not
-    // show one farmer's conversation to the next). Cached prices are not
-    // personal and stay for offline use.
+    // replaces the remembered farmer: their name, number, Apex chat log and
+    // farm (crops, tasks, money records) are not kept (none has an owner field,
+    // and a shared phone must not show one farmer's data to the next). Cached
+    // prices and weather are not personal and stay for offline use.
     const last = lastRef.current;
     const replaceLast = !!last && !sameIdentity(last, p);
     try {
       await AsyncStorage.setItem(K.profile, JSON.stringify(p));
       await AsyncStorage.removeItem(K.guest);
-      if (replaceLast) await AsyncStorage.multiRemove([K.last, "ko-chat-log"]);
+      if (replaceLast) await AsyncStorage.multiRemove([K.last, "ko-chat-log", FARM_KEY]);
     } catch {}
     setGuest(false);
-    if (replaceLast) setLastProfile(null);
+    if (replaceLast) { setLastProfile(null); clearFarmMemory(); }
     setProfile(p);
   }, []);
 
@@ -149,12 +150,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     const current = profile;
     try {
       await AsyncStorage.removeItem(K.profile);
-      if (forget) await AsyncStorage.multiRemove([K.last, "ko-chat-log", "ko-dash-cache", K.guest]);
+      if (forget) await AsyncStorage.multiRemove([K.last, "ko-chat-log", "ko-dash-cache", "ko-weather-cache", FARM_KEY, K.guest]);
       else if (current) await AsyncStorage.setItem(K.last, JSON.stringify(current));
       // ko-theme, ko-lang and ko-voice are kept.
     } catch {}
     setProfile(null);
-    if (forget) { setLastProfile(null); setGuest(false); }
+    if (forget) { setLastProfile(null); setGuest(false); clearFarmMemory(); }
     else if (current) setLastProfile(current);
   }, [profile]);
 
@@ -165,10 +166,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   const forgetLast = useCallback(async () => {
     touched.current = true;
-    // "Ondoa kwenye simu hii": the remembered farmer's chat goes with them, as
-    // with sign-out's "forget" box, so the next person never inherits it.
-    try { await AsyncStorage.multiRemove([K.last, "ko-chat-log"]); } catch {}
+    // "Ondoa kwenye simu hii": the remembered farmer's chat and farm go with
+    // them, as with sign-out's "forget" box, so the next person never inherits them.
+    try { await AsyncStorage.multiRemove([K.last, "ko-chat-log", FARM_KEY]); } catch {}
     setLastProfile(null);
+    clearFarmMemory();
   }, []);
 
   const status: SessionStatus = !hydrated ? "loading" : profile ? "signedIn" : guest ? "guest" : "signedOut";
