@@ -20,7 +20,7 @@ Three themes (Loam · Nyota · Savanna for bright sun) switchable from the sideb
 
 ### Connection
 
-On a phone the app reaches the server at the laptop's Wi-Fi address (auto-detected from Expo). When that fails the app shows "Offline" with a **Fix connection** button (also under Settings → KilimoOrbit server): it tests the address, says why it failed (no answer, unreachable, wrong server) with the usual fixes (server running? same Wi-Fi? Windows Firewall allowing Node.js?), and lets you type the address the server prints at start-up ("From a phone on this Wi-Fi: http://192.168.x.x:4517"). The address is kept on the phone.
+On a phone the app reaches the server at the laptop's Wi-Fi address (auto-detected from Expo). When that fails the app shows "Offline" with a **Fix connection** button (also under Settings → KilimoOrbit server): it tests the address, says why it failed (no answer, unreachable, wrong server) with the usual fixes (server running? same Wi-Fi? Windows Firewall allowing Node.js?), and lets you type the address the server prints at start-up ("From a phone on this Wi-Fi: http://192.168.x.x:4517  (Wi-Fi)"). On Windows take the one marked Wi-Fi: the vEthernet (WSL, Hyper-V) addresses are listed separately because a phone cannot reach them. The address is kept on the phone.
 
 ### Data honesty
 
@@ -44,6 +44,7 @@ On a phone the app reaches the server at the laptop's Wi-Fi address (auto-detect
 ## Prerequisites
 
 - Node.js 20.19.4+ (or 22.13+), the **Expo Go** app on your Android phone (Play Store), and the **kilimoorbit-sentinel server running** (it is the brain — this app is the face).
+- `npm install` ends with `npm audit` advisories; the ones left are inside Expo's build tooling (`@expo/config-plugins` → `xcode` → `uuid`, `node-forge`), on the developer's computer only, not in the app bundle. Do not run `npm audit fix --force`: it downgrades Expo.
 - The app is on **Expo SDK 57** (React Native 0.86, React 19.2). Expo Go only opens projects on the SDK it was built for, so use the current Expo Go; if it says the project needs a different SDK, update Expo Go (or the project, with `npx expo install expo@<version> --fix`).
 
 ## Run it

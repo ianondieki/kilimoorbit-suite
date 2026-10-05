@@ -87,12 +87,21 @@ export async function runReminders(bookings, mailer, now = new Date()) {
   return sent;
 }
 
-/** Addresses a phone on the same Wi-Fi can use to reach this server. */
-export function lanAddresses() {
+/** Virtual adapters (Windows vEthernet for WSL/Hyper-V, Docker bridges, VPNs…): a phone on the Wi-Fi cannot reach those. */
+const VIRTUAL_ADAPTER = /vethernet|wsl|hyper-v|virtual|vmware|vmnet|vbox|docker|br-|veth|virbr|utun|\btun\d|\btap\d|tailscale|zerotier|bridge|lxc/i;
+
+/**
+ * Addresses a phone on the same Wi-Fi can use to reach this server, the real
+ * Wi-Fi/Ethernet adapter first and virtual ones flagged, so the start-up line
+ * names the one to type into the app's Connection screen.
+ */
+export function lanAddresses(ifaces = networkInterfaces()) {
   const out = [];
-  for (const list of Object.values(networkInterfaces()))
-    for (const i of list ?? []) if (i.family === "IPv4" && !i.internal) out.push(i.address);
-  return out;
+  for (const [name, list] of Object.entries(ifaces))
+    for (const i of list ?? []) if (i.family === "IPv4" && !i.internal) out.push({ name, address: i.address, virtual: VIRTUAL_ADAPTER.test(name) });
+  // Home routers hand out 192.168.x.x or 10.x.x.x; 172.16–31.x.x is mostly Docker, WSL and Hyper-V.
+  const rank = (a) => (a.virtual ? 2 : /^172\.(1[6-9]|2\d|3[01])\./.test(a.address) ? 1 : 0);
+  return out.sort((a, b) => rank(a) - rank(b));
 }
 
 export function createApp(opts = {}) {
@@ -564,7 +573,10 @@ if (isMain) {
     // The mobile app on a phone reaches the server by one of these; the app's
     // Connection screen shows which one it is trying.
     const lan = lanAddresses();
-    if (lan.length) console.log(`  From a phone on this Wi-Fi: ${lan.map((ip) => `http://${ip}:${PORT}`).join("  or  ")}`);
+    const real = lan.filter((a) => !a.virtual);
+    const virtual = lan.filter((a) => a.virtual);
+    if (real.length) console.log(`  From a phone on this Wi-Fi: ${real.map((a) => `http://${a.address}:${PORT}  (${a.name})`).join("  or  ")}`);
+    if (virtual.length) console.log(`  Not reachable from a phone (virtual adapters): ${virtual.map((a) => `${a.address} ${a.name}`).join(", ")}`);
   });
   const shutdown = (sig) => {
     console.log(`\n[${sig}] shutting down…`);

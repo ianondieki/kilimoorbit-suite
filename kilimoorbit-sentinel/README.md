@@ -1,10 +1,10 @@
 # KilimoOrbit Sentinel
 
-An AI agri-logistics decision engine for Kenyan smallholder farmers, powered by Google Gemini (APEX core). It routes JSON payloads through five execution modes — market arbitrage, farmer chat, alert broadcast, onboarding, and logistics replanning — and ships with a Mission Control web dashboard, an investor one-pager at `/pitch`, farm-weather, price-history, county pest-watch, farm-news and farm-show APIs (with a booking agent that emails confirmations and reminders), and five verification suites (30 APEX contract checks, 12 Soko store checks, 34 farm-weather, price, pest-watch, news and show checks, 44 HTTP integration checks, 7 LIVE→MOCK fallback checks).
+An AI agri-logistics decision engine for Kenyan smallholder farmers, powered by Google Gemini (APEX core). It routes JSON payloads through five execution modes — market arbitrage, farmer chat, alert broadcast, onboarding, and logistics replanning — and ships with a Mission Control web dashboard, an investor one-pager at `/pitch`, farm-weather, price-history, county pest-watch, farm-news and farm-show APIs (with a booking agent that emails confirmations and reminders), and five verification suites (30 APEX contract checks, 12 Soko store checks, 34 farm-weather, price, pest-watch, news and show checks, 45 HTTP integration checks, 7 LIVE→MOCK fallback checks).
 
 ## Prerequisites
 
-- **Node.js 20+** (the `@google/genai` SDK requires it)
+- **Node.js 20+** (the `@google/genai` SDK and nodemailer 10 require it)
 - **Google AI Studio free API key** (no credit card) → get one here: **https://aistudio.google.com/apikey**
 
 ## Setup
@@ -12,7 +12,7 @@ An AI agri-logistics decision engine for Kenyan smallholder farmers, powered by 
 ```bash
 npm install
 cp .env.example .env       # then paste your GEMINI_API_KEY into .env
-npm test                   # APEX (30) + Soko (12) + weather, prices, pest watch, news & shows (34) + HTTP (44) + fallback (7)
+npm test                   # APEX (30) + Soko (12) + weather, prices, pest watch, news & shows (34) + HTTP (45) + fallback (7)
 npm start                  # launches Mission Control → http://localhost:4517
 npm run dev                # same, with auto-restart on file changes
 ```
@@ -129,7 +129,7 @@ Reports are kept in memory (at most 5,000; a restart clears them). A county with
 - `POST /api/events/book` `{ event_id, name, email?, county?, remind_days: 1 | 3 | 7 }` → `201 { booking_id, token, status: "BOOKED", event, calendar_url, ics, email: "SENT" | "SIMULATED" | "NONE" | "FAILED", remind_on, steps[] }`. The booking agent runs four steps (`steps` carries them for the app's timeline): **Scout** finds the show, **Planner** builds the calendar entry (an `.ics` with a reminder alarm, and a Google Calendar "add event" link the farmer opens on the phone), **Messenger** emails a confirmation with the `.ics` attached when SMTP is configured (SIMULATED and logged otherwise, exactly like sign-in), **Reminder** stores the reminder. A scheduler in the server sends reminder emails on `remind_on` (checked every minute; a reminder missed while the server was down is sent up to two days late). Bookings live in `data/events_bookings.json` (`EVENTS_STORE_PATH`), at most 2,000, with the farmer's name and email only to send those emails. 10 bookings per hour per IP (it sends email). Invalid → `400` `VALIDATION_ERROR` with `fields`.
 - `DELETE /api/events/book/:id?token=…` cancels the booking and its reminder with the token returned at booking time (`403` wrong token, `404` unknown).
 
-Logic: `src/agro/events.js`. At start-up the server also prints the addresses a phone on the same Wi-Fi can use (`From a phone on this Wi-Fi: http://192.168.x.x:4517`), which the app's Connection screen asks for.
+Logic: `src/agro/events.js`. At start-up the server also prints the addresses a phone on the same Wi-Fi can use, named by adapter and Wi-Fi first (`From a phone on this Wi-Fi: http://192.168.x.x:4517  (Wi-Fi)`), which the app's Connection screen asks for; Windows' vEthernet (WSL, Hyper-V) and Docker adapters, which a phone cannot reach, go on a separate "Not reachable from a phone" line.
 
 ## API hardening
 
@@ -156,11 +156,11 @@ The governing prompt is loaded verbatim from **`src/apex_system_prompt.md`** (yo
 
 | Command                  | What it does                                  |
 |--------------------------|-----------------------------------------------|
-| `npm test`               | All five suites: APEX contract (30) + Soko store (12) + farm weather, prices, pest watch, news & shows (34) + HTTP (44) + fallback (7) |
+| `npm test`               | All five suites: APEX contract (30) + Soko store (12) + farm weather, prices, pest watch, news & shows (34) + HTTP (45) + fallback (7) |
 | `npm run test:apex`      | Cold start + integrity + all 5 routes + climate + guardrails (30/30) |
 | `npm run test:soko`      | Soko marketplace store + fair-price suite (12/12)             |
 | `npm run test:agro`      | Farm weather (counties, sample forecast, farming windows, Open-Meteo mapping + fallback), market prices (levels, history, board consistency), the pest watch (validation, thresholds, window, bounds, sample), farm news (RSS parsing, county-first merge, cache and SAMPLE fallback) and farm shows (projection, distance, calendar entries, the booking agent, reminders, cancellation) (34/34) |
-| `npm run test:server`    | Boots the real server on a random port (stubbed news feeds, a temp bookings file), hits every endpoint, including hostile query shapes and payloads (44/44) |
+| `npm run test:server`    | Boots the real server on a random port (stubbed news feeds, a temp bookings file), hits every endpoint, including hostile query shapes and payloads, and checks the start-up address ranking (45/45) |
 | `npm run check`          | Syntax-check every module (fast CI gate)      |
 | `npm start` / `npm run dev` | Mission Control dashboard on port 4517 (dev = auto-restart) |
 | `npm run docker:build`   | Build the production image                    |

@@ -8,7 +8,7 @@ process.env.APEX_MOCK = "1";
 process.env.SOKO_STORE_PATH = process.env.SOKO_STORE_PATH
   || `${process.env.TEMP || process.env.TMPDIR || "/tmp"}/soko_test_${process.pid}.json`;
 
-const { createApp } = await import("../server.js");
+const { createApp, lanAddresses } = await import("../server.js");
 const { createNews } = await import("../agro/news.js");
 const { createBookings } = await import("../agro/events.js");
 const { unlinkSync, readFileSync } = await import("node:fs");
@@ -336,6 +336,19 @@ await check("POST /api/soko/price-suggest → per-market comparison", async () =
 await check("GET /api/soko/stats → counts by status", async () => {
   const r = await get("/api/soko/stats");
   return { ok: r.status === 200 && r.body.delivered >= 1 && r.body.cancelled >= 1 && typeof r.body.total === "number", detail: JSON.stringify(r.body) };
+});
+
+await check("Boot: lanAddresses puts the Wi-Fi adapter first and flags vEthernet/WSL/Docker ones", async () => {
+  const fake = {
+    "vEthernet (WSL (Hyper-V firewall))": [{ address: "172.22.0.1", family: "IPv4", internal: false }],
+    "Loopback Pseudo-Interface 1": [{ address: "127.0.0.1", family: "IPv4", internal: true }],
+    "Wi-Fi": [{ address: "192.168.100.113", family: "IPv4", internal: false }, { address: "fe80::1", family: "IPv6", internal: false }],
+    "vEthernet (Default Switch)": [{ address: "172.22.144.1", family: "IPv4", internal: false }],
+    docker0: [{ address: "172.17.0.1", family: "IPv4", internal: false }],
+  };
+  const got = lanAddresses(fake);
+  const ok = got.length === 4 && got[0].address === "192.168.100.113" && got[0].name === "Wi-Fi" && !got[0].virtual && got.slice(1).every((a) => a.virtual);
+  return { ok, detail: got.map((a) => `${a.address}${a.virtual ? " (virtual)" : ""}`).join(" · ") };
 });
 
 server.close();
