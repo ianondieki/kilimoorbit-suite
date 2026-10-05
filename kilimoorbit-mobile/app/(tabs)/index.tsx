@@ -15,6 +15,10 @@ import { AddAnimalSheet, EggSheet, HatchRows, HerdRows, MilkSheet, herdHasLayers
 import { dueHatchSteps } from "../../lib/livestock";
 import { StoreRows } from "../../components/Ghala";
 import { PestWatchCard } from "../../components/Scout";
+import { NewsCard } from "../../components/News";
+import { ShowsCard } from "../../components/Events";
+import { TriviaCard } from "../../components/Trivia";
+import { ConnectionSheet } from "../../components/Connection";
 import { checkKind, dueChecks } from "../../lib/postharvest";
 import { AlertsCard } from "../../components/PriceAlerts";
 import { useAlerts } from "../../lib/alerts";
@@ -55,7 +59,7 @@ export default function Today() {
   const wx = useForecast(county);
   const { width } = useWindowDimensions();
   const { isDocked } = useMenu();
-  const [sheet, setSheet] = useState<null | "county" | "crop" | "record" | "animal" | "milk" | "eggs">(null);
+  const [sheet, setSheet] = useState<null | "county" | "crop" | "record" | "animal" | "milk" | "eggs" | "connection">(null);
   const { herd } = useHerd();
   const alerts = useAlerts();
   const [refreshing, setRefreshing] = useState(false);
@@ -106,6 +110,10 @@ export default function Today() {
   const tasks = <Guard name="tasks"><TasksCard onAddCrop={() => setSheet("crop")} onAddAnimal={() => setSheet("animal")} days={wx.data?.days} /></Guard>;
   const market = <Guard name="market"><MarketCard /></Guard>;
   const climate = <Guard name="climate"><ClimateCard /></Guard>;
+  // Discover: the county's farm news, the shows near it, and five questions a day.
+  const news = <Guard name="news"><NewsCard county={farm.county} /></Guard>;
+  const shows = <Guard name="shows"><ShowsCard county={county} /></Guard>;
+  const trivia = <Guard name="trivia"><TriviaCard /></Guard>;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]} {...webLang(lang)}>
@@ -130,7 +138,7 @@ export default function Today() {
             </View>
           </Enter>
 
-          <ProblemBanner />
+          <ProblemBanner onFix={() => setSheet("connection")} />
           <Guard name="alerts"><AlertsCard /></Guard>
           {/* Only when neighbours are finding fall armyworm above the threshold, and only for maize growers. */}
           {farm.plantings.some((p) => p.crop === "maize") && <Guard name="pest-watch"><PestWatchCard county={county} compact /></Guard>}
@@ -140,10 +148,13 @@ export default function Today() {
               <View style={{ flex: 1, gap: 14 }}>
                 <Enter index={1}>{weather}</Enter>
                 <Enter index={3}>{climate}</Enter>
+                <Enter index={5}>{news}</Enter>
+                <Enter index={7}>{trivia}</Enter>
               </View>
               <View style={{ flex: 1, gap: 14 }}>
                 <Enter index={2}>{tasks}</Enter>
                 <Enter index={4}>{market}</Enter>
+                <Enter index={6}>{shows}</Enter>
               </View>
             </View>
           ) : (
@@ -152,6 +163,9 @@ export default function Today() {
               <Enter index={2}>{tasks}</Enter>
               <Enter index={3}>{market}</Enter>
               <Enter index={4}>{climate}</Enter>
+              <Enter index={5}>{news}</Enter>
+              <Enter index={6}>{shows}</Enter>
+              <Enter index={7}>{trivia}</Enter>
             </>
           )}
         </View>
@@ -178,12 +192,13 @@ export default function Today() {
       <AddAnimalSheet visible={sheet === "animal"} onClose={() => setSheet(null)} />
       <MilkSheet visible={sheet === "milk"} onClose={() => setSheet(null)} />
       <EggSheet visible={sheet === "eggs"} onClose={() => setSheet(null)} />
+      <ConnectionSheet visible={sheet === "connection"} onClose={() => setSheet(null)} />
     </SafeAreaView>
   );
 }
 
 /* ── Offline / Apex problem: one quiet line, not a red card ── */
-function ProblemBanner() {
+function ProblemBanner({ onFix }: { onFix: () => void }) {
   const t = useTheme();
   const { t: tt } = useLang();
   const { problem, reload, refreshing } = useSentinel();
@@ -196,7 +211,9 @@ function ProblemBanner() {
     >
       <SignalOffGlyph size={18} color={t.ink} />
       <Text style={{ flex: 1, color: t.ink, ...T.meta, fontWeight: "600" }}>{text}</Text>
-      <Btn kind="ghost" small label={tt("result.retry")} onPress={reload} disabled={refreshing} />
+      {problem.kind === "apex"
+        ? <Btn kind="ghost" small label={tt("result.retry")} onPress={reload} disabled={refreshing} />
+        : <Btn kind="ghost" small label={tt("sentinel.fix")} onPress={onFix} testID="fix-connection" />}
     </View>
   );
 }

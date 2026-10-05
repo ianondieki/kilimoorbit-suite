@@ -1,19 +1,25 @@
 /**
- * Single swap point for the backend (the KilimoOrbit Sentinel server).
+ * Where the backend (the KilimoOrbit Sentinel server) is.
  *
- * You normally don't edit this file — the API base is auto-detected per platform:
+ * The address is auto-detected per platform:
  *   - Web (browser on this machine):          http://localhost:4517
  *   - Android emulator → host machine:        http://10.0.2.2:4517
  *   - Physical device / iOS sim (same Wi-Fi): http://<Metro-host-LAN-IP>:4517
  *                                             (reuses the IP Expo is served from)
  *
- * To override (e.g. a deployed backend), set EXPO_PUBLIC_API_BASE in .env:
- *   EXPO_PUBLIC_API_BASE=https://kilimoorbit-sentinel.onrender.com
+ * A farmer (or whoever set up the laptop) can override it from the app's
+ * Connection screen (kept on the phone, "ko-api-base"), e.g. when the laptop
+ * has several network adapters and Expo picked the wrong one, or to point at
+ * a deployed server. EXPO_PUBLIC_API_BASE in .env sets the auto value.
  */
 import { Platform } from "react-native";
 import Constants from "expo-constants";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useCallback, useSyncExternalStore } from "react";
+import { cleanBase } from "./connection";
 
 const PORT = 4517;
+export const API_BASE_KEY = "ko-api-base";
 
 /** The LAN IP of the machine running Metro — lets a physical device reach the
  *  backend on the same Wi-Fi without hardcoding an address that goes stale. */
@@ -46,4 +52,39 @@ function resolveApiBase(): string {
   return `http://localhost:${PORT}`;
 }
 
+/** The auto-detected address. */
 export const API_BASE = resolveApiBase();
+
+let override: string | null = null;
+let hydrating: Promise<void> | null = null;
+const listeners = new Set<() => void>();
+const emit = () => listeners.forEach((l) => l());
+
+/** Reads the saved override once; every request waits for this so the first call goes to the right server. */
+export function hydrateApiBase(): Promise<void> {
+  if (!hydrating) {
+    hydrating = AsyncStorage.getItem(API_BASE_KEY)
+      .then((v) => { override = cleanBase(v); if (override) emit(); })
+      .catch(() => {});
+  }
+  return hydrating;
+}
+
+export const getApiBase = () => override ?? API_BASE;
+export const getApiOverride = () => override;
+
+export async function setApiBaseOverride(raw: string | null): Promise<string | null> {
+  override = cleanBase(raw);
+  emit();
+  try {
+    if (override) await AsyncStorage.setItem(API_BASE_KEY, override);
+    else await AsyncStorage.removeItem(API_BASE_KEY);
+  } catch {}
+  return override;
+}
+
+export function useApiBase(): { base: string; override: string | null; auto: string } {
+  const subscribe = useCallback((l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; }, []);
+  const o = useSyncExternalStore(subscribe, () => override, () => override);
+  return { base: o ?? API_BASE, override: o, auto: API_BASE };
+}

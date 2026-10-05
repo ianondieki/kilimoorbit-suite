@@ -105,9 +105,9 @@ export function Btn({
 
 /* ── Chip: selectable pill (checkbox / radio / plain button) ── */
 export function Chip({
-  label, selected = false, onPress, leading, role = "button", a11yLabel, pressRef, keys, testID,
+  label, sub, selected = false, onPress, leading, role = "button", a11yLabel, pressRef, keys, testID,
 }: {
-  label: string; selected?: boolean; onPress: () => void; leading?: React.ReactNode;
+  label: string; sub?: string; selected?: boolean; onPress: () => void; leading?: React.ReactNode;
   role?: "button" | "checkbox" | "radio"; a11yLabel?: string;
   pressRef?: (el: View | null) => void; keys?: Record<string, unknown>; testID?: string;
 }) {
@@ -121,7 +121,7 @@ export function Chip({
       {...(role === "checkbox" ? spaceActivates(onPress) : null)}
       {...keys}
       accessibilityRole={role}
-      accessibilityLabel={a11yLabel ?? label}
+      accessibilityLabel={a11yLabel ?? (sub ? `${label}, ${sub}` : label)}
       accessibilityState={toggle ? { checked: selected, selected } : undefined}
       {...(toggle ? { "aria-checked": selected } : null)}
       style={({ pressed, hovered, focused }: PressState) => [
@@ -137,9 +137,12 @@ export function Chip({
     >
       {toggle && selected && role === "checkbox" ? <CheckGlyph size={14} color={t.accent} /> : null}
       {leading}
-      <Text maxFontSizeMultiplier={1.4} style={{ flexShrink: 1, color: t.ink, fontSize: 15, lineHeight: 20, fontWeight: selected ? "700" : "500" }}>
-        {label}
-      </Text>
+      <View style={{ flexShrink: 1 }}>
+        <Text maxFontSizeMultiplier={1.4} style={{ color: t.ink, fontSize: 15, lineHeight: 20, fontWeight: selected ? "700" : "500" }}>
+          {label}
+        </Text>
+        {sub ? <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={{ color: t.dim, fontSize: 12, lineHeight: 15, fontFamily: "monospace", fontWeight: "700" }}>{sub}</Text> : null}
+      </View>
     </Pressable>
   );
 }

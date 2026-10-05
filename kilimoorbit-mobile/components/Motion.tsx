@@ -4,7 +4,7 @@ import {
   type AccessibilityState, type AccessibilityRole,
 } from "react-native";
 import Animated, {
-  FadeInDown, FadeInUp, useSharedValue, useAnimatedStyle,
+  FadeIn, FadeInDown, FadeInUp, useSharedValue, useAnimatedStyle,
   withSpring, withRepeat, withTiming, Easing, useReducedMotion, cancelAnimation, ReduceMotion,
 } from "react-native-reanimated";
 import { focusRing } from "../lib/ui";
@@ -19,11 +19,9 @@ export function Enter({
   // Reduced motion: render in place, no entering animation at all.
   const reduce = useReducedMotion();
   if (reduce) return <View style={style}>{children}</View>;
-  const anim = (from === "down" ? FadeInDown : FadeInUp)
-    .delay(index * 90)
-    .springify()
-    .damping(15)
-    .stiffness(140);
+  const anim = Platform.OS === "web"
+    ? (from === "down" ? FadeInDown : FadeInUp).delay(index * 90).springify().damping(15).stiffness(140)
+    : FadeIn.duration(220).delay(Math.min(index, 5) * 60);
   return (
     <Animated.View entering={anim} style={style}>
       {children}

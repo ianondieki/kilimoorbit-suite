@@ -1,5 +1,5 @@
-import { API_BASE } from "./config";
-import { cleanForecast, cleanHistory, cleanListing, cleanMeta, cleanPestWatch } from "./validate";
+import { getApiBase, hydrateApiBase } from "./config";
+import { cleanBooking, cleanForecast, cleanHistory, cleanListing, cleanMeta, cleanNews, cleanPestWatch, cleanShows } from "./validate";
 
 /* ── Apex v2.0 result types (the fields the app renders) ── */
 export type ArbitrageResult = {
@@ -76,10 +76,12 @@ export class TimeoutError extends Error {
 
 /** Fetch with a hard timeout — an unreachable LAN IP otherwise hangs the UI indefinitely. */
 async function request<T>(path: string, init?: RequestInit, timeoutMs = 15000): Promise<T> {
+  // The saved server address (Connection screen) must be read before the first request.
+  await hydrateApiBase();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(`${API_BASE}${path}`, { ...init, signal: controller.signal });
+    const res = await fetch(`${getApiBase()}${path}`, { ...init, signal: controller.signal });
     if (!res.ok) {
       // The message stays exactly as before (existing callers print it); the
       // server's JSON details ride along on the ApiError.
@@ -176,6 +178,39 @@ export const getPestWatch = async (county: string) =>
 /** Anonymous: county, crop, plants checked / hit and the crop's age only. */
 export const reportPest = async (input: { county: string; crop: "maize"; plants: number; hit: number; age_days: number | null }) =>
   must(cleanPestWatch((await post<any>("/api/pests/report", input, 10000))?.watch), "pest watch");
+
+/* ── Farm news (GET /api/news) ── */
+export type NewsItem = {
+  id: string; title: string; title_sw?: string; source: string;
+  /** The story, or null for an in-app tip (then `route` says where). */
+  link: string | null; route?: string;
+  published: string | null; summary: string; image: string | null;
+  scope: "county" | "national" | "tip"; county: string | null;
+};
+export type News = { county: string | null; fetched_at: string; source: "LIVE" | "CACHED" | "SAMPLE"; items: NewsItem[] };
+export const getNews = async (county: string | null) =>
+  must(cleanNews(await request<unknown>(`/api/news${county ? `?county=${encodeURIComponent(county)}` : ""}`, undefined, 12000)), "news");
+
+/* ── Farm shows (GET /api/events, POST /api/events/book) ── */
+export type Show = {
+  id: string; name: string; organiser: string; town: string; county: string; venue: string;
+  start: string; end: string; kind: "show" | "expo" | "contest"; url: string | null;
+  /** Projected from last year's calendar: confirm with the organiser. */
+  estimated: boolean; days_until: number; distance_km: number;
+};
+export type Shows = { county: string; today: string; theme: string; source: string; events: Show[] };
+export const getShows = async (county: string) =>
+  must(cleanShows(await request<unknown>(`/api/events?county=${encodeURIComponent(county)}`, undefined, 10000)), "shows");
+
+export type BookingStep = { agent: string; action: string; latency_ms: number };
+export type Booking = {
+  booking_id: string; token: string; status: "BOOKED"; event: Omit<Show, "days_until" | "distance_km">;
+  calendar_url: string; ics: string; email: "SENT" | "SIMULATED" | "NONE" | "FAILED"; remind_on: string; steps: BookingStep[];
+};
+export const bookShow = (input: { event_id: string; name: string; email?: string | null; county?: string | null; remind_days: 1 | 3 | 7 }) =>
+  post<unknown>("/api/events/book", input, 20000).then((r) => must(cleanBooking(r), "booking"));
+export const cancelBooking = (id: string, token: string) =>
+  request<{ ok: boolean }>(`/api/events/book/${encodeURIComponent(id)}?token=${encodeURIComponent(token)}`, { method: "DELETE" }, 10000);
 
 /* ── Soko marketplace (/api/soko) ── */
 export type SokoStatus = "open" | "claimed" | "delivered" | "cancelled";

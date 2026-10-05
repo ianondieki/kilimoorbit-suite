@@ -9,7 +9,11 @@ process.env.SOKO_STORE_PATH = process.env.SOKO_STORE_PATH
   || `${process.env.TEMP || process.env.TMPDIR || "/tmp"}/soko_test_${process.pid}.json`;
 
 const { createApp } = await import("../server.js");
-const { unlinkSync } = await import("node:fs");
+const { createNews } = await import("../agro/news.js");
+const { createBookings } = await import("../agro/events.js");
+const { unlinkSync, readFileSync } = await import("node:fs");
+const EVENTS_PATH = `${process.env.TEMP || process.env.TMPDIR || "/tmp"}/events_test_${process.pid}.json`;
+const FEED = readFileSync(new URL("./fixtures/news_feed.xml", import.meta.url), "utf8");
 
 const C = {
   green: (s) => `\x1b[32m${s}\x1b[0m`,
@@ -18,11 +22,16 @@ const C = {
   bold: (s) => `\x1b[1m${s}\x1b[0m`,
 };
 
-const server = createApp().listen(0);
+const server = createApp({
+  news: createNews({ fetchImpl: async () => ({ ok: true, status: 200, text: async () => FEED }) }),
+  bookings: createBookings({ storePath: EVENTS_PATH }),
+  scheduler: false,
+}).listen(0);
 await new Promise((r) => server.once("listening", r));
 const base = `http://127.0.0.1:${server.address().port}`;
 
 const get = async (p) => { const r = await fetch(base + p); return { status: r.status, body: await r.json().catch(() => null), headers: r.headers }; };
+const del = async (p) => { const r = await fetch(base + p, { method: "DELETE" }); return { status: r.status, body: await r.json().catch(() => null) }; };
 const post = async (p, body, raw = false) => {
   const r = await fetch(base + p, { method: "POST", headers: { "Content-Type": "application/json" }, body: raw ? body : JSON.stringify(body) });
   return { status: r.status, body: await r.json().catch(() => null), headers: r.headers };
@@ -212,6 +221,44 @@ await check("pest watch: bad reports and counties → 400 with fields; sample el
   };
 });
 
+await check("GET /api/news?county=Nakuru → county items first, LIVE; no county → national only", async () => {
+  const a = await get("/api/news?county=Nakuru");
+  const b = await get("/api/news");
+  const c = await get("/api/news?county[]=Nakuru");
+  return {
+    ok: a.status === 200 && a.body.source === "LIVE" && a.body.items[0].scope === "county" && a.body.items.length >= 2
+      && b.status === 200 && b.body.county === null && b.body.items.every((i) => i.scope === "national") && c.status === 200,
+    detail: `${a.body?.items?.length} items · first "${a.body?.items?.[0]?.title}"`,
+  };
+});
+
+await check("GET /api/events?county=Nakuru → nearest shows first with km and dates; bad county → 400", async () => {
+  const a = await get("/api/events?county=nakuru");
+  const b = await get("/api/events?county=Atlantis");
+  const c = await get("/api/events");
+  return {
+    ok: a.status === 200 && a.body.county === "Nakuru" && a.body.events.length >= 5 && a.body.events.some((e) => e.town === "Nakuru" && e.distance_km === 0)
+      && typeof a.body.events[0].days_until === "number" && b.status === 400 && b.body.fields.includes("county") && c.status === 400,
+    detail: a.body?.events?.slice(0, 3).map((e) => `${e.town} ${e.distance_km}km`).join(" · "),
+  };
+});
+
+await check("POST /api/events/book → 201 with the agent's steps, .ics, Google link and a SIMULATED email; DELETE needs the token", async () => {
+  const r = await post("/api/events/book", { event_id: "ask-kitale-2026", name: "Wanjiru", email: "w@example.com", county: "Nakuru", remind_days: 7 });
+  const bad = await post("/api/events/book", { event_id: "ask-kitale-2026", name: "Wanjiru", email: "nope" });
+  const junk = await post("/api/events/book", "[1]", true);
+  const wrong = await del(`/api/events/book/${r.body?.booking_id}?token=nope`);
+  const okDel = await del(`/api/events/book/${r.body?.booking_id}?token=${r.body?.token}`);
+  const gone = await del(`/api/events/book/${r.body?.booking_id}?token=${r.body?.token}`);
+  return {
+    ok: r.status === 201 && r.body.status === "BOOKED" && r.body.steps.length === 4 && r.body.email === "SIMULATED"
+      && r.body.calendar_url.includes("calendar.google.com") && r.body.ics.includes("BEGIN:VEVENT") && r.body.event.id === "ask-kitale-2026"
+      && bad.status === 400 && bad.body.fields.includes("email") && junk.status === 400
+      && wrong.status === 403 && okDel.status === 200 && gone.status === 404,
+    detail: `${r.status} · ${r.body?.steps?.map((s) => s.agent).join(" → ")} · email ${r.body?.email}`,
+  };
+});
+
 await check("GET /api/prices/history unknown/missing crop → 400", async () => {
   const a = await get("/api/prices/history?crop=unobtainium");
   const b = await get("/api/prices/history");
@@ -293,6 +340,7 @@ await check("GET /api/soko/stats → counts by status", async () => {
 
 server.close();
 try { unlinkSync(process.env.SOKO_STORE_PATH); } catch {}
+try { unlinkSync(EVENTS_PATH); } catch {}
 
 console.log("─".repeat(57));
 console.log(passed === total ? C.green(C.bold(`  ✓ ${passed}/${total} HTTP tests passed`)) : C.red(C.bold(`  ✗ ${passed}/${total} HTTP tests passed`)));

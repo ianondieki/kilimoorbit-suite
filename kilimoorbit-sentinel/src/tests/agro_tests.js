@@ -9,7 +9,11 @@ import {
 } from "../agro/weather.js";
 import { levelFor, priceOn, boardFor, historyFor } from "../agro/prices.js";
 import { createPestWatch, sampleWatch, thresholdFor, validateReport, WINDOW_DAYS } from "../agro/pests.js";
-import { readFileSync } from "node:fs";
+import { createNews, decodeEntities, parseRss, SAMPLE_TIPS } from "../agro/news.js";
+import {
+  EVENTS, createBookings, distanceKm, eventsNear, findEvent, googleCalendarUrl, icsFor, reminderMessage, upcoming, validateBooking,
+} from "../agro/events.js";
+import { readFileSync, unlinkSync } from "node:fs";
 
 const FEED_PATH = new URL("../../payloads/commodity_feed.json", import.meta.url);
 const freshFeed = () => JSON.parse(readFileSync(FEED_PATH, "utf8"));
@@ -237,7 +241,127 @@ await check("sample watch: stable within a week, sane numbers", () => {
   };
 });
 
+/* ── farm news ── */
+const FEED = readFileSync(new URL("./fixtures/news_feed.xml", import.meta.url), "utf8");
+const feedFetch = (text, status = 200) => async () => ({ ok: status === 200, status, text: async () => text });
+
+await check("news: RSS items are parsed, cleaned and sorted newest first", () => {
+  const items = parseRss(FEED, "Fixture");
+  const [a, b] = items;
+  return {
+    ok: items.length === 4 && a.title === "Nakuru farmers warned over fake & expired pesticides" && a.source === "Fixture"
+      && a.summary === "Farmers in Nakuru have been asked to check labels…" && a.image === "https://example.com/img.jpg"
+      && a.published === "2026-10-03T03:00:00.000Z" && b.title === "Maize prices ease as harvest starts" && b.source === "Kilimo News" && b.summary === ""
+      && decodeEntities("a &amp; b &#39;c&#x27; &nbsp;d") === "a & b 'c'  d" && parseRss("<not xml", "x").length === 0,
+    detail: `${items.length} items · "${a.title}"`,
+  };
+});
+
+await check("news: the county's items come first, old and duplicate stories are dropped, source LIVE", async () => {
+  const news = createNews({ fetchImpl: feedFetch(FEED) });
+  const r = await news.newsFor("Nakuru", { now: OCT });
+  const titles = r.items.map((i) => i.title);
+  return {
+    ok: r.source === "LIVE" && r.county === "Nakuru" && r.items[0].scope === "county" && r.items[0].county === "Nakuru"
+      && !titles.includes("Old story from last year") && titles.filter((t) => t === "Maize prices ease as harvest starts").length === 1
+      && r.items.every((i) => /^https?:/.test(i.link)),
+    detail: titles.join(" | "),
+  };
+});
+
+await check("news: no feed reachable → SAMPLE tips (bilingual, in-app routes); a dead feed keeps its last copy", async () => {
+  const dead = createNews({ fetchImpl: async () => { throw new Error("ENOTFOUND"); } });
+  const r = await dead.newsFor("Meru", { now: OCT });
+  let calls = 0;
+  const flaky = createNews({ fetchImpl: async () => { calls++; if (calls > 3) throw new Error("down"); return { ok: true, status: 200, text: async () => FEED }; } });
+  const first = await flaky.newsFor("Nakuru", { now: OCT });
+  const later = await flaky.newsFor("Nakuru", { now: new Date(OCT.getTime() + 2 * 60 * 60_000) }); // feeds down, cache 2 h old
+  return {
+    ok: r.source === "SAMPLE" && r.items.length === SAMPLE_TIPS.length && r.items.every((i) => i.title_sw && i.route && i.link === null)
+      && first.source === "LIVE" && later.source === "CACHED" && later.items.length === first.items.length,
+    detail: `dead → ${r.source} (${r.items.length}); flaky → ${first.source} then ${later.source}`,
+  };
+});
+
+/* ── farm shows ── */
+await check("shows: a past show is projected to next year and marked estimated; distances are sane", () => {
+  const kitale = upcoming(findEvent("ask-kitale-2026"), "2026-10-05");
+  const nakuru = upcoming(findEvent("ask-nakuru-2026"), "2026-10-05");
+  const km = Math.round(distanceKm(findCounty("Nakuru"), findCounty("Nairobi")));
+  return {
+    ok: kitale.start === "2026-10-07" && kitale.estimated === false && kitale.days_until === 2
+      && nakuru.start === "2027-07-01" && nakuru.end === "2027-07-05" && nakuru.estimated === true && km > 120 && km < 180
+      && EVENTS.every((e) => findCounty(e.county) && e.start <= e.end),
+    detail: `Kitale in ${kitale.days_until} days; Nakuru → ${nakuru.start} (estimated); Nakuru–Nairobi ${km} km`,
+  };
+});
+
+await check("shows: eventsNear puts shows within 60 days first (soonest), then the rest nearest first; on-now case", () => {
+  const near = eventsNear("Nakuru", { now: OCT, limit: 6 });
+  const nairobi = eventsNear("Nairobi", { now: new Date("2026-09-30T06:00:00Z"), limit: 3 });
+  const rest = near.events.slice(2);
+  return {
+    ok: near.county === "Nakuru" && near.events[0].id === "ask-kitale-2026" && near.events[1].id === "ask-ploughing-2026"
+      && rest[0].id === "ask-nakuru-2026" && rest[0].distance_km === 0 && rest.every((e, i, a) => i === 0 || e.distance_km >= a[i - 1].distance_km)
+      && nairobi.events[0].id === "ask-nairobi-2026" && nairobi.events[0].days_until < 0 && eventsNear("Atlantis") === null,
+    detail: near.events.map((e) => `${e.town} ${e.distance_km}km ${e.start}`).join(" · "),
+  };
+});
+
+await check("shows: Google Calendar link and .ics carry the dates (all-day, exclusive end) and a reminder alarm", () => {
+  const ev = upcoming(findEvent("ask-kitale-2026"), "2026-10-05");
+  const url = googleCalendarUrl(ev);
+  const ics = icsFor(ev, { uid: "u1@kilimoorbit", remindDays: 3, now: OCT });
+  return {
+    ok: url.startsWith("https://calendar.google.com/calendar/render?action=TEMPLATE") && url.includes("dates=20261007%2F20261011")
+      && url.includes("text=Kitale+National+Show") && ics.includes("DTSTART;VALUE=DATE:20261007") && ics.includes("DTEND;VALUE=DATE:20261011")
+      && ics.includes("TRIGGER:-P3DT17H") && ics.includes("SUMMARY:Kitale National Show") && ics.includes("UID:u1@kilimoorbit") && ics.endsWith("END:VCALENDAR\r\n"),
+    detail: url.slice(0, 90) + "…",
+  };
+});
+
+await check("shows: booking validation refuses junk field by field", () => {
+  const bad = [
+    validateBooking(null), validateBooking({}), validateBooking({ event_id: "nope", name: "W" }),
+    validateBooking({ event_id: "ask-kitale-2026", name: "" }), validateBooking({ event_id: "ask-kitale-2026", name: "W", email: "not-an-email" }),
+    validateBooking({ event_id: "ask-kitale-2026", name: "W", remind_days: 2 }),
+  ];
+  const good = validateBooking({ event_id: "ask-nakuru-2026", name: "  Wanjiru   Kamau ", email: "W@Example.com", county: "nakuru", phone: "+254700000000" }, OCT);
+  return {
+    ok: bad.every((b) => b.error) && good.input.name === "Wanjiru Kamau" && good.input.email === "w@example.com" && good.input.county === "Nakuru"
+      && good.input.remind_days === 3 && good.input.event.start === "2027-07-01" && !("phone" in good.input),
+    detail: bad.map((b) => (b.fields ?? []).join("+") || "body").join(" · "),
+  };
+});
+
+await check("shows: the booking agent runs scout → planner → messenger → reminder, persists, reminds on the day, cancels", async () => {
+  const path = `${process.env.TMPDIR || "/tmp"}/events_test_${process.pid}.json`;
+  try { unlinkSync(path); } catch {}
+  const sent = [];
+  const mailer = async (msg) => { sent.push(msg); };
+  const store = createBookings({ storePath: path, now: () => OCT });
+  const { input } = validateBooking({ event_id: "ask-kitale-2026", name: "Wanjiru", email: "w@example.com", remind_days: 1 }, OCT);
+  const r = await store.book(input, { mailer });
+  const silent = await store.book({ ...input, email: null }, { mailer });
+  const reopened = createBookings({ storePath: path, now: () => new Date("2026-10-06T06:00:00Z") });
+  const due = reopened.due();
+  const msg = reminderMessage(due[0]);
+  reopened.markReminder(due[0].id, "SENT");
+  const after = reopened.due();
+  const sizeBefore = reopened.size;
+  const cancel = [reopened.cancel(r.booking_id, "wrong"), reopened.cancel(r.booking_id, r.token), reopened.cancel(r.booking_id, r.token)];
+  try { unlinkSync(path); } catch {}
+  return {
+    ok: r.status === "BOOKED" && r.steps.map((s) => s.agent).join(">") === "Scout>Planner>Messenger>Reminder" && r.email === "SENT" && r.remind_on === "2026-10-06"
+      && sent.length === 1 && sent[0].to === "w@example.com" && sent[0].attachments[0].content.includes("BEGIN:VEVENT") && r.ics.includes("TRIGGER:-P1DT17H")
+      && silent.email === "NONE" && silent.steps.length === 4 && sizeBefore === 2
+      && due.length === 1 && msg.subject === "Kitale National Show starts tomorrow" && after.length === 0
+      && cancel.join(",") === "forbidden,ok,missing" && reopened.size === 1,
+    detail: `${r.steps.length} steps · reminder ${r.remind_on} · "${msg.subject}"`,
+  };
+});
+
 console.log("─".repeat(57));
 const ok = passed === total;
-console.log((ok ? C.green : C.red)(C.bold(`  ${ok ? "✓" : "✗"} ${passed}/${total} farm weather, price + pest watch tests passed`)));
+console.log((ok ? C.green : C.red)(C.bold(`  ${ok ? "✓" : "✗"} ${passed}/${total} farm weather, prices, pest watch, news + shows tests passed`)));
 process.exit(ok ? 0 : 1);

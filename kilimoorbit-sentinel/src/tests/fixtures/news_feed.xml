@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+<channel>
+<title>Fixture feed</title>
+<item>
+<title><![CDATA[Nakuru farmers warned over fake &amp; expired pesticides]]></title>
+<link>https://example.com/nakuru-pesticides</link>
+<pubDate>Sat, 03 Oct 2026 06:00:00 +0300</pubDate>
+<description><![CDATA[<p>Farmers in <b>Nakuru</b> have been asked to check labels&hellip; Read more</p>]]></description>
+<media:content url="https://example.com/img.jpg" type="image/jpeg"/>
+</item>
+<item>
+<title>Maize prices ease as harvest starts - Kilimo News</title>
+<link>https://example.com/maize-prices</link>
+<pubDate>Fri, 02 Oct 2026 09:30:00 +0000</pubDate>
+<source url="https://kilimonews.co.ke">Kilimo News</source>
+<description>&lt;a href="https://example.com/maize-prices"&gt;Maize prices ease as harvest starts&lt;/a&gt;&amp;nbsp;&amp;nbsp;&lt;font color="#6f6f6f"&gt;Kilimo News&lt;/font&gt;</description>
+</item>
+<item>
+<title>Old story from last year</title>
+<link>https://example.com/old</link>
+<pubDate>Mon, 05 Jan 2026 09:30:00 +0000</pubDate>
+</item>
+<item>
+<title>No link item</title>
+<pubDate>Fri, 02 Oct 2026 09:30:00 +0000</pubDate>
+</item>
+<item>
+<title>Maize prices ease as harvest starts</title>
+<link>https://example.com/maize-prices-dupe</link>
+<pubDate>Fri, 02 Oct 2026 08:30:00 +0000</pubDate>
+</item>
+</channel>
+</rss>

@@ -1,6 +1,6 @@
 # KilimoOrbit Sentinel
 
-An AI agri-logistics decision engine for Kenyan smallholder farmers, powered by Google Gemini (APEX core). It routes JSON payloads through five execution modes — market arbitrage, farmer chat, alert broadcast, onboarding, and logistics replanning — and ships with a Mission Control web dashboard, an investor one-pager at `/pitch`, farm-weather, price-history and county pest-watch APIs, and five verification suites (30 APEX contract checks, 12 Soko store checks, 26 farm-weather, price and pest-watch checks, 41 HTTP integration checks, 7 LIVE→MOCK fallback checks).
+An AI agri-logistics decision engine for Kenyan smallholder farmers, powered by Google Gemini (APEX core). It routes JSON payloads through five execution modes — market arbitrage, farmer chat, alert broadcast, onboarding, and logistics replanning — and ships with a Mission Control web dashboard, an investor one-pager at `/pitch`, farm-weather, price-history, county pest-watch, farm-news and farm-show APIs (with a booking agent that emails confirmations and reminders), and five verification suites (30 APEX contract checks, 12 Soko store checks, 34 farm-weather, price, pest-watch, news and show checks, 44 HTTP integration checks, 7 LIVE→MOCK fallback checks).
 
 ## Prerequisites
 
@@ -12,7 +12,7 @@ An AI agri-logistics decision engine for Kenyan smallholder farmers, powered by 
 ```bash
 npm install
 cp .env.example .env       # then paste your GEMINI_API_KEY into .env
-npm test                   # APEX (30) + Soko (12) + weather, prices & pest watch (26) + HTTP (41) + fallback (7)
+npm test                   # APEX (30) + Soko (12) + weather, prices, pest watch, news & shows (34) + HTTP (44) + fallback (7)
 npm start                  # launches Mission Control → http://localhost:4517
 npm run dev                # same, with auto-restart on file changes
 ```
@@ -119,9 +119,21 @@ Farmers' fall armyworm scouting walks, pooled by county so neighbours can see wh
 
 Reports are kept in memory (at most 5,000; a restart clears them). A county with no farmer reports in the last 14 days gets a deterministic **SAMPLE** watch (labelled, like the sample weather and prices), so the app never presents invented numbers as farmers' reports. Logic: `src/agro/pests.js`.
 
+## Farm news
+
+`GET /api/news?county=Nakuru` → `{ county, fetched_at, source: "LIVE" | "CACHED" | "SAMPLE", items[≤12] }`, each item `{ id, title, source, link, published, summary, image, scope: "county" | "national" | "tip", county }`. The server reads public RSS feeds (The Standard's agriculture feed, Kilimo News, and a Google News search for the county) with an 8 s timeout, caches each source for 30 minutes and keeps a source's last good copy for a day when it is down (`CACHED`). County items come first, old (> 60 days) and duplicate stories are dropped. When no feed can be read at all (no internet on the server), five evergreen KilimoOrbit tips are served with `source: "SAMPLE"`, `link: null` and an in-app `route`, and the app labels them DEMO. Logic: `src/agro/news.js`. 60 requests/min per IP.
+
+## Farm shows — near the farmer, with a booking agent
+
+- `GET /api/events?county=Nakuru` → `{ county, today, theme, source: "ASK 2026 calendar", events[≤8] }`: the Agricultural Society of Kenya's published 2026 show calendar plus the Nairobi expos (Africa Agri Expo, Agritec Africa, Africa FarmTech), each with `start`, `end`, `town`, `county`, `venue`, `organiser`, `url`, `distance_km` from the farmer's county centre, `days_until` (negative while on), and `estimated: true` when a show's dates have passed and were projected to the same dates next year. Shows within 60 days come first (soonest first), then the rest nearest first. Unknown or missing county → `400`.
+- `POST /api/events/book` `{ event_id, name, email?, county?, remind_days: 1 | 3 | 7 }` → `201 { booking_id, token, status: "BOOKED", event, calendar_url, ics, email: "SENT" | "SIMULATED" | "NONE" | "FAILED", remind_on, steps[] }`. The booking agent runs four steps (`steps` carries them for the app's timeline): **Scout** finds the show, **Planner** builds the calendar entry (an `.ics` with a reminder alarm, and a Google Calendar "add event" link the farmer opens on the phone), **Messenger** emails a confirmation with the `.ics` attached when SMTP is configured (SIMULATED and logged otherwise, exactly like sign-in), **Reminder** stores the reminder. A scheduler in the server sends reminder emails on `remind_on` (checked every minute; a reminder missed while the server was down is sent up to two days late). Bookings live in `data/events_bookings.json` (`EVENTS_STORE_PATH`), at most 2,000, with the farmer's name and email only to send those emails. 10 bookings per hour per IP (it sends email). Invalid → `400` `VALIDATION_ERROR` with `fields`.
+- `DELETE /api/events/book/:id?token=…` cancels the booking and its reminder with the token returned at booking time (`403` wrong token, `404` unknown).
+
+Logic: `src/agro/events.js`. At start-up the server also prints the addresses a phone on the same Wi-Fi can use (`From a phone on this Wi-Fi: http://192.168.x.x:4517`), which the app's Connection screen asks for.
+
 ## API hardening
 
-- Per-IP rate limits (dependency-free): APEX 60/min, Autopilot 20/min, suite 6/min, marketplace 120/min, weather 120/min, price history 120/min, pest watch 120/min, pest reports 30 per 10 min, sign-in 5/hour (the sign-in endpoint sends email, so it is capped hardest). `429` responses carry `Retry-After`. Set `RATE_LIMIT_DISABLED=1` for load tests.
+- Per-IP rate limits (dependency-free): APEX 60/min, Autopilot 20/min, suite 6/min, marketplace 120/min, weather 120/min, price history 120/min, pest watch 120/min, pest reports 30 per 10 min, news 60/min, shows 120/min, show bookings 10/hour, sign-in 5/hour (the sign-in endpoint sends email, so it is capped hardest). `429` responses carry `Retry-After`. Set `RATE_LIMIT_DISABLED=1` for load tests.
 - Malformed JSON bodies → `400 {"error_type":"BAD_JSON"}`; unknown `/api/*` routes → `404` JSON; bodies over 256 KB → `413`.
 - `GET /api/health` reports engine, model, version and uptime for uptime monitors and the Docker healthcheck.
 - Every async route catches its own errors (`500` JSON, never a hung request), query parameters must be plain strings (`?crop[]=` or repeated keys → `400`), and a process-level `unhandledRejection` handler logs anything that still slips through instead of letting Node exit: one bad request never takes the server down for every farmer.
@@ -144,11 +156,11 @@ The governing prompt is loaded verbatim from **`src/apex_system_prompt.md`** (yo
 
 | Command                  | What it does                                  |
 |--------------------------|-----------------------------------------------|
-| `npm test`               | All five suites: APEX contract (30) + Soko store (12) + farm weather, prices & pest watch (26) + HTTP (41) + fallback (7) |
+| `npm test`               | All five suites: APEX contract (30) + Soko store (12) + farm weather, prices, pest watch, news & shows (34) + HTTP (44) + fallback (7) |
 | `npm run test:apex`      | Cold start + integrity + all 5 routes + climate + guardrails (30/30) |
 | `npm run test:soko`      | Soko marketplace store + fair-price suite (12/12)             |
-| `npm run test:agro`      | Farm weather (counties, sample forecast, farming windows, Open-Meteo mapping + fallback), market prices (levels, history, board consistency) and the pest watch (validation, thresholds, window, bounds, sample) (26/26) |
-| `npm run test:server`    | Boots the real server on a random port, hits every endpoint, including hostile query shapes and payloads (41/41) |
+| `npm run test:agro`      | Farm weather (counties, sample forecast, farming windows, Open-Meteo mapping + fallback), market prices (levels, history, board consistency), the pest watch (validation, thresholds, window, bounds, sample), farm news (RSS parsing, county-first merge, cache and SAMPLE fallback) and farm shows (projection, distance, calendar entries, the booking agent, reminders, cancellation) (34/34) |
+| `npm run test:server`    | Boots the real server on a random port (stubbed news feeds, a temp bookings file), hits every endpoint, including hostile query shapes and payloads (44/44) |
 | `npm run check`          | Syntax-check every module (fast CI gate)      |
 | `npm start` / `npm run dev` | Mission Control dashboard on port 4517 (dev = auto-restart) |
 | `npm run docker:build`   | Build the production image                    |

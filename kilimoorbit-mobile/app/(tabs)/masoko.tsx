@@ -8,7 +8,6 @@ import { View, Text, ScrollView, RefreshControl, TextInput, Pressable, useWindow
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import Header from "../../components/Header";
-import Ticker from "../../components/Ticker";
 import Field from "../../components/Field";
 import { Bounded } from "../../components/Bounded";
 import { Btn, Card, Chip, ChipRow, Eyebrow, T, Tag } from "../../components/Kit";
@@ -21,10 +20,11 @@ import { MyListings, SokoSheet } from "../../components/SokoSell";
 import { AlertRow } from "../../components/PriceAlerts";
 import { HoldCard } from "../../components/Ghala";
 import { FarmProfileSheet } from "../../components/FarmSheets";
+import { ConnectionSheet } from "../../components/Connection";
 import { useTheme } from "../../lib/theme-context";
 import { useLang } from "../../lib/session";
 import { focusRing, isWeb, webCursor, webLang, type PressState } from "../../lib/ui";
-import { SAFE_EMOJI, cropName, freshnessText, isDemoBoard } from "../../lib/prices";
+import { cropName, freshnessText, isDemoBoard } from "../../lib/prices";
 import { useSentinel } from "../../lib/sentinel";
 import { useFarm } from "../../lib/farm";
 import { fmtKES, getPriceHistory, type Commodity, type PriceHistory } from "../../lib/api";
@@ -38,7 +38,7 @@ export default function Masoko() {
   const feed = s.meta?.commodity_feed;
   const [picked, setPicked] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [sheet, setSheet] = useState<null | "soko" | "county">(null);
+  const [sheet, setSheet] = useState<null | "soko" | "county" | "connection">(null);
   const [sale, setSale] = useState<{ kg: number; fair: number }>({ kg: 0, fair: 0 });
   // The farmer's harvest (kg): shared by the price card and the sell-or-store card.
   const [qty, setQty] = useState("500");
@@ -53,41 +53,32 @@ export default function Masoko() {
   const mine = farm.plantings.map((p) => p.crop as string).find((k) => keys.includes(k));
   const crop = picked ?? mine ?? (runCrop && keys.includes(runCrop) ? runCrop : keys[0] ?? null);
 
-  const ticker = useMemo(() => {
-    const p = s.meta?.payloads?.arbitrage;
-    if (!feed) return [tt("engine.OFFLINE").toUpperCase()];
-    const items = feed.commodities.map((c) => {
-      const best = [...c.quotes].sort((a, b) => b.price - a.price)[0];
-      return `${SAFE_EMOJI[c.crop] ? SAFE_EMOJI[c.crop] + " " : ""}${cropName(lang, c.crop).toUpperCase()} ${best.market} KES ${best.price}/kg ${best.delta >= 0 ? "▲" : "▼"}${Math.abs(best.delta)}`;
-    });
-    const flag = s.arb?.cargo_optimized_route.logistics_risk_flag;
-    if (flag && flag !== "CLEAR") items.push(`⚠ ${tt(`risk.${flag}` as Key).toUpperCase()}`);
-    if (p?.vehicle_telemetry) items.push(`E-BODA ${p.vehicle_telemetry.vehicle_id} · ${p.vehicle_telemetry.battery_level}%`);
-    return items;
-  }, [feed, s.arb, lang]);
-
   const commodity = feed?.commodities.find((c) => c.crop === crop);
   // Phones scroll the crop chips sideways; wider screens wrap them (a mouse
   // can't easily scroll sideways, and there is room).
   const { width } = useWindowDimensions();
   const wrapChips = width >= 700;
-  const chips = feed?.commodities.map((c) => (
-    <Chip
-      key={c.crop}
-      role="radio"
-      selected={c.crop === crop}
-      onPress={() => setPicked(c.crop)}
-      label={cropName(lang, c.crop)}
-      leading={<CropCoin cropKey={c.crop} size={26} />}
-      testID={`mk-crop-${c.crop}`}
-    />
-  ));
+  // Each chip carries today's best price and its move, so the board reads at a glance (no marquee).
+  const chips = feed?.commodities.map((c) => {
+    const best = [...c.quotes].sort((a, b) => b.price - a.price)[0];
+    return (
+      <Chip
+        key={c.crop}
+        role="radio"
+        selected={c.crop === crop}
+        onPress={() => setPicked(c.crop)}
+        label={cropName(lang, c.crop)}
+        sub={best ? `KES ${best.price} ${best.delta > 0 ? "▲" : best.delta < 0 ? "▼" : "·"}${best.delta === 0 ? "" : Math.abs(best.delta)}` : undefined}
+        leading={<CropCoin cropKey={c.crop} size={26} />}
+        testID={`mk-crop-${c.crop}`}
+      />
+    );
+  });
   const demo = isDemoBoard({ engine: s.meta?.engine });
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]} {...webLang(lang)}>
       <Header title={tt("mk.title")} engine={s.engine} />
-      <Ticker items={ticker} />
       <ScrollView
         contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await s.reload(); setRefreshing(false); }} tintColor={t.accent} />}
@@ -105,7 +96,10 @@ export default function Masoko() {
                 <SignalOffGlyph size={20} color={t.dim} />
                 <Text style={{ flex: 1, color: t.dim, ...T.body }}>{tt("mk.none")}</Text>
               </View>
-              <Btn kind="secondary" label={tt("result.retry")} onPress={s.reload} style={{ marginTop: 12 }} />
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
+                <Btn kind="secondary" label={tt("result.retry")} onPress={s.reload} style={{ flex: 1 }} />
+                <Btn kind="ghost" label={tt("sentinel.fix")} onPress={() => setSheet("connection")} style={{ flex: 1 }} testID="mk-fix-connection" />
+              </View>
             </Card>
           ) : (
             <>
@@ -159,6 +153,7 @@ export default function Masoko() {
         />
       )}
       <FarmProfileSheet visible={sheet === "county"} onClose={() => setSheet(null)} />
+      <ConnectionSheet visible={sheet === "connection"} onClose={() => setSheet(null)} />
     </SafeAreaView>
   );
 }
