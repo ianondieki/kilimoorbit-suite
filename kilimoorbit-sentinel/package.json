@@ -1,7 +1,7 @@
 {
   "name": "kilimoorbit-sentinel",
-  "version": "1.1.0",
-  "description": "KilimoOrbit Sentinel \u2014 Gemini-powered agri-logistics intelligence engine (APEX) with 5 execution routes, hardened error schemas, and a Mission Control dashboard.",
+  "version": "1.1.1",
+  "description": "KilimoOrbit Sentinel — Gemini-powered agri-logistics intelligence engine (APEX) with 5 execution routes, hardened error schemas, and a Mission Control dashboard.",
   "type": "module",
   "main": "src/server.js",
   "scripts": {
@@ -29,7 +29,7 @@
     "@google/genai": "^1.0.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "nodemailer": "^8.0.11"
+    "nodemailer": "^10.0.15"
   },
   "license": "MIT"
 }
