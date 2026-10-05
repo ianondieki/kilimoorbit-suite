@@ -19,7 +19,8 @@ function Shell() {
   // login.tsx and show a plain background until storage has hydrated.
   return (
     <>
-      <StatusBar style={dark ? "light" : "dark"} backgroundColor={t.bg} />
+      {/* Edge-to-edge (SDK 55+): the bar is transparent over each screen's own background. */}
+      <StatusBar style={dark ? "light" : "dark"} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: t.bg } }}>
         <Stack.Screen name="login" options={{ animation: "fade" }} />
       </Stack>

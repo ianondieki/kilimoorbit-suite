@@ -37,7 +37,8 @@ Three themes (Loam · Nyota · Savanna for bright sun) switchable from the sideb
 
 ## Prerequisites
 
-- Node.js 18+, the **Expo Go** app on your Android phone (Play Store), and the **kilimoorbit-sentinel server running** (it is the brain — this app is the face).
+- Node.js 20.19.4+ (or 22.13+), the **Expo Go** app on your Android phone (Play Store), and the **kilimoorbit-sentinel server running** (it is the brain — this app is the face).
+- The app is on **Expo SDK 57** (React Native 0.86, React 19.2). Expo Go only opens projects on the SDK it was built for, so use the current Expo Go; if it says the project needs a different SDK, update Expo Go (or the project, with `npx expo install expo@<version> --fix`).
 
 ## Run it
 
