@@ -10,7 +10,7 @@ import { useLang } from "../lib/session";
 import { announce, focusRing, webCursor, type PressState } from "../lib/ui";
 import { cropName } from "../lib/prices";
 import { searchCounties } from "../lib/counties";
-import { CROPS, CROP_KEYS, inputsFor, pick, type CropKey } from "../lib/agronomy";
+import { CROPS, CROP_KEYS, acresFromSteps, inputsFor, pick, type CropKey } from "../lib/agronomy";
 import { addDays, longDay, todayKey } from "../lib/dates";
 import { EXPENSE_CATS, INCOME_CATS, farmActions, useFarm, type Entry } from "../lib/farm";
 import type { Key } from "../lib/i18n";
@@ -51,6 +51,65 @@ export function DateNudge({ value, onChange, label }: { value: string; onChange:
   );
 }
 
+/* ── shared: field size by pacing ── */
+export function MeasureField({ onUse }: { onUse: (acres: number) => void }) {
+  const t = useTheme();
+  const { t: tt } = useLang();
+  const [open, setOpen] = useState(false);
+  const [len, setLen] = useState("");
+  const [wid, setWid] = useState("");
+  const acres = acresFromSteps(Number(len), Number(wid));
+  const m2 = Math.round(Number(len) * Number(wid));
+  if (!open)
+    return (
+      <Btn kind="ghost" small label={tt("measure.open")} onPress={() => setOpen(true)} style={{ alignSelf: "flex-start" }} testID="measure-open" />
+    );
+  const num = (v: string) => v.replace(/[^\d]/g, "").slice(0, 4);
+  return (
+    <View style={{ backgroundColor: t.raised, borderRadius: 14, padding: 14, gap: 10 }} testID="measure">
+      <Text style={{ color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "800" }}>{tt("measure.title")}</Text>
+      <Text style={{ color: t.dim, ...T.meta }}>{tt("measure.how")}</Text>
+      <View style={{ flexDirection: "row", gap: 10 }}>
+        <Field
+          label={tt("measure.length")}
+          glyph={null}
+          value={len}
+          onChangeText={(v) => setLen(num(v))}
+          height={52}
+          inputStyle={{ fontSize: 18, fontWeight: "700" }}
+          status={null}
+          statusMinHeight={0}
+          style={{ flex: 1 }}
+          inputProps={{ keyboardType: "numeric", inputMode: "numeric", testID: "measure-length" } as any}
+        />
+        <Field
+          label={tt("measure.width")}
+          glyph={null}
+          value={wid}
+          onChangeText={(v) => setWid(num(v))}
+          height={52}
+          inputStyle={{ fontSize: 18, fontWeight: "700" }}
+          status={null}
+          statusMinHeight={0}
+          style={{ flex: 1 }}
+          inputProps={{ keyboardType: "numeric", inputMode: "numeric", testID: "measure-width" } as any}
+        />
+      </View>
+      {acres != null ? (
+        <View style={{ gap: 8 }} accessibilityLiveRegion="polite" aria-live="polite">
+          <Text style={{ color: t.ink, ...T.body, fontWeight: "700" }} testID="measure-result">
+            {tt("measure.result", { a: acres < 0.01 ? "< 0.01" : String(acres), m2: m2.toLocaleString("en-KE") })}
+          </Text>
+          {acres >= 0.05 && (
+            <Btn kind="secondary" small label={tt("measure.use", { a: String(acres) })} onPress={() => { onUse(acres); setOpen(false); }} style={{ alignSelf: "flex-start" }} testID="measure-use" />
+          )}
+        </View>
+      ) : null}
+      <Text style={{ color: t.dim, fontSize: 12.5, lineHeight: 17 }}>{tt("measure.uneven")}</Text>
+    </View>
+  );
+}
+
 /* ── Farm profile: county + size ── */
 export function FarmProfileSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const t = useTheme();
@@ -78,6 +137,7 @@ export function FarmProfileSheet({ visible, onClose }: { visible: boolean; onClo
     >
       <Group label={tt("farm.size")}>
         <Stepper value={acres} onChange={setAcres} step={0.25} min={0.25} max={500} format={acresFmt} label={tt("farm.size")} />
+        <MeasureField onUse={(a) => setAcres(Math.min(500, a))} />
       </Group>
       <View style={{ gap: 4 }}>
         <Field
@@ -186,6 +246,7 @@ export function AddCropSheet({ visible, onClose, initialCrop }: { visible: boole
 
       <Group label={tt("add.acres")}>
         <Stepper value={acres} onChange={setAcres} step={0.25} min={0.25} max={100} format={acresFmt} label={tt("add.acres")} />
+        <MeasureField onUse={(a) => setAcres(Math.min(100, a))} />
       </Group>
 
       <Group label={tt(transplant ? "add.whenTransplant" : "add.when")}>
@@ -219,7 +280,9 @@ export function AddCropSheet({ visible, onClose, initialCrop }: { visible: boole
 
 /* ── Money record ── */
 
-export function RecordSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+export function RecordSheet({
+  visible, onClose, preset,
+}: { visible: boolean; onClose: () => void; preset?: { kind: Entry["kind"]; category: Entry["category"]; crop?: CropKey } }) {
   const t = useTheme();
   const { lang, t: tt } = useLang();
   const { farm } = useFarm();
@@ -235,8 +298,8 @@ export function RecordSheet({ visible, onClose }: { visible: boolean; onClose: (
 
   useEffect(() => {
     if (!visible) return;
-    setKind("expense"); setCat("seed"); setAmount(""); setNote(""); setKgSold(""); setDate(todayKey()); setTried(false);
-    setCrop(farm.plantings[0]?.crop);
+    setKind(preset?.kind ?? "expense"); setCat(preset?.category ?? "seed"); setAmount(""); setNote(""); setKgSold(""); setDate(todayKey()); setTried(false);
+    setCrop(preset ? preset.crop : farm.plantings[0]?.crop);
   }, [visible]);
 
   const value = Number(amount.replace(/[^\d.]/g, ""));

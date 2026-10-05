@@ -2,7 +2,7 @@
   "expo": {
     "name": "KilimoOrbit Sentinel",
     "slug": "kilimoorbit-sentinel",
-    "version": "1.4.0",
+    "version": "1.5.0",
     "scheme": "kilimoorbit",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",

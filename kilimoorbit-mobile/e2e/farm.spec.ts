@@ -23,7 +23,12 @@ const test = base.extend<{ noCrash: void }>({
 /** A planting `daysAgo` days back, in the app's local-date format. */
 const planted = (crop: string, daysAgo: number, acres = 1) => ({ crop, daysAgo, acres });
 
-async function start(page: Page, path: string, lang: "en" | "sw" = "en", farm?: { county?: string; plantings?: ReturnType<typeof planted>[] }) {
+type StoredLot = { crop: string; kg: number; daysAgo: number; hermetic: boolean };
+
+async function start(
+  page: Page, path: string, lang: "en" | "sw" = "en",
+  farm?: { county?: string; plantings?: ReturnType<typeof planted>[]; store?: StoredLot[] },
+) {
   await page.addInitScript(([l, f]) => {
     if (sessionStorage.getItem("ko-e2e-seeded")) return;
     sessionStorage.setItem("ko-e2e-seeded", "1");
@@ -41,6 +46,7 @@ async function start(page: Page, path: string, lang: "en" | "sw" = "en", farm?: 
       localStorage.setItem("ko-farm", JSON.stringify({
         v: 1, county: f.county ?? null, acres: null, done: {}, entries: [],
         plantings: (f.plantings ?? []).map((p: any, i: number) => ({ id: `e2e${i}`, crop: p.crop, acres: p.acres, plantedOn: key(p.daysAgo) })),
+        store: (f.store ?? []).map((l: any, i: number) => ({ id: `lot${i}`, crop: l.crop, kg: l.kg, since: key(l.daysAgo), hermetic: l.hermetic })),
       }));
     }
   }, [lang, farm ?? null] as const);
@@ -268,8 +274,17 @@ test("Price alert: a target below today's best price shows on Today", async ({ p
 
 /** Junk in every key the app stores: wrong types, missing fields, broken JSON. */
 const CORRUPT: Record<string, string> = {
-  "ko-farm": JSON.stringify({ county: 42, acres: "big", plantings: [{ id: 1, crop: "maize" }, { id: "p", crop: "maize", acres: 1, plantedOn: "2026-13-45" }, null], entries: "no", done: [] }),
-  "ko-herd": JSON.stringify({ animals: [{ id: "a", species: "cow", events: [{ id: "e", kind: "served", date: "bad" }, { kind: "birth" }] }, { id: 5 }, { id: "b", species: "dragon" }], milk: [{ animalId: "a", litres: "x" }], done: "x", milkPrice: -3 }),
+  "ko-farm": JSON.stringify({
+    county: 42, acres: "big", entries: "no", done: [],
+    plantings: [{ id: 1, crop: "maize" }, { id: "p", crop: "maize", acres: 1, plantedOn: "2026-13-45" }, null, { id: "q", crop: "toString", acres: 1, plantedOn: "2026-01-01" }],
+    store: [{ id: "l", crop: "maize", kg: "lots", since: "x" }, { id: "l2", crop: "rice", kg: 5, since: "2026-01-01" }, 7, { id: "l3", crop: "beans", kg: 1e12, since: "2026-01-01" }],
+    prices: { dap: "cheap", hack: 5, can: -1, toString: 5 },
+  }),
+  "ko-herd": JSON.stringify({
+    animals: [{ id: "a", species: "cow", events: [{ id: "e", kind: "served", date: "bad" }, { kind: "birth" }] }, { id: 5 }, { id: "b", species: "dragon" }, { id: "f", species: "chicken", count: "many" }],
+    milk: [{ animalId: "a", litres: "x" }], done: "x", milkPrice: -3,
+    eggs: [{ id: "g", flockId: "f", date: "2026-01-01", eggs: 5.5 }, { id: "g2", flockId: "a", date: "2026-01-01", eggs: 5 }, "x"], eggPrice: "free",
+  }),
   "ko-soko": JSON.stringify([{ id: "z", owner_token: "t", qty_kg: "lots", created_at: "never" }, { owner_token: 1 }]),
   "ko-alerts": JSON.stringify({ x: 1 }),
   "ko-weather-cache": JSON.stringify({ county: "Meru", ts: "now", data: { county: "Meru", days: "none" } }),
@@ -287,7 +302,7 @@ test("Corrupted storage never crashes a screen", async ({ page }) => {
     for (const [k, v] of Object.entries(data)) localStorage.setItem(k, v);
     localStorage.setItem("ko-theme", "{not json");
   }, CORRUPT);
-  for (const path of ["/", "/shamba", "/shamba?tab=livestock", "/shamba?tab=records", "/masoko", "/daktari", "/chat", "/autopilot"]) {
+  for (const path of ["/", "/shamba", "/shamba?tab=livestock", "/shamba?tab=records", "/masoko", "/masoko?crop=dragon", "/masoko?crop=maize", "/daktari", "/chat", "/autopilot"]) {
     await page.goto(path);
     await expect(page.locator("body")).toContainText(/\w/);
     await page.waitForTimeout(400);
@@ -331,4 +346,103 @@ test("Apex answering without a market run: board stays, Today explains", async (
   await expect(page.getByText("Apex couldn't plan a market run right now.")).toBeVisible();
   await page.goto("/masoko");
   await expect(page.getByTestId("mk-crop-maize")).toBeVisible();
+});
+
+test("Store: a ripe maize harvest goes into store, a sale from it lands in Records, and Markets weighs selling now against storing", async ({ page }) => {
+  await start(page, "/shamba", "en", { county: "Nyeri", plantings: [planted("maize", 125, 1.5)] });
+  await page.getByTestId("harvest-maize").click();
+  await expect(page.getByTestId("store-kg")).toHaveText("= 1,350 kg"); // a typical 900 kg an acre, as 90 kg bags
+  await expect(page.getByText("That's 900 kg an acre (typical: 900–2,250)")).toBeVisible();
+  await page.getByTestId("store-save").click();
+  await expect(page.getByTestId("lot-maize")).toContainText("Maize · 15 bags");
+
+  await page.getByTestId("lot-sell-maize").click();
+  await page.getByTestId("lot-price").fill("50");
+  await expect(page.getByText("Total: KES 4,500")).toBeVisible();
+  await page.getByTestId("lot-save").click();
+  await expect(page.getByTestId("lot-maize")).toContainText("Maize · 14 bags");
+  await expect(page.getByTestId("lot-maize")).toContainText("1,260 kg");
+
+  await page.getByRole("button", { name: "When to sell?" }).click();
+  await expect(page.getByText("Your 1,260 kg in store")).toBeVisible();
+  await expect(page.getByTestId("hold-verdict")).toBeVisible();
+  await expect(page.getByTestId("hold-bars")).toBeVisible();
+  await page.getByTestId("hold-open").click(); // ordinary bags: the plan is re-weighed, nothing breaks
+  await expect(page.getByTestId("hold-verdict")).toBeVisible();
+
+  await page.goto("/shamba?tab=records");
+  await expect(page.getByText("90 kg · KES 50/kg")).toBeVisible();
+  await expect(page.getByText("From the store")).toBeVisible();
+});
+
+test("Store checks: a check that is due shows on Today; a tick records it and a second tick undoes it", async ({ page }) => {
+  await start(page, "/", "en", { store: [{ crop: "beans", kg: 450, daysAgo: 20, hermetic: false }] });
+  const check = page.getByTestId("store-check-beans");
+  await expect(check).toContainText("Check stored beans");
+  await expect(check).toContainText("6 days late");
+  await check.click();
+  await expect(check).toHaveAttribute("aria-checked", "true");
+  await check.click();
+  await expect(check).toHaveAttribute("aria-checked", "false");
+  await page.goto("/shamba");
+  await expect(page.getByTestId("lot-check-beans")).toBeVisible(); // undone: still due
+});
+
+test("Will it pay: the budget answers first, the farmer's own DAP price changes it and is remembered", async ({ page }) => {
+  await start(page, "/shamba");
+  await page.getByTestId("budget-open").click();
+  await page.getByTestId("bud-crop-maize").click();
+  await page.getByTestId("bud-sell").fill("45");
+  await expect(page.getByTestId("bud-profit")).toHaveText("KES 16,000"); // 900 kg × 45 − 24,500 of costs
+  await expect(page.getByTestId("bud-breakeven")).toContainText("KES 28 a kilo");
+  await page.getByTestId("bud-price-dap").fill("2500");
+  await expect(page.getByTestId("bud-profit")).toHaveText("KES 17,000");
+  await page.getByTestId("sheet-budget").getByRole("button", { name: "Close" }).click();
+
+  await page.getByTestId("budget-open").click();
+  await page.getByTestId("bud-crop-maize").click();
+  await expect(page.getByTestId("bud-price-dap")).toHaveValue("2500");
+  await page.getByTestId("bud-cmp-beans").click(); // the comparison switches the crop
+  await expect(page.getByTestId("bud-crop-beans")).toHaveAttribute("aria-checked", "true");
+});
+
+test("A fresh harvest is recorded as a sale with its kilos", async ({ page }) => {
+  await start(page, "/shamba", "en", { plantings: [planted("tomato", 80, 0.5)] });
+  await page.getByTestId("harvest-tomato").click();
+  await expect(page.getByTestId("record-kg")).toBeVisible(); // opened as income · crop sale
+  await page.getByTestId("record-amount").fill("3000");
+  await page.getByTestId("record-kg").fill("60");
+  await page.getByTestId("record-save").click();
+  await page.getByRole("radio", { name: "Records" }).click();
+  await expect(page.getByText("60 kg · KES 50/kg")).toBeVisible();
+});
+
+test("Eggs: a laying flock gets an egg log with trays and the week's total", async ({ page }) => {
+  await start(page, "/shamba?tab=livestock");
+  await page.getByTestId("herd-add").first().click();
+  await page.getByTestId("sp-chicken").click();
+  await page.getByTestId("animal-name").fill("Layers");
+  await page.getByTestId("animal-count").fill("100");
+  await page.getByRole("radio", { name: "6 months ago" }).click();
+  await page.getByTestId("animal-save").click();
+
+  await page.getByTestId("egg-add").click();
+  await page.getByTestId("egg-count").fill("85");
+  await expect(page.getByText("= 2 trays + 25 · 85% of hens")).toBeVisible();
+  await page.getByTestId("egg-price").fill("450");
+  await page.getByTestId("egg-save").click();
+  await expect(page.getByTestId("egg-week")).toHaveText("This week: 85 eggs (2 trays + 25) · ≈ KES 1,275");
+});
+
+test("Field size by pacing fills in the acres", async ({ page }) => {
+  await start(page, "/shamba");
+  await page.getByTestId("farm-add-crop").first().click();
+  await page.getByTestId("measure-open").click();
+  await page.getByTestId("measure-length").fill("64");
+  await page.getByTestId("measure-width").fill("64");
+  await expect(page.getByTestId("measure-result")).toHaveText("≈ 1.01 acres (4,096 m²)");
+  await page.getByTestId("measure-use").click();
+  await expect(page.getByTestId("sheet-add-crop").getByText("1.01", { exact: true })).toBeVisible();
+  await page.getByTestId("add-crop-save").click();
+  await expect(page.getByText(/Planted .* · 1.01 acres/)).toBeVisible();
 });

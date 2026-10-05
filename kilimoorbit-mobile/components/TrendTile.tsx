@@ -10,7 +10,7 @@ import { View, Text, Pressable, type LayoutChangeEvent } from "react-native";
 import { useTheme } from "../lib/theme-context";
 import { useLang } from "../lib/session";
 import { isWeb } from "../lib/ui";
-import { dayMonth, longDay } from "../lib/dates";
+import { dayMonth, longDay, todayKey } from "../lib/dates";
 import { T } from "./Kit";
 
 const H = 64;
@@ -47,7 +47,7 @@ export default function TrendTile({
 
   const shown = active ?? n - 1;
   const readout = active == null
-    ? `${dayMonth(lang, dates[0])} – ${tt("common.today")}`
+    ? `${dayMonth(lang, dates[0])} – ${dates[n - 1] === todayKey() ? tt("common.today") : dayMonth(lang, dates[n - 1])}`
     : `${longDay(lang, dates[active])} · ${fmt(prices[active])}`;
 
   const keys = isWeb

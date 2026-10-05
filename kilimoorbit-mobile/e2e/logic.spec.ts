@@ -1,17 +1,20 @@
 /**
- * Unit tests for the app's pure logic (no browser): livestock calendar,
- * price alerts, weather-aware task advice, the crop doctor, the input
- * calculator and the response validators. Run as the "logic" project.
+ * Unit tests for the app's pure logic (no browser): livestock calendar and
+ * egg log, price alerts, weather-aware task advice, the crop doctor, the
+ * input calculator, the store and sell-or-hold plan, the crop budget, field
+ * size by pacing and the response validators. Run as the "logic" project.
  */
 import { test, expect } from "@playwright/test";
 import { addDays } from "../lib/dates";
 import {
-  currentService, groupReminders, milkWeek, openReminders, remindersOf, statusOf,
-  type Animal, type AnimalEvent, type MilkEntry,
+  canLay, currentService, eggWeek, groupReminders, layDropped, layRate, milkWeek, openReminders, recordedDays, remindersOf, statusOf,
+  type Animal, type AnimalEvent, type EggEntry, type MilkEntry,
 } from "../lib/livestock";
+import { bagsLabel, bagsOf, dueChecks, holdPlan, nextCheck, type Lot } from "../lib/postharvest";
+import { budgetFor, compareCrops } from "../lib/budget";
 import { alertHits, suggestTarget } from "../lib/pricewatch";
 import { taskHint } from "../lib/advice";
-import { CROPS, bagsFor, inputsFor } from "../lib/agronomy";
+import { CROPS, CROP_KEYS, acresFromSteps, bagsFor, inputsFor } from "../lib/agronomy";
 import { diagnose } from "../lib/pests";
 import { cleanArb, cleanFeed, cleanForecast, cleanListing } from "../lib/validate";
 import type { WxDay } from "../lib/api";
@@ -109,13 +112,14 @@ test.describe("livestock calendar", () => {
     expect(groups.filter((g) => g.items[0].id.startsWith("heat@")).length).toBe(1);
   });
 
-  test("milk: this week vs last week", () => {
+  test("milk: this week vs last week, by the daily average of recorded days", () => {
     const milk: MilkEntry[] = [
       { id: "1", animalId: "c1", date: TODAY, litres: 10 },
       { id: "2", animalId: "c1", date: addDays(TODAY, -1), litres: 10 },
       { id: "3", animalId: "c1", date: addDays(TODAY, -8), litres: 16 },
     ];
-    expect(milkWeek(milk, TODAY)).toEqual({ thisWeek: 20, lastWeek: 16, changePct: 25 });
+    // 10 L a day this week against 16 L last week: down, though more days were written down.
+    expect(milkWeek(milk, TODAY)).toEqual({ thisWeek: 20, lastWeek: 16, changePct: -37.5 });
     expect(milkWeek([], TODAY).changePct).toBeNull();
   });
 });
@@ -194,5 +198,128 @@ test.describe("response validation", () => {
   test("listings get safe defaults", () => {
     expect(cleanListing({ id: "1", qty_kg: "lots", status: "weird" })).toMatchObject({ qty_kg: 0, status: "open", crop: "" });
     expect(cleanListing({ qty_kg: 1 })).toBeNull();
+  });
+});
+
+test.describe("store: sell now or hold", () => {
+  test("maize in October in hermetic bags: holding to April pays in a typical year", () => {
+    const plan = holdPlan("maize", 1000, 50, 9, true)!;
+    expect(plan.months.map((m) => m.month)).toEqual([9, 10, 11, 0, 1, 2, 3]);
+    expect(plan.best.month).toBe(3);
+    expect(plan.best.price).toBe(56); // 50 × 1.05 / 0.93
+    expect(plan.best.kg).toBe(970); // 0.5 % a month for 6 months
+    expect(plan.best.gain).toBe(plan.best.value - 50000);
+    expect(plan.worthIt).toBe(true);
+    expect(plan.lossPct).toBe(3);
+  });
+
+  test("the same maize in ordinary bags: weevil losses eat the gain", () => {
+    const plan = holdPlan("maize", 1000, 50, 9, false)!;
+    expect(plan.best.k).toBe(0);
+    expect(plan.worthIt).toBe(false);
+  });
+
+  test("at the lean-season peak (June) prices only fall: sell", () => {
+    const plan = holdPlan("maize", 1000, 60, 5, true)!;
+    expect(Math.max(...plan.months.slice(1).map((m) => m.price))).toBeLessThanOrEqual(60);
+    expect(plan.worthIt).toBe(false);
+  });
+
+  test("potatoes keep 3 months at most; perishables and bad input give no plan", () => {
+    expect(holdPlan("potatoes", 500, 40, 0, true)!.months).toHaveLength(4);
+    expect(holdPlan("tomato" as any, 500, 40, 0, true)).toBeNull();
+    expect(holdPlan("maize", 0, 40, 0, true)).toBeNull();
+    expect(holdPlan("maize", 500, NaN, 0, true)).toBeNull();
+  });
+
+  test("bags round to the half bag", () => {
+    expect(bagsOf("maize", 1350)).toBe(15);
+    expect(bagsOf("maize", 100)).toBe(1);
+    expect(bagsOf("potatoes", 125)).toBe(2.5);
+    expect(bagsLabel(11.5)).toBe("11½");
+    expect(bagsLabel(0.5)).toBe("½");
+  });
+
+  test("store checks: 14 days in ordinary bags, 30 sealed, weekly for potatoes", () => {
+    const lot = (x: Partial<Lot>): Lot => ({ id: "l", crop: "maize", kg: 900, since: addDays(TODAY, -20), hermetic: false, ...x });
+    expect(nextCheck(lot({}))).toBe(addDays(TODAY, -6));
+    expect(nextCheck(lot({ hermetic: true }))).toBe(addDays(TODAY, 10));
+    expect(nextCheck(lot({ crop: "potatoes", hermetic: true }))).toBe(addDays(TODAY, -13));
+    expect(nextCheck(lot({ checked: addDays(TODAY, -2) }))).toBe(addDays(TODAY, 12));
+    const due = dueChecks([lot({ id: "a" }), lot({ id: "b", hermetic: true })], TODAY);
+    expect(due.map((d) => [d.lot.id, d.inDays])).toEqual([["a", -6]]);
+  });
+});
+
+test.describe("crop budget", () => {
+  test("an acre of maize at KES 45: costs, profit and break-even", () => {
+    const b = budgetFor("maize", 1, { pricePerKg: 45 });
+    expect(b.lines.map((l) => [l.key, l.cost])).toEqual([["seed", 3500], ["dap", 3500], ["can", 3000], ["labour", 12000], ["chem", 2500]]);
+    expect(b.cost).toBe(24500);
+    expect(b.kg).toBe(900);
+    expect(b.revenue).toBe(40500);
+    expect(b.profit).toBe(16000);
+    expect(b.breakEvenPrice).toBe(28);
+    expect(b.breakEvenKg).toBe(545);
+  });
+
+  test("the farmer's own prices, good practice and loan interest", () => {
+    expect(budgetFor("maize", 1, { pricePerKg: 45, prices: { dap: 2500 } }).cost).toBe(23500);
+    expect(budgetFor("maize", 1, { pricePerKg: 45, level: 1 }).kg).toBe(2250);
+    const loan = budgetFor("maize", 1, { pricePerKg: 45, interestPct: 10 });
+    expect(loan.lines.at(-1)).toEqual({ key: "interest", cost: 2450 });
+    expect(loan.cost).toBe(26950);
+  });
+
+  test("seedlings are priced per 1,000; every crop compares, best first", () => {
+    const tomato = budgetFor("tomato", 0.5, { pricePerKg: 50 });
+    expect(tomato.lines[0]).toMatchObject({ key: "seed", unit: "seedlings", qty: 3700, cost: 18500 });
+    const cmp = compareCrops(1, { priceOf: () => 40 });
+    expect(cmp.map((c) => c.crop).sort()).toEqual([...CROP_KEYS].sort());
+    for (let i = 1; i < cmp.length; i++) expect(cmp[i - 1].profit).toBeGreaterThanOrEqual(cmp[i].profit);
+  });
+
+  test("no price or no land never divides by zero", () => {
+    const b = budgetFor("beans", 0, { pricePerKg: 0 });
+    expect(b.breakEvenPrice).toBeNull();
+    expect(b.breakEvenKg).toBeNull();
+    expect(Number.isFinite(b.profit)).toBe(true);
+  });
+});
+
+test.describe("eggs and field size", () => {
+  const eggs = (perDay: (daysAgo: number) => number, days: number[]): EggEntry[] =>
+    days.map((d) => ({ id: `g${d}`, flockId: "f", date: addDays(TODAY, -d), eggs: perDay(d) }));
+
+  test("laying rate per 100 hens, and a drop worth acting on", () => {
+    const log = eggs((d) => (d >= 7 ? 85 : 68), [1, 2, 3, 4, 8, 9, 10, 11]);
+    const r = layRate(log, "f", 100, TODAY);
+    expect(r).toEqual({ now: 68, before: 85 });
+    expect(layDropped(r)).toBe(true);
+    expect(layRate(log.slice(0, 2), "f", 100, TODAY).now).toBeNull(); // fewer than 3 days recorded
+  });
+
+  test("the week compares daily averages, so a day not yet written down isn't a fall", () => {
+    const log = eggs(() => 80, [1, 2, 3, 8, 9, 10, 11, 12, 13]);
+    const w = eggWeek(log, TODAY);
+    expect(w.thisWeek).toBe(240);
+    expect(w.lastWeek).toBe(480);
+    expect(w.changePct).toBe(0);
+    expect(recordedDays(["a", "b", "c"], [0, 5, 0])).toEqual({ dates: ["b"], values: [5] });
+  });
+
+  test("the egg log opens from 17 weeks, or when the hatch date is unknown", () => {
+    const flock = (born?: string): Animal => ({ id: "f", species: "chicken", name: "F", female: true, count: 50, events: [], ...(born ? { born } : null) });
+    expect(canLay(flock(addDays(TODAY, -100)), TODAY)).toBe(false);
+    expect(canLay(flock(addDays(TODAY, -130)), TODAY)).toBe(true);
+    expect(canLay(flock(), TODAY)).toBe(true);
+    expect(canLay(cow([]), TODAY)).toBe(false);
+  });
+
+  test("acres from big steps", () => {
+    expect(acresFromSteps(64, 64)).toBe(1.01);
+    expect(acresFromSteps(60, 45)).toBe(0.67);
+    expect(acresFromSteps(0, 50)).toBeNull();
+    expect(acresFromSteps(NaN, 50)).toBeNull();
   });
 });

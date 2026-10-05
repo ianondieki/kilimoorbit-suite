@@ -13,10 +13,10 @@ type TT = (k: Key, v?: Vars) => string;
 
 export function buildReport(opts: {
   lang: Lang; tt: TT; name?: string; farm: Farm; entries: Entry[]; periodLabel: string;
-  /** Livestock line, e.g. "Cow 2, Chickens 50", and litres of milk in the period. */
-  herdLine?: string; milkLitres?: number;
+  /** Livestock line, e.g. "Cow 2, Chickens 50", and litres of milk and eggs in the period. */
+  herdLine?: string; milkLitres?: number; eggs?: number;
 }): string {
-  const { lang, tt, name, farm, entries, periodLabel, herdLine, milkLitres } = opts;
+  const { lang, tt, name, farm, entries, periodLabel, herdLine, milkLitres, eggs } = opts;
   const sum = totals(entries);
   const who = [name, farm.county, farm.acres ? acresText(tt, farm.acres) : null].filter(Boolean).join(" · ");
   const lines = [
@@ -44,6 +44,12 @@ export function buildReport(opts: {
   if (herdLine) {
     lines.push("", tt("report.herd", { list: herdLine }));
     if (milkLitres) lines.push(tt("report.milk", { n: Math.round(milkLitres * 10) / 10 }));
+    if (eggs) lines.push(tt("report.eggs", { n: eggs.toLocaleString("en-KE") }));
+  }
+  if (farm.store.length) {
+    const kg = new Map<string, number>();
+    for (const l of farm.store) kg.set(l.crop, (kg.get(l.crop) ?? 0) + l.kg);
+    lines.push("", tt("report.store", { list: [...kg].map(([c, n]) => `${cropName(lang, c)} ${n.toLocaleString("en-KE")} kg`).join(", ") }));
   }
   lines.push("", tt("report.footer"));
   return lines.join("\n");

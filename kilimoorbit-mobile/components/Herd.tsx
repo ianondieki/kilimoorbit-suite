@@ -13,7 +13,8 @@ import { announce, focusRing, webCursor, type PressState } from "../lib/ui";
 import { pick } from "../lib/agronomy";
 import { addDays, dayMonth, daysBetween, todayKey } from "../lib/dates";
 import {
-  SPEC, SPECIES, eventsFor, fill, groupReminders, milkSeries, milkWeek, openReminders, remindersOf, statusOf,
+  SPEC, SPECIES, TRAY, canLay, eggSeries, eggWeek, eventsFor, fill, groupReminders, layDropped, layRate, milkSeries, milkWeek,
+  openReminders, recordedDays, remindersOf, statusOf,
   type Animal, type EventKind, type OpenReminder, type ReminderGroup, type Species,
 } from "../lib/livestock";
 import { herdActions, useHerd } from "../lib/herd";
@@ -277,6 +278,105 @@ export function MilkSheet({ visible, onClose, animalId }: { visible: boolean; on
   );
 }
 
+/* ── Record eggs ── */
+const traysText = (tt: (k: Key, v?: Record<string, string | number>) => string, n: number) =>
+  tt("egg.trays", { t: Math.floor(n / TRAY), e: n % TRAY });
+
+export function EggSheet({ visible, onClose, flockId }: { visible: boolean; onClose: () => void; flockId?: string }) {
+  const t = useTheme();
+  const { t: tt } = useLang();
+  const { herd } = useHerd();
+  const today = todayKey();
+  const layers = herd.animals.filter((a) => canLay(a, today) || herd.eggs.some((e) => e.flockId === a.id));
+  const [who, setWho] = useState<string | undefined>(undefined);
+  const [date, setDate] = useState(today);
+  const [count, setCount] = useState("");
+  const [price, setPrice] = useState("");
+  const [tried, setTried] = useState(false);
+
+  const existing = (id: string | undefined, d: string) => herd.eggs.find((e) => e.flockId === id && e.date === d)?.eggs;
+  useEffect(() => {
+    if (!visible) return;
+    const id = flockId ?? layers[0]?.id;
+    setWho(id);
+    setDate(todayKey());
+    const n = existing(id, todayKey());
+    setCount(n ? String(n) : "");
+    setPrice(herd.eggPrice ? String(herd.eggPrice) : "");
+    setTried(false);
+  }, [visible]);
+
+  const n = Number(count);
+  const valid = count.trim() !== "" && Number.isInteger(n) && n >= 0 && n <= 100000;
+  const pickWho = (id: string) => { setWho(id); const x = existing(id, date); setCount(x ? String(x) : ""); };
+  const pickDate = (d: string) => { const k = d > todayKey() ? todayKey() : d; setDate(k); const x = existing(who, k); if (x) setCount(String(x)); };
+  const save = () => {
+    if (!who) return;
+    if (!valid) { setTried(true); return; }
+    herdActions.setEggs(who, date, n);
+    const p = Number(price);
+    herdActions.setEggPrice(price.trim() && p > 0 ? p : null);
+    announce(tt("egg.saved"));
+    onClose();
+  };
+  const hens = herd.animals.find((a) => a.id === who)?.count ?? 0;
+
+  return (
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title={tt("egg.title")}
+      testID="sheet-eggs"
+      footer={<Btn label={tt("rec.save")} onPress={save} disabled={!who} style={{ flex: 1 }} testID="egg-save" />}
+    >
+      {layers.length > 1 && (
+        <Group label={tt("egg.who")}>
+          <ChipRow role="radiogroup" label={tt("egg.who")}>
+            {layers.map((a) => (
+              <Chip key={a.id} role="radio" selected={who === a.id} onPress={() => pickWho(a.id)} label={a.name} leading={<AnimalCoin species={a.species} size={24} />} />
+            ))}
+          </ChipRow>
+        </Group>
+      )}
+      <Field
+        label={tt(date === todayKey() ? "egg.count" : "egg.countOn")}
+        glyph={null}
+        value={count}
+        onChangeText={(v) => setCount(v.replace(/[^\d]/g, "").slice(0, 6))}
+        height={56}
+        inputStyle={{ fontSize: 20, fontWeight: "700" }}
+        error={tried && !valid}
+        status={
+          tried && !valid ? { kind: "error", text: tt("egg.countErr") }
+          : valid && n > 0 ? { kind: "note", text: `= ${traysText(tt, n)}${hens ? ` · ${tt("egg.rateNow", { p: Math.round((n / hens) * 100) })}` : ""}` }
+          : null
+        }
+        statusMinHeight={0}
+        inputProps={{ keyboardType: "numeric", inputMode: "numeric", placeholder: "0", testID: "egg-count" } as any}
+      />
+      <Group label={tt("ev.date")}>
+        <ChipRow role="radiogroup" label={tt("ev.date")}>
+          <Chip role="radio" selected={date === todayKey()} onPress={() => pickDate(todayKey())} label={tt("common.today")} />
+          <Chip role="radio" selected={date === addDays(todayKey(), -1)} onPress={() => pickDate(addDays(todayKey(), -1))} label={tt("common.yesterday")} />
+        </ChipRow>
+        <DateNudge value={date} onChange={pickDate} label={tt("ev.date")} />
+      </Group>
+      <Field
+        label={tt("egg.price")}
+        glyph={null}
+        value={price}
+        onChangeText={(v) => setPrice(v.replace(/[^\d]/g, "").slice(0, 5))}
+        height={52}
+        inputStyle={{ fontSize: 17, fontWeight: "700" }}
+        status={null}
+        statusMinHeight={0}
+        inputProps={{ keyboardType: "numeric", inputMode: "numeric", testID: "egg-price" } as any}
+      />
+      <Text style={{ color: t.dim, fontSize: 12.5, lineHeight: 17 }}>{tt("egg.note")}</Text>
+    </Sheet>
+  );
+}
+
 /* ── status line ── */
 function StatusBlock({ a }: { a: Animal }) {
   const t = useTheme();
@@ -340,7 +440,7 @@ function ReminderRows({ a, rs, dates }: { a: Animal; rs: OpenReminder[]; dates?:
 }
 
 /* ── one animal ── */
-function AnimalCard({ a, onRecord, onMilk }: { a: Animal; onRecord: (k: EventKind) => void; onMilk: () => void }) {
+function AnimalCard({ a, onRecord, onMilk, onEggs }: { a: Animal; onRecord: (k: EventKind) => void; onMilk: () => void; onEggs: () => void }) {
   const t = useTheme();
   const { lang, t: tt } = useLang();
   const { herd } = useHerd();
@@ -365,6 +465,9 @@ function AnimalCard({ a, onRecord, onMilk }: { a: Animal; onRecord: (k: EventKin
         </View>
         {isMilker(a) && (
           <Btn kind="secondary" small label={tt("milk.add")} onPress={onMilk} testID={`milk-${a.id}`} />
+        )}
+        {canLay(a, today) && (
+          <Btn kind="secondary" small label={tt("egg.add")} onPress={onEggs} testID={`eggs-${a.id}`} />
         )}
       </View>
       <StatusBlock a={a} />
@@ -458,10 +561,11 @@ function MilkCard({ onAdd }: { onAdd: () => void }) {
   const { t: tt } = useLang();
   const { herd } = useHerd();
   const today = todayKey();
-  const { dates, litres } = milkSeries(herd.milk, today, 14);
+  const series = milkSeries(herd.milk, today, 14);
   const week = milkWeek(herd.milk, today);
-  // A trend needs a few recorded days; one entry would draw a misleading flat zero line.
-  const any = litres.filter((x) => x > 0).length >= 3;
+  // Recorded days only, and a trend needs a few of them.
+  const { dates, values: litres } = recordedDays(series.dates, series.litres);
+  const any = litres.length >= 3;
   return (
     <Card>
       <Eyebrow text={tt("milk.eyebrow")} />
@@ -474,7 +578,7 @@ function MilkCard({ onAdd }: { onAdd: () => void }) {
           changePct={week.changePct}
           a11yName=""
           fmt={(v) => `${v} L`}
-          summary={tt("milk.a11y", { first: litres[0], last: litres[13], lo: Math.min(...litres), hi: Math.max(...litres) })}
+          summary={tt("milk.a11y", { first: litres[0], last: litres[litres.length - 1], lo: Math.min(...litres), hi: Math.max(...litres) })}
         />
       ) : null}
       <Text style={{ color: t.ink, ...T.body, fontWeight: "700", marginTop: any ? 12 : 0 }} testID="milk-week">
@@ -487,6 +591,53 @@ function MilkCard({ onAdd }: { onAdd: () => void }) {
   );
 }
 
+/* ── egg card ── */
+function EggCard({ onAdd }: { onAdd: () => void }) {
+  const t = useTheme();
+  const { t: tt } = useLang();
+  const { herd } = useHerd();
+  const today = todayKey();
+  const series = eggSeries(herd.eggs, today, 14);
+  const week = eggWeek(herd.eggs, today);
+  const { dates, values: eggs } = recordedDays(series.dates, series.eggs);
+  const any = eggs.length >= 3;
+  const flocks = herd.animals.filter((a) => a.species === "chicken" && herd.eggs.some((e) => e.flockId === a.id));
+  const trays = week.thisWeek / TRAY;
+  return (
+    <Card>
+      <Eyebrow text={tt("egg.eyebrow")} />
+      {any ? (
+        <TrendTile
+          testID="egg-trend"
+          label={tt("egg.trend")}
+          prices={eggs}
+          dates={dates}
+          changePct={week.changePct}
+          a11yName=""
+          fmt={(v) => String(v)}
+          summary={tt("egg.a11y", { first: eggs[0], last: eggs[eggs.length - 1], lo: Math.min(...eggs), hi: Math.max(...eggs) })}
+        />
+      ) : null}
+      <Text style={{ color: t.ink, ...T.body, fontWeight: "700", marginTop: any ? 12 : 0 }} testID="egg-week">
+        {herd.eggPrice
+          ? tt("egg.weekValue", { n: week.thisWeek.toLocaleString("en-KE"), tr: traysText(tt, week.thisWeek), v: Math.round(trays * herd.eggPrice).toLocaleString("en-KE") })
+          : tt("egg.week", { n: week.thisWeek.toLocaleString("en-KE"), tr: traysText(tt, week.thisWeek) })}
+      </Text>
+      {flocks.map((f) => {
+        const r = layRate(herd.eggs, f.id, f.count ?? 0, today);
+        if (r.now == null) return null;
+        return (
+          <View key={f.id} style={{ marginTop: 8, gap: 6 }} testID={`lay-${f.id}`}>
+            <Text style={{ color: t.dim, ...T.meta }}>{tt("egg.rate", { name: f.name, p: r.now })}</Text>
+            {layDropped(r) ? <Tag block tone="warn" label={tt("egg.drop", { name: f.name, from: r.before!, to: r.now })} /> : null}
+          </View>
+        );
+      })}
+      <Btn label={tt("egg.add")} onPress={onAdd} icon={(c) => <PlusGlyph size={14} color={c} />} style={{ marginTop: 12 }} testID="egg-add" />
+    </Card>
+  );
+}
+
 /* ── the Livestock section of Shamba ── */
 export function HerdSection() {
   const t = useTheme();
@@ -495,7 +646,9 @@ export function HerdSection() {
   const [adding, setAdding] = useState(false);
   const [event, setEvent] = useState<{ animal: Animal; kind: EventKind } | null>(null);
   const [milkFor, setMilkFor] = useState<string | undefined | null>(null);
+  const [eggsFor, setEggsFor] = useState<string | undefined | null>(null);
   const hasMilkers = herd.animals.some(isMilker);
+  const hasLayers = herdHasLayers(herd.animals) || herd.eggs.length > 0;
 
   return (
     <View style={{ gap: 14 }}>
@@ -511,8 +664,9 @@ export function HerdSection() {
       ) : (
         <>
           {hasMilkers && <MilkCard onAdd={() => setMilkFor(undefined)} />}
+          {hasLayers && <EggCard onAdd={() => setEggsFor(undefined)} />}
           {herd.animals.map((a) => (
-            <AnimalCard key={a.id} a={a} onRecord={(kind) => setEvent({ animal: a, kind })} onMilk={() => setMilkFor(a.id)} />
+            <AnimalCard key={a.id} a={a} onRecord={(kind) => setEvent({ animal: a, kind })} onMilk={() => setMilkFor(a.id)} onEggs={() => setEggsFor(a.id)} />
           ))}
           <Btn kind="secondary" label={tt("herd.add")} onPress={() => setAdding(true)} icon={(c) => <PlusGlyph size={14} color={c} />} testID="herd-add" />
         </>
@@ -520,6 +674,7 @@ export function HerdSection() {
       <AddAnimalSheet visible={adding} onClose={() => setAdding(false)} />
       <EventSheet visible={!!event} onClose={() => setEvent(null)} animals={event ? [event.animal] : []} kind={event?.kind ?? null} />
       <MilkSheet visible={milkFor !== null} onClose={() => setMilkFor(null)} animalId={milkFor ?? undefined} />
+      <EggSheet visible={eggsFor !== null} onClose={() => setEggsFor(null)} flockId={eggsFor ?? undefined} />
     </View>
   );
 }
@@ -579,3 +734,4 @@ export function HerdRows({ max = 3 }: { max?: number }) {
 }
 
 export const herdHasMilkers = (animals: Animal[]) => animals.some(isMilker);
+export const herdHasLayers = (animals: Animal[]) => animals.some((a) => canLay(a, todayKey()));

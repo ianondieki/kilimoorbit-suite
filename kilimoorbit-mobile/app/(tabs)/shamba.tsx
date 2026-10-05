@@ -1,6 +1,7 @@
 /**
- * Shamba / My farm: the crop calendar (stages, dated tasks, what inputs to
- * buy) and the daftari (money in and out, profit per crop). All on the phone.
+ * Shamba / My farm: crops (calendar with stages, dated tasks and inputs; the
+ * store; the "will it pay?" budget), livestock, and the daftari (money in and
+ * out, profit per crop). All on the phone.
  */
 import React, { useState } from "react";
 import { View, Text, ScrollView, Pressable } from "react-native";
@@ -14,10 +15,13 @@ import { useLocalSearchParams } from "expo-router";
 import Segmented from "../../components/Segmented";
 import { Bounded } from "../../components/Bounded";
 import { AddCropSheet, FarmProfileSheet, RecordSheet } from "../../components/FarmSheets";
+import { LotSheet, StoreCard, StoreSheet } from "../../components/Ghala";
+import { BudgetSheet } from "../../components/Budget";
+import { isStoreCrop, type Lot, type StoreCrop } from "../../lib/postharvest";
 import { Btn, Card, Chip, ChipRow, Empty, Eyebrow, T, Tag, tint } from "../../components/Kit";
 import { Enter, LevelBar } from "../../components/Motion";
 import { CropCoin } from "../../components/ShambaPanel";
-import { ArrowGlyph, ChevronGlyph, CrossGlyph, PlusGlyph, SproutGlyph } from "../../components/Glyphs";
+import { ArrowGlyph, BarsGlyph, ChevronGlyph, CrossGlyph, PlusGlyph, SproutGlyph } from "../../components/Glyphs";
 import { useTheme } from "../../lib/theme-context";
 import { useLang, useSession } from "../../lib/session";
 import { announce, focusRing, webCursor, webLang, type PressState } from "../../lib/ui";
@@ -42,10 +46,24 @@ export default function Shamba() {
   // ?tab=livestock (or records) opens that section directly.
   const params = useLocalSearchParams<{ tab?: string }>();
   const [tab, setTab] = useState<Tab>(params.tab === "livestock" || params.tab === "records" ? params.tab : "calendar");
-  const [sheet, setSheet] = useState<null | "county" | "crop" | "record">(null);
+  const [sheet, setSheet] = useState<null | "county" | "crop" | "record" | "store" | "budget" | "sale">(null);
   const [preset, setPreset] = useState<CropKey | undefined>(undefined);
+  const [storeFor, setStoreFor] = useState<{ crop?: StoreCrop; kg?: number; acres?: number }>({});
+  const [budgetPreset, setBudgetPreset] = useState<{ crop?: CropKey; acres?: number }>({});
+  const [lot, setLot] = useState<Lot | null>(null);
 
   const addCrop = (k?: CropKey) => { setPreset(k); setSheet("crop"); };
+  const actions: CropActions = {
+    onAdd: addCrop,
+    // A harvest that keeps goes into store (with the typical harvest as a start); a fresh one is sold.
+    onHarvest: (p) => {
+      if (isStoreCrop(p.crop)) { setStoreFor({ crop: p.crop, kg: CROPS[p.crop].yieldPerAcre[0] * p.acres, acres: p.acres }); setSheet("store"); }
+      else { setPreset(p.crop); setSheet("sale"); }
+    },
+    onStore: () => { setStoreFor({}); setSheet("store"); },
+    onSell: setLot,
+    onBudget: (crop, acres) => { setBudgetPreset({ crop, acres }); setSheet("budget"); },
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]} {...webLang(lang)}>
@@ -87,7 +105,7 @@ export default function Shamba() {
 
           <Guard name={tab}>
             {tab === "calendar" ? (
-              <Calendar onAdd={addCrop} />
+              <Calendar actions={actions} />
             ) : tab === "livestock" ? (
               <HerdSection />
             ) : (
@@ -100,12 +118,25 @@ export default function Shamba() {
       <FarmProfileSheet visible={sheet === "county"} onClose={() => setSheet(null)} />
       <AddCropSheet visible={sheet === "crop"} onClose={() => setSheet(null)} initialCrop={preset} />
       <RecordSheet visible={sheet === "record"} onClose={() => setSheet(null)} />
+      <RecordSheet visible={sheet === "sale"} onClose={() => setSheet(null)} preset={{ kind: "income", category: "sale", crop: preset }} />
+      <StoreSheet visible={sheet === "store"} onClose={() => setSheet(null)} crop={storeFor.crop} kg={storeFor.kg} acres={storeFor.acres} />
+      <BudgetSheet visible={sheet === "budget"} onClose={() => setSheet(null)} crop={budgetPreset.crop} acres={budgetPreset.acres} onPlant={addCrop} />
+      <LotSheet lot={lot} onClose={() => setLot(null)} />
     </SafeAreaView>
   );
 }
 
-/* ───────────────────────── Calendar ───────────────────────── */
-function Calendar({ onAdd }: { onAdd: (k?: CropKey) => void }) {
+/* ───────────────────────── Crops: calendar, store, budget ───────────────────────── */
+type CropActions = {
+  onAdd: (k?: CropKey) => void;
+  onHarvest: (p: Planting) => void;
+  onStore: () => void;
+  onSell: (l: Lot) => void;
+  onBudget: (crop?: CropKey, acres?: number) => void;
+};
+
+function Calendar({ actions }: { actions: CropActions }) {
+  const { onAdd } = actions;
   const t = useTheme();
   const { t: tt } = useLang();
   const { farm } = useFarm();
@@ -127,18 +158,22 @@ function Calendar({ onAdd }: { onAdd: (k?: CropKey) => void }) {
         <>
           {sorted.map((p, i) => (
             <Enter key={p.id} index={i}>
-              <Guard name={`planting:${p.crop}`}><PlantingCard p={p} days={wx.data?.days} /></Guard>
+              <Guard name={`planting:${p.crop}`}><PlantingCard p={p} days={wx.data?.days} actions={actions} /></Guard>
             </Enter>
           ))}
           <Btn kind="secondary" label={tt("tasks.addCrop")} onPress={() => onAdd()} icon={(c) => <PlusGlyph size={14} color={c} />} testID="farm-add-crop" />
         </>
       )}
-      <SuggestCard onPick={onAdd} />
+      {/* The store shows once something is stored, or a grain or potato crop is two weeks from harvest. */}
+      {farm.store.length > 0 || farm.plantings.some((p) => isStoreCrop(p.crop) && daysBetween(p.plantedOn, todayKey()) >= CROPS[p.crop].daysToHarvest - 14) ? (
+        <Guard name="store"><StoreCard onAdd={actions.onStore} onSell={actions.onSell} /></Guard>
+      ) : null}
+      <SuggestCard onPick={onAdd} onBudget={() => actions.onBudget()} />
     </View>
   );
 }
 
-function PlantingCard({ p, days }: { p: Planting; days?: WxDay[] }) {
+function PlantingCard({ p, days, actions }: { p: Planting; days?: WxDay[]; actions: CropActions }) {
   const t = useTheme();
   const { lang, t: tt } = useLang();
   const { farm } = useFarm();
@@ -183,6 +218,18 @@ function PlantingCard({ p, days }: { p: Planting; days?: WxDay[] }) {
 
       <Outlook p={p} />
 
+      {harvesting && (
+        <Btn
+          kind="secondary"
+          small
+          label={isStoreCrop(p.crop) ? tt("plant.toStore") : tt("plant.recordSale")}
+          onPress={() => actions.onHarvest(p)}
+          icon={(c) => <PlusGlyph size={13} color={c} />}
+          style={{ marginTop: 10, alignSelf: "flex-start" }}
+          testID={`harvest-${p.crop}`}
+        />
+      )}
+
       {/* Collapsed: the next two open tasks. Open: the whole calendar instead. */}
       {!open && (
         <View style={{ marginTop: 12 }}>
@@ -208,6 +255,15 @@ function PlantingCard({ p, days }: { p: Planting; days?: WxDay[] }) {
             <Text style={{ color: t.dim, fontSize: 12.5, lineHeight: 17 }}>
               {tt("plant.spacing", { s: plan.spacing })} · {tt("plant.inputsNote")}
             </Text>
+            <Btn
+              kind="ghost"
+              small
+              label={tt("bud.open")}
+              onPress={() => actions.onBudget(p.crop, p.acres)}
+              icon={(c) => <ArrowGlyph size={13} color={c} />}
+              style={{ flexDirection: "row-reverse", alignSelf: "flex-start" }}
+              testID={`budget-${p.crop}`}
+            />
           </View>
           {confirm ? (
             <View style={{ gap: 10 }}>
@@ -265,7 +321,7 @@ function Outlook({ p }: { p: Planting }) {
   );
 }
 
-function SuggestCard({ onPick }: { onPick: (k: CropKey) => void }) {
+function SuggestCard({ onPick, onBudget }: { onPick: (k: CropKey) => void; onBudget: () => void }) {
   const t = useTheme();
   const { lang, t: tt } = useLang();
   const season = seasonFor();
@@ -294,6 +350,14 @@ function SuggestCard({ onPick }: { onPick: (k: CropKey) => void }) {
         <Text style={{ color: t.dim, ...T.meta, fontWeight: "700" }}>{tt("suggest.water")}</Text>
         {chips(irrigated)}
       </View>
+      <Btn
+        kind="secondary"
+        label={tt("bud.openCompare")}
+        onPress={onBudget}
+        icon={(c) => <BarsGlyph size={18} color={c} />}
+        style={{ marginTop: 14 }}
+        testID="budget-open"
+      />
     </Card>
   );
 }
@@ -381,7 +445,8 @@ function Records({ onAdd }: { onAdd: () => void }) {
             for (const a of herd.animals) counts.set(a.species, (counts.get(a.species) ?? 0) + (a.species === "chicken" ? a.count ?? 1 : 1));
             const herdLine = [...counts].map(([sp, n]) => `${tt(`sp.${sp}` as Key)} ${n.toLocaleString("en-KE")}`).join(", ");
             const milkLitres = herd.milk.filter((m) => period === "all" || m.date >= from).reduce((x, m) => x + m.litres, 0);
-            const text = buildReport({ lang, tt, name: profile?.name, farm, entries, periodLabel: tt(period === "all" ? "rec.all" : "rec.season"), herdLine, milkLitres });
+            const eggs = herd.eggs.filter((e) => period === "all" || e.date >= from).reduce((x, e) => x + e.eggs, 0);
+            const text = buildReport({ lang, tt, name: profile?.name, farm, entries, periodLabel: tt(period === "all" ? "rec.all" : "rec.season"), herdLine, milkLitres, eggs });
             const r = await shareText(text);
             if (r !== "shared") { setShared(r); announce(tt(r === "copied" ? "rec.copied" : "rec.shareFail")); setTimeout(() => setShared(null), 2500); }
           }}

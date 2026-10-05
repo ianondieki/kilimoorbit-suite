@@ -6,15 +6,20 @@
  */
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { EVENT_KINDS, SPECIES, type Animal, type AnimalEvent, type EventKind, type MilkEntry, type Species } from "./livestock";
+import { EVENT_KINDS, SPECIES, type Animal, type AnimalEvent, type EggEntry, type EventKind, type MilkEntry, type Species } from "./livestock";
 
 export const HERD_KEY = "ko-herd";
 const MAX_ANIMALS = 100;
 const MAX_EVENTS = 200;
 const MAX_MILK = 3000;
+const MAX_EGGS = 3000;
 
-export type Herd = { v: 1; animals: Animal[]; milk: MilkEntry[]; done: Record<string, true>; milkPrice: number | null };
-const EMPTY: Herd = { v: 1, animals: [], milk: [], done: {}, milkPrice: null };
+export type Herd = {
+  v: 1; animals: Animal[]; milk: MilkEntry[]; done: Record<string, true>; milkPrice: number | null;
+  /** Egg log for chicken flocks, and the farmer's price for a tray of 30. */
+  eggs: EggEntry[]; eggPrice: number | null;
+};
+const EMPTY: Herd = { v: 1, animals: [], milk: [], done: {}, milkPrice: null, eggs: [], eggPrice: null };
 
 let state: Herd = EMPTY;
 let hydrated = false;
@@ -53,12 +58,19 @@ export function sanitizeHerd(raw: any): Herd {
     .filter((m: any) => m && typeof m.id === "string" && ids.has(m.animalId) && day(m.date) && pos(m.litres) && m.litres <= 200)
     .map((m: any): MilkEntry => ({ id: m.id, animalId: m.animalId, date: m.date, litres: m.litres }))
     .slice(-MAX_MILK);
+  const flocks = new Set(animals.filter((a: Animal) => a.species === "chicken").map((a: Animal) => a.id));
+  const eggs = (Array.isArray(raw.eggs) ? raw.eggs : [])
+    .filter((e: any) => e && typeof e.id === "string" && flocks.has(e.flockId) && day(e.date) && Number.isInteger(e.eggs) && e.eggs > 0 && e.eggs <= 100000)
+    .map((e: any): EggEntry => ({ id: e.id, flockId: e.flockId, date: e.date, eggs: e.eggs }))
+    .slice(-MAX_EGGS);
   return {
     v: 1,
     animals,
     milk,
     done: raw.done && typeof raw.done === "object" && !Array.isArray(raw.done) ? raw.done : {},
     milkPrice: pos(raw.milkPrice) && raw.milkPrice < 10000 ? raw.milkPrice : null,
+    eggs,
+    eggPrice: pos(raw.eggPrice) && raw.eggPrice < 100000 ? raw.eggPrice : null,
   };
 }
 
@@ -100,6 +112,7 @@ export const herdActions = {
       ...s,
       animals: s.animals.filter((a) => a.id !== id),
       milk: s.milk.filter((m) => m.animalId !== id),
+      eggs: s.eggs.filter((e) => e.flockId !== id),
       done: Object.fromEntries(Object.entries(s.done).filter(([k]) => !k.startsWith(`${id}:`))) as Herd["done"],
     }));
   },
@@ -142,6 +155,18 @@ export const herdActions = {
   },
   setMilkPrice(price: number | null) {
     mutate((s) => ({ ...s, milkPrice: price && Number.isFinite(price) && price > 0 && price < 10000 ? Math.round(price) : null }));
+  },
+  /** One count per flock per day, like milk: a second entry replaces the first; 0 removes it. */
+  setEggs(flockId: string, date: string, eggs: number) {
+    if (!DAY.test(date) || !Number.isInteger(eggs) || eggs < 0 || eggs > 100000) return;
+    mutate((s) => {
+      if (!s.animals.some((a) => a.id === flockId && a.species === "chicken")) return s;
+      const rest = s.eggs.filter((e) => !(e.flockId === flockId && e.date === date));
+      return { ...s, eggs: eggs > 0 ? [...rest, { id: uid("g"), flockId, date, eggs }].slice(-MAX_EGGS) : rest };
+    });
+  },
+  setEggPrice(price: number | null) {
+    mutate((s) => ({ ...s, eggPrice: price && Number.isFinite(price) && price > 0 && price < 100000 ? Math.round(price) : null }));
   },
 };
 

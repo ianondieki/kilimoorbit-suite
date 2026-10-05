@@ -287,3 +287,15 @@ export function cropsForSeason(season: SeasonKey): { rainfed: CropKey[]; irrigat
   const irrigated = CROP_KEYS.filter((k) => CROPS[k].water);
   return { rainfed, irrigated };
 }
+
+/* ── field size by pacing ── */
+export const SQ_M_PER_ACRE = 4046.86;
+
+/**
+ * Acres from a field walked in big steps (about a metre each): length × width.
+ * For an uneven field, use the average of each pair of opposite sides.
+ */
+export function acresFromSteps(length: number, width: number, stepM = 1): number | null {
+  if (!(length > 0) || !(width > 0) || !(stepM > 0) || !Number.isFinite(length * width * stepM)) return null;
+  return Math.round(((length * stepM * width * stepM) / SQ_M_PER_ACRE) * 100) / 100;
+}

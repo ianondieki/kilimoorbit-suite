@@ -11,7 +11,9 @@ import Header from "../../components/Header";
 import FAB from "../../components/FAB";
 import WeatherCard, { windowText, type Win } from "../../components/WeatherCard";
 import { Guard } from "../../components/ScreenError";
-import { AddAnimalSheet, HerdRows, MilkSheet, herdHasMilkers } from "../../components/Herd";
+import { AddAnimalSheet, EggSheet, HerdRows, MilkSheet, herdHasLayers, herdHasMilkers } from "../../components/Herd";
+import { StoreRows } from "../../components/Ghala";
+import { checkKind, dueChecks } from "../../lib/postharvest";
 import { AlertsCard } from "../../components/PriceAlerts";
 import { useAlerts } from "../../lib/alerts";
 import { alertHits } from "../../lib/pricewatch";
@@ -51,7 +53,7 @@ export default function Today() {
   const wx = useForecast(county);
   const { width } = useWindowDimensions();
   const { isDocked } = useMenu();
-  const [sheet, setSheet] = useState<null | "county" | "crop" | "record" | "animal" | "milk">(null);
+  const [sheet, setSheet] = useState<null | "county" | "crop" | "record" | "animal" | "milk" | "eggs">(null);
   const { herd } = useHerd();
   const alerts = useAlerts();
   const [refreshing, setRefreshing] = useState(false);
@@ -77,7 +79,9 @@ export default function Today() {
     const due = upcomingTasks(farm).slice(0, 3).map((x) => `${pick(lang, x.title)} (${cropName(lang, x.planting.crop)})`);
     const herdDue = openReminders(herd.animals, herd.done, todayKey(), 7).slice(0, 2)
       .map((r) => fill(pick(lang, r.title), herd.animals.find((a) => a.id === r.animalId)?.name ?? ""));
-    const all = [...due, ...herdDue];
+    const storeDue = dueChecks(farm.store, todayKey(), 1).slice(0, 2)
+      .map((c) => tt(`store.check.${checkKind(c.lot)}` as Key, { crop: cropName(lang, c.lot.crop).toLowerCase() }));
+    const all = [...due, ...herdDue, ...storeDue];
     if (all.length) parts.push(tt("listen.today.tasks", { list: all.join("; ") }));
     for (const h of alertHits(alerts, sentinel.meta?.commodity_feed))
       parts.push(tt("listen.today.alert", { crop: cropName(lang, h.alert.crop), p: h.price, market: h.market }));
@@ -153,10 +157,12 @@ export default function Today() {
         actions={[
           { label: tt("fab.record"), glyph: (c) => <BarsGlyph size={20} color={c} />, onPress: () => setSheet("record"), testID: "fab-record" },
           { label: tt("fab.addCrop"), glyph: (c) => <SproutGlyph size={22} color={c} />, onPress: () => setSheet("crop"), testID: "fab-add-crop" },
-          // Dairy farmers record milk daily; everyone else gets "add an animal".
+          // Dairy farmers record milk daily, poultry farmers eggs; everyone else gets "add an animal".
           herdHasMilkers(herd.animals)
             ? { label: tt("fab.milk"), glyph: (c) => <PlusGlyph size={18} color={c} />, onPress: () => setSheet("milk"), testID: "fab-milk" }
-            : { label: tt("fab.addAnimal"), glyph: (c) => <PlusGlyph size={18} color={c} />, onPress: () => setSheet("animal"), testID: "fab-add-animal" },
+            : herdHasLayers(herd.animals)
+              ? { label: tt("fab.eggs"), glyph: (c) => <PlusGlyph size={18} color={c} />, onPress: () => setSheet("eggs"), testID: "fab-eggs" }
+              : { label: tt("fab.addAnimal"), glyph: (c) => <PlusGlyph size={18} color={c} />, onPress: () => setSheet("animal"), testID: "fab-add-animal" },
           { label: tt("fab.diagnose"), glyph: (c) => <LensGlyph size={20} color={c} />, onPress: () => router.navigate("/daktari") },
           { label: tt("fab.ask"), glyph: (c) => <ChatGlyph size={20} color={c} />, onPress: () => router.navigate("/chat") },
         ]}
@@ -167,6 +173,7 @@ export default function Today() {
       <RecordSheet visible={sheet === "record"} onClose={() => setSheet(null)} />
       <AddAnimalSheet visible={sheet === "animal"} onClose={() => setSheet(null)} />
       <MilkSheet visible={sheet === "milk"} onClose={() => setSheet(null)} />
+      <EggSheet visible={sheet === "eggs"} onClose={() => setSheet(null)} />
     </SafeAreaView>
   );
 }
@@ -204,13 +211,15 @@ function TasksCard({ onAddCrop, onAddAnimal, days }: { onAddCrop: () => void; on
   const hasCrops = farm.plantings.length > 0;
   const hasAnimals = herd.animals.length > 0;
   const herdDue = hasAnimals ? openReminders(herd.animals, herd.done, todayKey(), 7).length : 0;
+  const storeDue = dueChecks(farm.store, todayKey(), 1).length;
+  const hasStore = farm.store.length > 0;
 
   return (
     <Card>
       <Eyebrow text={tt("tasks.eyebrow")} />
       {!ready || !herdReady ? (
         <Skeleton height={48} color={t.raised} radius={12} />
-      ) : !hasCrops && !hasAnimals ? (
+      ) : !hasCrops && !hasAnimals && !hasStore ? (
         <View style={{ gap: 12 }}>
           <Text style={{ color: t.dim, ...T.body }}>{tt("tasks.emptyAll")}</Text>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
@@ -222,7 +231,8 @@ function TasksCard({ onAddCrop, onAddAnimal, days }: { onAddCrop: () => void; on
         <>
           {shown.length > 0 && <TaskRows tasks={shown} showCrop days={days} onToggled={(k) => setKept((s) => new Set(s).add(k))} />}
           <Guard name="herd-rows"><HerdRows max={3} /></Guard>
-          {shown.length === 0 && herdDue === 0 && (
+          <Guard name="store-rows"><StoreRows /></Guard>
+          {shown.length === 0 && herdDue === 0 && storeDue === 0 && (
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4 }}>
               <CheckCoin size={24} bg={t.ok} fg={t.field} />
               <Text style={{ flex: 1, color: t.ink, ...T.body }}>{tt("tasks.allDone")}</Text>
