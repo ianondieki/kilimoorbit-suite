@@ -1,21 +1,21 @@
 {
   "name": "kilimoorbit-suite",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "description": "KilimoOrbit suite — Sentinel backend + KilimoOrbit mobile + Soko mobile. One-command install and start.",
   "scripts": {
-    "postinstall": "npm --prefix kilimoorbit-sentinel install && npm --prefix kilimoorbit-mobile install && npm --prefix soko-mobile install",
+    "postinstall": "node scripts/in.js kilimoorbit-sentinel install && node scripts/in.js kilimoorbit-mobile install && node scripts/in.js soko-mobile install",
     "install:all": "npm install",
     "update": "git checkout -- . && git pull --ff-only && npm install",
-    "start": "npm --prefix kilimoorbit-sentinel start",
-    "app": "npm --prefix kilimoorbit-mobile start",
-    "soko": "npm --prefix soko-mobile start",
+    "start": "node scripts/in.js kilimoorbit-sentinel start",
+    "app": "node scripts/in.js kilimoorbit-mobile start",
+    "soko": "node scripts/in.js soko-mobile start",
     "dev": "concurrently -n backend,kilimo,soko -c green,cyan,magenta \"npm run dev:backend\" \"npm run dev:kilimo\" \"npm run dev:soko\"",
-    "dev:backend": "npm --prefix kilimoorbit-sentinel start",
-    "dev:kilimo": "npm --prefix kilimoorbit-mobile start -- --web --port 8081",
-    "dev:soko": "npm --prefix soko-mobile start -- --web --port 8082",
+    "dev:backend": "node scripts/in.js kilimoorbit-sentinel start",
+    "dev:kilimo": "node scripts/in.js kilimoorbit-mobile start -- --web --port 8081",
+    "dev:soko": "node scripts/in.js soko-mobile start -- --web --port 8082",
     "dev:apps": "concurrently -n kilimo,soko -c cyan,magenta \"npm run dev:kilimo\" \"npm run dev:soko\"",
-    "test": "npm --prefix kilimoorbit-sentinel test"
+    "test": "node scripts/in.js kilimoorbit-sentinel test"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
