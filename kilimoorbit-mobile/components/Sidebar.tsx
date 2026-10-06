@@ -21,6 +21,7 @@ import { router, usePathname } from "expo-router";
 import { useTheme, useThemeControls } from "../lib/theme-context";
 import { useApiBase } from "../lib/config";
 import { hostOf } from "../lib/connection";
+import { getFontStatus } from "../lib/typography";
 import { ConnectionSheet } from "./Connection";
 import { THEMES, type Theme } from "../lib/themes";
 import { useLang, useSession } from "../lib/session";
@@ -158,6 +159,8 @@ function SidebarBody({ variant, open }: { variant: Variant; open: boolean }) {
   const tileRefs = useRef<(View | null)[]>([]);
   const [conn, setConn] = useState(false);
   const { base: apiBase } = useApiBase();
+  const appVersion = Constants.expoConfig?.version ?? "?";
+  const fontsOk = getFontStatus() === "ready";
 
   useEffect(() => {
     if (!drawer) return;
@@ -314,6 +317,15 @@ function SidebarBody({ variant, open }: { variant: Variant; open: boolean }) {
           </View>
           <ChevronGlyph size={12} color={t.dim} dir="right" />
         </Pressable>
+
+        {/* What is running: the app version and whether the bundled fonts loaded, so an old bundle or a font that failed is visible at a glance. */}
+        <View accessible accessibilityLabel={`${tt("settings.app")}: ${appVersion}, ${tt(fontsOk ? "settings.fontsOk" : "settings.fontsFail")}`} testID="settings-app" style={{ minHeight: 48, paddingHorizontal: 20, flexDirection: "row", alignItems: "center", gap: 14 }}>
+          <LeafGlyph size={22} color={t.ink} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "600" }}>{tt("settings.app")}</Text>
+            <Text numberOfLines={1} style={{ color: fontsOk ? t.dim : t.alert, fontSize: 12.5, lineHeight: 16, fontWeight: "700" }}>v{appVersion} · {tt(fontsOk ? "settings.fontsOk" : "settings.fontsFail")}</Text>
+          </View>
+        </View>
         <ConnectionSheet visible={conn} onClose={() => setConn(false)} />
 
         {/* 6. Footer: its own line at the end of the scrolling body, for
