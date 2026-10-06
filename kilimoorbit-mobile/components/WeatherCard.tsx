@@ -17,7 +17,23 @@ import type { Key, Lang, Vars } from "../lib/i18n";
 import { Btn, Card, Eyebrow, T } from "./Kit";
 import { DemoTag } from "./ShambaPanel";
 import { Skeleton } from "./Motion";
-import { CheckCoin, ChevronGlyph, CrossGlyph, SignalOffGlyph, WeatherGlyph, SunGlyph } from "./Glyphs";
+import { CheckCoin, ChevronGlyph, CrossGlyph, SignalOffGlyph } from "./Glyphs";
+import Icon, { type IconName } from "./Icon";
+import SkyScene, { daypart, hasSunOrMoon } from "./SkyScene";
+import type { Sky } from "../lib/api";
+
+/** Material weather icon and tint for a sky. */
+export function skyIcon(sky: Sky, t: { accent: string; dim: string; water: string; alert: string }): { name: IconName; color: string } {
+  switch (sky) {
+    case "sunny": return { name: "weather-sunny", color: t.accent };
+    case "partly": return { name: "weather-partly-cloudy", color: t.accent };
+    case "cloudy": return { name: "weather-cloudy", color: t.dim };
+    case "showers": return { name: "weather-rainy", color: t.water };
+    case "rain": return { name: "weather-pouring", color: t.water };
+    case "heavy": return { name: "weather-pouring", color: t.water };
+    default: return { name: "weather-lightning-rainy", color: t.alert };
+  }
+}
 
 export type Win = "spray" | "plant" | "dry";
 
@@ -30,7 +46,7 @@ export default function WeatherCard({
 
   return (
     <Card>
-      <Eyebrow domain="weather" icon={(c) => <SunGlyph size={15} color={c} />}
+      <Eyebrow domain="weather" icon={(c) => <Icon name="weather-partly-cloudy" size={17} color={c} />}
         text={tt("wx.eyebrow", { county: county.toUpperCase() })}
         right={f?.source === "SAMPLE" ? <DemoTag /> : null}
       />
@@ -74,23 +90,38 @@ function Body({ f, cachedAgeMin }: { f: Forecast; cachedAgeMin?: number }) {
   const d0 = f.days[0];
   const today = todayKey();
   const sky = (d: WxDay) => tt(`wx.sky.${d.sky}` as Key);
+  const hour = new Date().getHours();
+  const part = daypart(hour);
+  const skyWord = part === "night" && d0.sky === "sunny" ? tt("wx.clearNight") : sky(d0);
 
   return (
     <View style={{ gap: 14 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-        <WeatherGlyph sky={d0.sky} size={56} sun={t.accent} cloud={t.dim} water={t.water} alert={t.alert} />
-        <Text style={{ color: t.ink, fontSize: 40, lineHeight: 46, fontWeight: "800" }}>{d0.tmax}°</Text>
-        <View style={{ flex: 1 }}>
-          <Text style={{ color: t.ink, ...T.title }}>{sky(d0)}</Text>
-          <Text style={{ color: t.dim, ...T.meta }}>
-            {[tt("wx.low", { n: d0.tmin }), tt("wx.rain", { p: d0.rain_chance }), tt("wx.wind", { n: d0.wind_kmh })].join(" · ")}
-          </Text>
+      {/* The sky as it is today, with the big numbers on it. */}
+      <View
+        accessible
+        accessibilityLabel={tt("wx.dayA11y", { day: tt("common.today"), sky: sky(d0), tmax: d0.tmax, tmin: d0.tmin, p: d0.rain_chance })}
+        style={{ borderRadius: 16, overflow: "hidden", borderWidth: 1, borderColor: t.line }}
+        testID="wx-hero"
+      >
+        <SkyScene sky={d0.sky} hour={hour} height={176} />
+        <View style={{ position: "absolute", left: 16, top: 12, right: hasSunOrMoon(d0.sky, part) ? 104 : 20 }}>
+          <Text style={{ color: "#FFFFFF", fontSize: 54, lineHeight: 60, fontWeight: "800", letterSpacing: -1.5 }}>{d0.tmax}°</Text>
+          <Text display numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={{ color: "#FFFFFF", fontSize: 22, lineHeight: 28 }}>{skyWord}</Text>
+          <Text style={{ color: "rgba(255,255,255,0.86)", ...T.meta, fontWeight: "700", marginTop: 2 }}>{tt("wx.low", { n: d0.tmin })}</Text>
         </View>
       </View>
 
-      {cachedAgeMin != null && (
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <Stat icon="thermometer-low" label={tt("wx.lowLabel")} value={`${d0.tmin}°`} color={t.ink} testID="wx-stat-low" />
+        <Stat icon="water-percent" label={tt("wx.rainLabel")} value={`${d0.rain_chance}%`} color={d0.rain_chance >= 50 ? t.water : t.ink} testID="wx-stat-rain" />
+        <Stat icon="weather-windy" label={tt("wx.windLabel")} value={`${d0.wind_kmh} km/h`} color={d0.wind_kmh >= 25 ? t.accent : t.ink} testID="wx-stat-wind" />
+      </View>
+
+      {cachedAgeMin != null ? (
         <Text style={{ color: t.dim, ...T.meta, marginTop: -6 }}>{tt("wx.cached", { age: ageText(lang, cachedAgeMin) })}</Text>
-      )}
+      ) : f.source === "OPEN_METEO" ? (
+        <Text style={{ color: t.dim, ...T.meta, marginTop: -6 }} testID="wx-live">{tt("wx.live")}</Text>
+      ) : null}
 
       {/* 7-day strip: each day is one labelled group for screen readers. */}
       <View style={{ flexDirection: "row", borderTopWidth: 1, borderBottomWidth: 1, borderColor: t.line, paddingVertical: 10 }}>
@@ -106,7 +137,7 @@ function Body({ f, cachedAgeMin }: { f: Forecast; cachedAgeMin?: number }) {
               style={{ flex: 1, alignItems: "center", gap: 4 }}
             >
               <Text style={{ color: isToday ? t.accent : t.dim, fontSize: 12, lineHeight: 16, fontWeight: "800" }} numberOfLines={1}>{name}</Text>
-              <WeatherGlyph sky={d.sky} size={26} sun={t.accent} cloud={t.dim} water={t.water} alert={t.alert} />
+              <Icon name={skyIcon(d.sky, t).name} size={26} color={skyIcon(d.sky, t).color} />
               <Text style={{ color: t.ink, fontSize: 14, lineHeight: 18, fontWeight: "700" }}>{d.tmax}°</Text>
               <Text style={{ color: d.rain_chance >= 50 ? t.water : t.dim, fontSize: 11.5, lineHeight: 15, fontWeight: "700" }}>{d.rain_chance}%</Text>
             </View>
@@ -122,6 +153,18 @@ function Body({ f, cachedAgeMin }: { f: Forecast; cachedAgeMin?: number }) {
           <WindowRow key={w} kind={w} days={f.days} />
         ))}
       </View>
+    </View>
+  );
+}
+
+/** A small tile: icon, value, label. */
+function Stat({ icon, label, value, color, testID }: { icon: IconName; label: string; value: string; color: string; testID?: string }) {
+  const t = useTheme();
+  return (
+    <View testID={testID} style={{ flex: 1, backgroundColor: t.raised, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 10, gap: 2 }}>
+      <Icon name={icon} size={18} color={t.dim} />
+      <Text numberOfLines={1} adjustsFontSizeToFit style={{ color, fontSize: 16, lineHeight: 20, fontWeight: "800", marginTop: 4 }}>{value}</Text>
+      <Text numberOfLines={1} style={{ color: t.dim, fontSize: 11.5, lineHeight: 14, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>{label}</Text>
     </View>
   );
 }

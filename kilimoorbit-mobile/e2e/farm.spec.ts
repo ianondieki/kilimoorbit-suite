@@ -765,3 +765,20 @@ test("Design: every section label wears its section's colour with an icon badge;
   await expect(next).toBeVisible();
   expect(await next.locator("div").count()).toBeGreaterThan(0); // the arrow glyph
 });
+
+test("Weather: the hero draws the sky for the conditions and the hour, with stat tiles; a live forecast says so", async ({ page, context }) => {
+  // A rainy evening: the forecast is stubbed from the server's own sample, the clock fixed at 20:30.
+  const base = await (await fetch("http://localhost:4517/api/weather?county=Nakuru")).json();
+  const rainy = { ...base, source: "OPEN_METEO", days: base.days.map((d: any, i: number) => (i === 0 ? { ...d, sky: "rain", rain_chance: 82, rain_mm: 14 } : d)) };
+  await context.route("http://localhost:4517/api/weather**", (r) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(rainy) }));
+  const evening = new Date(); evening.setHours(20, 30, 0, 0);
+  await page.clock.setFixedTime(evening);
+  await start(page, "/", "en", { county: "Nakuru" });
+  const hero = page.getByTestId("wx-hero");
+  await expect(hero).toBeVisible();
+  await expect(page.getByTestId("sky-rain-night")).toBeVisible();
+  await expect(hero).toContainText("Rain");
+  await expect(page.getByTestId("wx-stat-rain")).toContainText("82%");
+  await expect(page.getByTestId("wx-live")).toContainText("Open-Meteo");
+  await expect(page.getByTestId("eyebrow-weather").first().getByText("DEMO", { exact: true })).toHaveCount(0); // a live forecast carries no sample tag (other cards may)
+});
