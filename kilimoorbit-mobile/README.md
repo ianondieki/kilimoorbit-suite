@@ -50,18 +50,15 @@ On a phone the app reaches the server at the laptop's Wi-Fi address (auto-detect
 ## Run it
 
 ```bash
-# 1. Start the backend (in the kilimoorbit-sentinel folder)
-npm start                    # Mission Control + API on :4517
+# 1. Start the backend (in the kilimoorbit-sentinel folder, or `npm start` at the repository root)
+npm start                    # Mission Control + API on :4517; prints "From a phone on this Wi-Fi: http://192.168.x.x:4517  (Wi-Fi)"
 
-# 2. Point the app at the backend — edit lib/config.ts:
-#    Android emulator:        http://10.0.2.2:4517
-#    Physical phone (same Wi-Fi): http://<your-laptop-LAN-IP>:4517   ← run `ipconfig`/`ip a`
-#    Deployed backend:        https://your-sentinel.onrender.com
-
-# 3. Start the app (in this folder)
+# 2. Start the app (in this folder, or `npm run app` at the repository root)
 npm install
-npm start                    # scan the QR with Expo Go on Android
+npm start                    # scan the QR with Expo Go on Android, phone on the same Wi-Fi as the computer
 ```
+
+The app finds the server by itself: `EXPO_PUBLIC_API_BASE` when set, otherwise the computer Expo is running on (port 4517), `localhost` in the browser and `10.0.2.2` on the Android emulator. If Today shows **Offline**, tap **Fix connection** and type the address the server printed. A deployed backend (`https://your-sentinel.onrender.com`) goes in the same place, or in `EXPO_PUBLIC_API_BASE` in `.env`.
 
 `npm run typecheck` runs the strict TypeScript check (passes clean).
 
