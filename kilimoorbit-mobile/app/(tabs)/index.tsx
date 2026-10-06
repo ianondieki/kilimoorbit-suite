@@ -6,6 +6,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { View, ScrollView, RefreshControl, useWindowDimensions } from "react-native";
 import Text from "../../components/Text";
+import Icon from "../../components/Icon";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect } from "expo-router";
 import Header from "../../components/Header";
@@ -33,7 +34,7 @@ import { AddCropSheet, FarmProfileSheet, RecordSheet } from "../../components/Fa
 import { Btn, Card, Eyebrow, T, Tag } from "../../components/Kit";
 import { Enter, CountUp, Skeleton } from "../../components/Motion";
 import { DemoTag } from "../../components/ShambaPanel";
-import { ArrowGlyph, BarsGlyph, ChatGlyph, CheckCoin, LensGlyph, PlusGlyph, SignalOffGlyph, SproutGlyph, LeafGlyph } from "../../components/Glyphs";
+import { ArrowGlyph, BarsGlyph, ChatGlyph, CheckCoin, LensGlyph, PlusGlyph, SignalOffGlyph, LeafGlyph } from "../../components/Glyphs";
 import { useTheme } from "../../lib/theme-context";
 import { useLang, useSession } from "../../lib/session";
 import { webLang } from "../../lib/ui";
@@ -175,7 +176,7 @@ export default function Today() {
       <FAB
         actions={[
           { label: tt("fab.record"), glyph: (c) => <BarsGlyph size={20} color={c} />, onPress: () => setSheet("record"), testID: "fab-record" },
-          { label: tt("fab.addCrop"), glyph: (c) => <SproutGlyph size={22} color={c} />, onPress: () => setSheet("crop"), testID: "fab-add-crop" },
+          { label: tt("fab.addCrop"), glyph: (c) => <Icon name="sprout" size={22} color={c} />, onPress: () => setSheet("crop"), testID: "fab-add-crop" },
           // Dairy farmers record milk daily, poultry farmers eggs; everyone else gets "add an animal".
           herdHasMilkers(herd.animals)
             ? { label: tt("fab.milk"), glyph: (c) => <PlusGlyph size={18} color={c} />, onPress: () => setSheet("milk"), testID: "fab-milk" }
@@ -239,7 +240,7 @@ function TasksCard({ onAddCrop, onAddAnimal, days }: { onAddCrop: () => void; on
 
   return (
     <Card>
-      <Eyebrow domain="farm" icon={(c) => <SproutGlyph size={15} color={c} />} text={tt("tasks.eyebrow")} />
+      <Eyebrow domain="farm" icon={(c) => <Icon name="sprout" size={17} color={c} />} text={tt("tasks.eyebrow")} />
       {!ready || !herdReady ? (
         <Skeleton height={48} color={t.raised} radius={12} />
       ) : !hasCrops && !hasAnimals && !hasStore ? (

@@ -22,6 +22,7 @@ import { useTheme, useThemeControls } from "../lib/theme-context";
 import { useApiBase } from "../lib/config";
 import { hostOf } from "../lib/connection";
 import { getFontStatus } from "../lib/typography";
+import Icon from "./Icon";
 import { ConnectionSheet } from "./Connection";
 import { THEMES, type Theme } from "../lib/themes";
 import { useLang, useSession } from "../lib/session";
@@ -30,7 +31,7 @@ import { focusElement, focusRing, radioKeys, spaceActivates, webCursor, isWeb, t
 import type { Key } from "../lib/i18n";
 import { useMenu, type CloseOpts } from "./MenuContext";
 import Segmented from "./Segmented";
-import { ArrowGlyph, BarsGlyph, ChatGlyph, CheckCoin, CheckGlyph, ChevronGlyph, CrossGlyph, ExitGlyph, LeafGlyph, LensGlyph, MoonGlyph, PersonGlyph, PhoneGlyph, PlusGlyph, RouteGlyph, SignalOffGlyph, SpeakerGlyph, SproutGlyph, SunGlyph } from "./Glyphs";
+import { ArrowGlyph, BarsGlyph, ChatGlyph, CheckCoin, CheckGlyph, ChevronGlyph, CrossGlyph, ExitGlyph, LeafGlyph, LensGlyph, MoonGlyph, PersonGlyph, PhoneGlyph, PlusGlyph, SignalOffGlyph, SpeakerGlyph, SunGlyph } from "./Glyphs";
 
 type Variant = "drawer" | "docked";
 
@@ -236,17 +237,17 @@ function SidebarBody({ variant, open }: { variant: Variant; open: boolean }) {
         {/* 3. Nenda */}
         <Eyebrow text={tt("eyebrow.nav")} />
         <NavRow label={tt("nav.today")} active={isActive("/")} drawer={drawer}
-          glyph={(c) => <SunGlyph size={22} color={c} />} onPress={() => go("/")} />
+          glyph={(c) => <Icon name="white-balance-sunny" size={24} color={c} />} onPress={() => go("/")} />
         <NavRow label={tt("nav.farm")} active={isActive("/shamba")} drawer={drawer}
-          glyph={(c) => <SproutGlyph size={24} color={c} />} onPress={() => go("/shamba")} />
+          glyph={(c) => <Icon name="barn" size={24} color={c} />} onPress={() => go("/shamba")} />
         <NavRow label={tt("nav.markets")} active={isActive("/masoko")} drawer={drawer}
-          glyph={(c) => <BarsGlyph size={22} color={c} />} onPress={() => go("/masoko")} />
+          glyph={(c) => <Icon name="storefront-outline" size={24} color={c} />} onPress={() => go("/masoko")} />
         <NavRow label={tt("nav.doctor")} active={isActive("/daktari")} drawer={drawer}
-          glyph={(c) => <LensGlyph size={22} color={c} />} onPress={() => go("/daktari")} />
+          glyph={(c) => <Icon name="stethoscope" size={24} color={c} />} onPress={() => go("/daktari")} />
         <NavRow label={tt("nav.chat")} active={isActive("/chat")} drawer={drawer}
-          glyph={(c) => <ChatGlyph size={24} color={c} />} onPress={() => go("/chat")} />
+          glyph={(c) => <Icon name="chat-processing-outline" size={24} color={c} />} onPress={() => go("/chat")} />
         <NavRow label={tt("nav.autopilot")} active={isActive("/autopilot")} drawer={drawer}
-          glyph={(c) => <RouteGlyph size={26} color={c} />} onPress={() => go("/autopilot")} />
+          glyph={(c) => <Icon name="robot-outline" size={24} color={c} />} onPress={() => go("/autopilot")} />
 
         {/* 4. Mipangilio */}
         <Eyebrow text={tt("eyebrow.settings")} />

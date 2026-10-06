@@ -6,7 +6,7 @@ import { useTheme, useThemeControls } from "../../lib/theme-context";
 import { useLang, useSession } from "../../lib/session";
 import { MenuProvider, useMenu } from "../../components/MenuContext";
 import Sidebar from "../../components/Sidebar";
-import { BarsGlyph, ChatGlyph, LensGlyph, SproutGlyph, SunGlyph } from "../../components/Glyphs";
+import Icon from "../../components/Icon";
 import { SANS } from "../../lib/typography";
 import { tint } from "../../components/Kit";
 
@@ -68,11 +68,11 @@ function TabShell() {
             sceneStyle: { backgroundColor: t.bg },
           }}
         >
-          <Tabs.Screen name="index" options={{ title: tt("nav.today"), tabBarIcon: ({ color, focused }) => <TabIcon focused={focused}><SunGlyph size={22} color={ink(color)} /></TabIcon> }} />
-          <Tabs.Screen name="shamba" options={{ title: tt("nav.farm"), tabBarIcon: ({ color, focused }) => <TabIcon focused={focused}><SproutGlyph size={24} color={ink(color)} /></TabIcon> }} />
-          <Tabs.Screen name="masoko" options={{ title: tt("nav.markets"), tabBarIcon: ({ color, focused }) => <TabIcon focused={focused}><BarsGlyph size={22} color={ink(color)} /></TabIcon> }} />
-          <Tabs.Screen name="daktari" options={{ title: tt("nav.doctorTab"), tabBarAccessibilityLabel: tt("nav.doctor"), tabBarIcon: ({ color, focused }) => <TabIcon focused={focused}><LensGlyph size={22} color={ink(color)} /></TabIcon> }} />
-          <Tabs.Screen name="chat" options={{ title: tt("nav.chatTab"), tabBarAccessibilityLabel: tt("nav.chat"), tabBarIcon: ({ color, focused }) => <TabIcon focused={focused}><ChatGlyph size={22} color={ink(color)} /></TabIcon> }} />
+          <Tabs.Screen name="index" options={{ title: tt("nav.today"), tabBarIcon: ({ color, focused }) => <TabIcon focused={focused}><Icon name="white-balance-sunny" size={24} color={ink(color)} /></TabIcon> }} />
+          <Tabs.Screen name="shamba" options={{ title: tt("nav.farm"), tabBarIcon: ({ color, focused }) => <TabIcon focused={focused}><Icon name="barn" size={24} color={ink(color)} /></TabIcon> }} />
+          <Tabs.Screen name="masoko" options={{ title: tt("nav.markets"), tabBarIcon: ({ color, focused }) => <TabIcon focused={focused}><Icon name="storefront-outline" size={24} color={ink(color)} /></TabIcon> }} />
+          <Tabs.Screen name="daktari" options={{ title: tt("nav.doctorTab"), tabBarAccessibilityLabel: tt("nav.doctor"), tabBarIcon: ({ color, focused }) => <TabIcon focused={focused}><Icon name="stethoscope" size={24} color={ink(color)} /></TabIcon> }} />
+          <Tabs.Screen name="chat" options={{ title: tt("nav.chatTab"), tabBarAccessibilityLabel: tt("nav.chat"), tabBarIcon: ({ color, focused }) => <TabIcon focused={focused}><Icon name="chat-processing-outline" size={24} color={ink(color)} /></TabIcon> }} />
           {/* Reached from Markets and the sidebar; not a bar tab (five is the most a phone bar holds well). */}
           <Tabs.Screen name="autopilot" options={{ title: tt("nav.autopilot"), href: null }} />
         </Tabs>

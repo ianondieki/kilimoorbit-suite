@@ -24,7 +24,8 @@ import { isStoreCrop, type Lot, type StoreCrop } from "../../lib/postharvest";
 import { Btn, Card, Chip, ChipRow, Empty, Eyebrow, T, Tag, tint } from "../../components/Kit";
 import { Enter, LevelBar } from "../../components/Motion";
 import { CropCoin } from "../../components/ShambaPanel";
-import { ArrowGlyph, BarsGlyph, ChevronGlyph, CrossGlyph, PlusGlyph, SproutGlyph, CoinGlyph } from "../../components/Glyphs";
+import { ArrowGlyph, BarsGlyph, ChevronGlyph, CrossGlyph, PlusGlyph, CoinGlyph } from "../../components/Glyphs";
+import Icon from "../../components/Icon";
 import { useTheme } from "../../lib/theme-context";
 import { useLang, useSession } from "../../lib/session";
 import { announce, focusRing, webCursor, webLang, type PressState } from "../../lib/ui";
@@ -87,7 +88,7 @@ export default function Shamba() {
             ]}
           >
             <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: tint(t.ok, 0.18), alignItems: "center", justifyContent: "center" }}>
-              <SproutGlyph size={24} color={t.ok} />
+              <Icon name="barn" size={26} color={t.ok} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ color: t.ink, ...T.title }}>{farm.county ?? tt("farm.noCounty")}</Text>
@@ -155,7 +156,7 @@ function Calendar({ actions }: { actions: CropActions }) {
       {sorted.length === 0 ? (
         <Card>
           <Empty
-            glyph={<View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: tint(t.ok, 0.18), alignItems: "center", justifyContent: "center" }}><SproutGlyph size={30} color={t.ok} /></View>}
+            glyph={<View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: tint(t.ok, 0.18), alignItems: "center", justifyContent: "center" }}><Icon name="barn" size={32} color={t.ok} /></View>}
             title={tt("farm.empty.title")}
             body={tt("farm.empty.body")}
             action={<Btn label={tt("tasks.addCrop")} onPress={() => onAdd()} icon={(c) => <PlusGlyph size={14} color={c} />} testID="farm-add-crop" />}
@@ -348,7 +349,7 @@ function SuggestCard({ onPick, onBudget }: { onPick: (k: CropKey) => void; onBud
   );
   return (
     <Card>
-      <Eyebrow domain="farm" icon={(c) => <SproutGlyph size={15} color={c} />} text={tt("suggest.eyebrow", { season: tt(`season.${season.key}.name` as Key).toUpperCase() })} />
+      <Eyebrow domain="farm" icon={(c) => <Icon name="sprout" size={17} color={c} />} text={tt("suggest.eyebrow", { season: tt(`season.${season.key}.name` as Key).toUpperCase() })} />
       {rainfed.length ? (
         <View style={{ gap: 8 }}>
           <Text style={{ color: t.ink, ...T.body }}>{tt("suggest.rains")}</Text>

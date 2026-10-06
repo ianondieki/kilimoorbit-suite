@@ -8,6 +8,7 @@ import React, { useEffect, useState } from "react";
 import { View, Pressable, type LayoutChangeEvent } from "react-native";
 import Text from "./Text";
 import { Eyebrow } from "./Kit";
+import Icon from "./Icon";
 import Animated, {
   Easing, FadeIn, ReduceMotion, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withTiming,
 } from "react-native-reanimated";
@@ -22,7 +23,7 @@ import { focusRing, isWeb, webCursor, type PressState } from "../lib/ui";
 import { Wordmark } from "./auth/Controls";
 import SeasonOrbit from "./SeasonOrbit";
 import { Skeleton } from "./Motion";
-import { ChevronGlyph, SignalOffGlyph, CoinGlyph, LeafGlyph, SproutGlyph } from "./Glyphs";
+import { ChevronGlyph, SignalOffGlyph, CoinGlyph, LeafGlyph } from "./Glyphs";
 
 type Props = {
   variant: "side" | "strip" | "tiles";
@@ -398,7 +399,7 @@ function Side({ board, season, width, height }: Props) {
 
       {showCaps && (
         <View style={{ paddingTop: 32 }} onLayout={(e: LayoutChangeEvent) => setCapsH(Math.ceil(e.nativeEvent.layout.height))}>
-          <Eyebrow domain="farm" icon={(c) => <SproutGlyph size={15} color={c} />} text={tt("caps.eyebrow")} />
+          <Eyebrow domain="farm" icon={(c) => <Icon name="sprout" size={17} color={c} />} text={tt("caps.eyebrow")} />
           <View style={{ marginTop: 8 }}>
             {(["caps.1", "caps.2", "caps.3", "caps.4"] as const).map((k) => (
               <View key={k} style={{ minHeight: 40, flexDirection: "row", gap: 12, alignItems: "center" }}>
