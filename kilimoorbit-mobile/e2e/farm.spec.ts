@@ -715,3 +715,35 @@ test("Markets: each crop chip carries today's best price; there is no ticker", a
   await expect(page.getByTestId("mk-crop-maize")).toContainText(/KES \d+/);
   await expect(page.getByText(/E-BODA/)).toHaveCount(0);
 });
+
+test("Type: the bundled serif and sans are loaded and used (greeting and question in Fraunces, the rest in Nunito Sans)", async ({ page }) => {
+  await start(page, "/", "en", { county: "Nakuru" });
+  await expect(page.getByText("0/5 today")).toBeVisible();
+  const loaded = await page.evaluate(async () => {
+    await document.fonts.ready;
+    return [...document.fonts].filter((f) => f.status === "loaded").map((f) => f.family);
+  });
+  expect(loaded).toEqual(expect.arrayContaining(["Fraunces_600SemiBold", "NunitoSans_400Regular", "NunitoSans_700Bold"]));
+  const greeting = page.getByRole("heading").filter({ hasText: /^(Good (morning|afternoon|evening|night)|Hello|Habari|Jambo)/ }).first();
+  await expect(greeting).toHaveCSS("font-family", /Fraunces_600SemiBold/);
+  const first = byId(pickDaily(todayKey(), {})[0])!;
+  await expect(page.getByTestId("trivia-card").getByText(first.q.en)).toHaveCSS("font-family", /Fraunces_600SemiBold/);
+  await expect(page.getByText("0/5 today")).toHaveCSS("font-family", /NunitoSans_700Bold/);
+  await expect(page.getByTestId("trivia-option-1-0").getByText(first.options[0].en)).toHaveCSS("font-family", /NunitoSans_600SemiBold/);
+});
+
+test("Trivia: the slider's dots turn green for a right answer and red for a wrong one", async ({ page }) => {
+  await start(page, "/", "en", { county: "Nakuru" });
+  const ids = pickDaily(todayKey(), {});
+  const first = byId(ids[0])!;
+  const second = byId(ids[1])!;
+  await page.getByTestId("trivia-card").scrollIntoViewIfNeeded();
+  await page.getByTestId(`trivia-option-1-${first.answer}`).click();
+  await expect(page.getByTestId("trivia-dot-0").locator("div").first()).toHaveCSS("background-color", "rgb(111, 191, 115)"); // Loam: ok
+  await page.getByTestId("trivia-next").first().click();
+  const wrong = (second.answer + 1) % second.options.length;
+  await page.getByTestId(`trivia-option-2-${wrong}`).click();
+  await expect(page.getByTestId("trivia-why").nth(1)).toContainText("Not quite");
+  await expect(page.getByTestId("trivia-dot-1").locator("div").first()).toHaveCSS("background-color", "rgb(224, 83, 47)"); // Loam: alert
+  await expect(page.getByText("2/5 today")).toBeVisible();
+});

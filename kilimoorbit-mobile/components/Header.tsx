@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, Pressable, Animated, Easing, AccessibilityInfo, StyleSheet, Platform, type StyleProp, type ViewStyle } from "react-native";
+import { View, Pressable, Animated, Easing, AccessibilityInfo, StyleSheet, Platform, type StyleProp, type ViewStyle } from "react-native";
+import Text from "./Text";
 import { useTheme } from "../lib/theme-context";
 import { useLang } from "../lib/session";
 import { focusRing, webCursor, webLang, type PressState } from "../lib/ui";
@@ -127,5 +128,5 @@ const s = StyleSheet.create({
   dotWrap: { width: 8, height: 8, alignItems: "center", justifyContent: "center" },
   halo: { position: "absolute", width: 8, height: 8, borderRadius: 4 },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  statusTxt: { fontSize: 10, fontFamily: "monospace", letterSpacing: 1 },
+  statusTxt: { fontSize: 10.5, fontWeight: "700", letterSpacing: 1 },
 });

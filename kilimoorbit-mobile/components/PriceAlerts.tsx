@@ -3,7 +3,8 @@
  * the board has reached. In-app only (said plainly in the sheet).
  */
 import React, { useEffect, useState } from "react";
-import { View, Text, Pressable } from "react-native";
+import { View, Pressable } from "react-native";
+import Text from "./Text";
 import { router } from "expo-router";
 import { useTheme } from "../lib/theme-context";
 import { useLang } from "../lib/session";

@@ -5,9 +5,11 @@
  */
 import React, { useEffect, useId, useState } from "react";
 import {
-  View, Text, TextInput, type TextInputProps, type TextStyle, type StyleProp,
+  View, TextInput, StyleSheet, type TextInputProps, type TextStyle, type StyleProp,
   type ViewStyle, type LayoutChangeEvent,
 } from "react-native";
+import Text from "./Text";
+import { SANS, isBundled, weightKey } from "../lib/typography";
 import Animated, {
   FadeInDown, ReduceMotion, useAnimatedStyle, useReducedMotion, useSharedValue,
   withSequence, withSpring, withTiming,
@@ -81,6 +83,9 @@ export default function Field({
   }));
 
   const hint = status && (status.kind === "error" || status.kind === "rest" || status.kind === "note") ? status.text : undefined;
+  // TextInput bypasses the Text wrapper, so the bundled sans is picked here from the weight asked for.
+  const inp = (StyleSheet.flatten(inputStyle) || {}) as TextStyle;
+  const typed: TextStyle = { ...inp, fontFamily: isBundled(inp.fontFamily) ? inp.fontFamily : SANS[weightKey(inp.fontWeight)], fontWeight: undefined };
 
   return (
     <Animated.View style={[shakeStyle, style]} onLayout={onLayout}>
@@ -127,7 +132,7 @@ export default function Field({
           aria-invalid={error ? true : undefined}
           {...(isWeb && status?.text ? ({ "aria-describedby": statusId } as any) : null)}
           {...inputProps}
-          style={[{ flex: 1, alignSelf: "stretch", paddingLeft: 16, paddingRight: 4, color: t.ink }, noOutline, inputStyle]}
+          style={[{ flex: 1, alignSelf: "stretch", paddingLeft: 16, paddingRight: 4, color: t.ink }, noOutline, typed]}
         />
         <View style={{ width: 48, alignItems: "center", justifyContent: "center" }}>
           {valid && !error ? (

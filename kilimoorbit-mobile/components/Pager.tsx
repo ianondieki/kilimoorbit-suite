@@ -5,11 +5,13 @@
  * tappable. Nothing moves on its own: a farmer reads at their own pace.
  */
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { View, Text, Pressable, ScrollView, type NativeSyntheticEvent, type NativeScrollEvent } from "react-native";
+import { View, Pressable, ScrollView, type NativeSyntheticEvent, type NativeScrollEvent } from "react-native";
+import Text from "./Text";
 import { useReducedMotion } from "react-native-reanimated";
 import { useTheme } from "../lib/theme-context";
 import { useLang } from "../lib/session";
 import { focusRing, isWeb, webCursor, type PressState } from "../lib/ui";
+import { haptic } from "../lib/haptics";
 import { ChevronGlyph } from "./Glyphs";
 
 // Web: scroll-snap keeps a mouse-wheel or drag landing on a page too.
@@ -18,7 +20,7 @@ const snapPage: any = isWeb ? { scrollSnapAlign: "start" } : null;
 export type PagerHandle = { go: (index: number) => void; index: () => number };
 
 export default function Pager<T>({
-  items, render, keyOf, label, testID, onIndexChange, arrows = isWeb, controller,
+  items, render, keyOf, label, testID, onIndexChange, arrows = isWeb, controller, dotTone,
 }: {
   items: T[];
   render: (item: T, index: number) => React.ReactNode;
@@ -31,6 +33,8 @@ export default function Pager<T>({
   arrows?: boolean;
   /** Lets a page turn the slider itself (a "Next" button inside a page). */
   controller?: React.MutableRefObject<PagerHandle | null>;
+  /** Colours a dot by what happened on that page (the trivia: right or wrong). */
+  dotTone?: (index: number) => "ok" | "bad" | null | undefined;
 }) {
   const t = useTheme();
   const { t: tt } = useLang();
@@ -47,6 +51,7 @@ export default function Pager<T>({
     if (next === indexRef.current) return;
     indexRef.current = next;
     setIndex(next);
+    haptic.select();
     onIndexChange?.(next);
   }, [n, onIndexChange]);
 
@@ -118,7 +123,10 @@ export default function Pager<T>({
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 10 }}>
           {arrows && <Arrow dir="left" disabled={index === 0} onPress={() => go(index - 1)} label={tt("pager.prev")} />}
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 6 }}>
-            {items.map((it, i) => (
+            {items.map((it, i) => {
+              const tone = dotTone?.(i);
+              const fill = tone === "ok" ? t.ok : tone === "bad" ? t.alert : i === index ? t.accent : t.line;
+              return (
               <Pressable
                 key={keyOf(it, i)}
                 onPress={() => go(i)}
@@ -130,9 +138,10 @@ export default function Pager<T>({
                 testID={testID ? `${testID}-dot-${i}` : undefined}
                 style={({ focused }: PressState) => [{ padding: 2, borderRadius: 999 }, webCursor, focusRing(focused, t.accent)]}
               >
-                <View style={{ width: i === index ? 18 : 7, height: 7, borderRadius: 4, backgroundColor: i === index ? t.accent : t.line }} />
+                <View style={{ width: i === index ? 18 : 7, height: 7, borderRadius: 4, backgroundColor: fill }} />
               </Pressable>
-            ))}
+              );
+            })}
           </View>
           {arrows && <Arrow dir="right" disabled={index === n - 1} onPress={() => go(index + 1)} label={tt("pager.next")} />}
         </View>

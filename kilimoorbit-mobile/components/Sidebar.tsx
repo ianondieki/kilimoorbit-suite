@@ -7,8 +7,9 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Modal, View, Text, Pressable, ScrollView, Switch, useWindowDimensions, type LayoutChangeEvent,
+  Modal, View, Pressable, ScrollView, Switch, useWindowDimensions, type LayoutChangeEvent,
 } from "react-native";
+import Text from "./Text";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
   Easing, ReduceMotion, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming,

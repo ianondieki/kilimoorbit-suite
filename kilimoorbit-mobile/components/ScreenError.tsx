@@ -8,7 +8,8 @@
  * both say the farmer's data is safe: nothing on the phone is touched.
  */
 import React, { Component, type ReactNode } from "react";
-import { View, Text, ScrollView } from "react-native";
+import { View, ScrollView } from "react-native";
+import Text from "./Text";
 import { router, type ErrorBoundaryProps } from "expo-router";
 import { useTheme } from "../lib/theme-context";
 import { useLang } from "../lib/session";
@@ -22,7 +23,7 @@ export function ScreenErrorBoundary({ error, retry }: ErrorBoundaryProps) {
     <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24 }}>
       <View accessibilityRole="alert" testID="screen-error" style={{ maxWidth: 480, width: "100%", alignSelf: "center", gap: 12, padding: 20, borderRadius: 20, borderWidth: 1, borderColor: t.line, backgroundColor: t.panel }}>
         <SignalOffGlyph size={28} color={t.dim} />
-        <Text accessibilityRole="header" style={{ color: t.ink, fontSize: 20, lineHeight: 26, fontWeight: "800" }}>{tt("crash.title")}</Text>
+        <Text accessibilityRole="header" display style={{ color: t.ink, fontSize: 21, lineHeight: 27 }}>{tt("crash.title")}</Text>
         <Text style={{ color: t.ink, ...T.body }}>{tt("crash.body")}</Text>
         {__DEV__ && error?.message ? (
           <Text style={{ color: t.dim, fontSize: 12, lineHeight: 16, fontFamily: "monospace" }} numberOfLines={4}>{error.message}</Text>

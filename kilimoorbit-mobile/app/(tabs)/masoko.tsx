@@ -4,7 +4,8 @@
  * run (Apex Route A) and any delivery on the road, with Autopilot one tap away.
  */
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, ScrollView, RefreshControl, TextInput, Pressable, useWindowDimensions } from "react-native";
+import { View, ScrollView, RefreshControl, TextInput, Pressable, useWindowDimensions } from "react-native";
+import Text from "../../components/Text";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import Header from "../../components/Header";

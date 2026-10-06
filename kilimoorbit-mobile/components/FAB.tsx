@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Pressable, Text, View, StyleSheet, Platform } from "react-native";
+import { Pressable, View, StyleSheet, Platform } from "react-native";
+import Text from "./Text";
 import { useTheme } from "../lib/theme-context";
 import { useLang } from "../lib/session";
 import { focusRing, webCursor, type PressState } from "../lib/ui";

@@ -4,7 +4,8 @@
  * season. Works offline; "Ask Apex" hands the case to the chat.
  */
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, ScrollView, Pressable, Platform, useWindowDimensions } from "react-native";
+import { View, ScrollView, Pressable, Platform, useWindowDimensions } from "react-native";
+import Text from "../../components/Text";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { Guard } from "../../components/ScreenError";

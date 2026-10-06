@@ -5,7 +5,8 @@
  * (lib/farm.ts), so a sale from store lands in the daftari in the same change.
  */
 import React, { useCallback, useEffect, useState } from "react";
-import { View, Text, Pressable } from "react-native";
+import { View, Pressable } from "react-native";
+import Text from "./Text";
 import { router, useFocusEffect } from "expo-router";
 import { useTheme } from "../lib/theme-context";
 import { useLang } from "../lib/session";

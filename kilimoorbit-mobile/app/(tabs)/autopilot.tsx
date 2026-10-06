@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { View, Text, ScrollView, StyleSheet, ActivityIndicator } from "react-native";
+import { View, ScrollView, StyleSheet, ActivityIndicator } from "react-native";
+import Text from "../../components/Text";
 import { webLang } from "../../lib/ui";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Header from "../../components/Header";

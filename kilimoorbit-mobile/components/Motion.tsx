@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
 import {
-  Platform, Pressable, View, ViewStyle, StyleProp, Text, TextStyle,
+  Platform, Pressable, View, ViewStyle, StyleProp, TextStyle,
   type AccessibilityState, type AccessibilityRole,
 } from "react-native";
+import Text from "./Text";
 import Animated, {
   FadeIn, FadeInDown, FadeInUp, useSharedValue, useAnimatedStyle,
   withSpring, withRepeat, withTiming, Easing, useReducedMotion, cancelAnimation, ReduceMotion,

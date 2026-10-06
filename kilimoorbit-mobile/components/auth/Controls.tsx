@@ -4,7 +4,8 @@
  * Every control is a real >= 48px box with a visible web focus outline.
  */
 import React, { useEffect, useState } from "react";
-import { View, Text, Pressable, type StyleProp, type ViewStyle } from "react-native";
+import { View, Pressable, type StyleProp, type ViewStyle } from "react-native";
+import Text from "../Text";
 import Animated, {
   FadeIn, ReduceMotion, cancelAnimation, useAnimatedStyle, useReducedMotion, useSharedValue,
   withRepeat, withSpring, withTiming, Easing,

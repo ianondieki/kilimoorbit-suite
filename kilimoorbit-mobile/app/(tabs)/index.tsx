@@ -4,7 +4,8 @@
  * season's climate watch. Detail lives one tap away (Shamba, Masoko).
  */
 import React, { useCallback, useMemo, useState } from "react";
-import { View, Text, ScrollView, RefreshControl, useWindowDimensions } from "react-native";
+import { View, ScrollView, RefreshControl, useWindowDimensions } from "react-native";
+import Text from "../../components/Text";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect } from "expo-router";
 import Header from "../../components/Header";
@@ -125,7 +126,7 @@ export default function Today() {
         <View style={{ width: "100%", maxWidth: wide ? 1120 : 760, alignSelf: "center", padding: 16, gap: 14 }}>
           <Enter index={0}>
             <View style={{ paddingTop: 4, paddingBottom: 2 }}>
-              <Text accessibilityRole="header" style={{ color: t.ink, fontSize: 24, lineHeight: 30, fontWeight: "800" }}>
+              <Text accessibilityRole="header" style={{ color: t.ink, ...T.display }}>
                 {first ? `${hello}, ${first}` : hello}
               </Text>
               <Text style={{ color: t.dim, ...T.body, marginTop: 2 }}>

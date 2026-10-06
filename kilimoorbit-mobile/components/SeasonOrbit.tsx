@@ -4,7 +4,8 @@
  * a gold satellite marks today. Derived from the date alone — no data needed.
  */
 import React, { useEffect, useMemo } from "react";
-import { View, Text } from "react-native";
+import { View } from "react-native";
+import Text from "./Text";
 import Animated, {
   Easing, ReduceMotion, cancelAnimation, interpolate, useAnimatedStyle, useReducedMotion,
   useSharedValue, withDelay, withRepeat, withSequence, withTiming, type SharedValue,
@@ -106,7 +107,7 @@ export default function SeasonOrbit({ size, variant, date }: Props) {
       {full && (
         <View style={{ pointerEvents: "none", position: "absolute", left: 0, top: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center" }}>
           <View style={{ maxWidth: size * 0.7, alignItems: "center" }}>
-            <Text style={{ color: t.ink, fontSize: 26, lineHeight: 32, fontWeight: "800", textAlign: "center" }} numberOfLines={2}>
+            <Text display style={{ color: t.ink, fontSize: 26, lineHeight: 32, textAlign: "center" }} numberOfLines={2}>
               {tt(`season.${season.key}.name` as any)}
             </Text>
             <Text style={{ color: t.dim, fontSize: 13, lineHeight: 18, fontFamily: "monospace", textAlign: "center", marginTop: 2 }}>

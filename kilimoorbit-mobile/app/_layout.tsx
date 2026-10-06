@@ -2,8 +2,15 @@ import React, { useEffect } from "react";
 import { Platform } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useFonts } from "expo-font";
+import * as SplashScreen from "expo-splash-screen";
 import { ThemeProvider, useTheme } from "../lib/theme-context";
 import { SessionProvider, useLang } from "../lib/session";
+import { FONTS } from "../lib/typography";
+
+// The splash stays up until the bundled fonts are ready, so no screen is ever
+// drawn in the system font and then redrawn.
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 function Shell() {
   const t = useTheme();
@@ -29,6 +36,12 @@ function Shell() {
 }
 
 export default function RootLayout() {
+  const [fontsReady, fontError] = useFonts(FONTS);
+  const ready = fontsReady || !!fontError; // a font that fails to load falls back to the system font, never a blank app
+  useEffect(() => {
+    if (ready) SplashScreen.hideAsync().catch(() => {});
+  }, [ready]);
+  if (!ready) return null;
   return (
     <ThemeProvider>
       <SessionProvider>

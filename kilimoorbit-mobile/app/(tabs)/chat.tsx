@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  View, Text, TextInput, Pressable, FlatList, ScrollView, StyleSheet, KeyboardAvoidingView, Platform, Switch,
+  View, TextInput, Pressable, FlatList, ScrollView, StyleSheet, KeyboardAvoidingView, Platform, Switch,
 } from "react-native";
+import Text from "../../components/Text";
+import { SANS } from "../../lib/typography";
 import { webLang } from "../../lib/ui";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
@@ -291,7 +293,7 @@ const s = StyleSheet.create({
   quick: { minHeight: 40, justifyContent: "center", borderWidth: 1, borderRadius: 999, paddingHorizontal: 14 },
   inputRow: { padding: 12, borderTopWidth: 1 },
   inputInner: { flexDirection: "row", gap: 10 },
-  input: { flex: 1, minHeight: 48, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15 },
+  input: { flex: 1, minHeight: 48, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15.5, fontFamily: SANS["500"] },
   send: { flex: 1, minHeight: 48, borderRadius: 12, paddingHorizontal: 18, justifyContent: "center" },
 });
 

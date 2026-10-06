@@ -4,7 +4,8 @@
  * internet) opens the app screen it is about. Data: lib/news.ts.
  */
 import React from "react";
-import { View, Text } from "react-native";
+import { View } from "react-native";
+import Text from "./Text";
 import { router } from "expo-router";
 import { useTheme } from "../lib/theme-context";
 import { useLang } from "../lib/session";
@@ -70,7 +71,7 @@ function Story({ item }: { item: NewsItem }) {
         <Text style={{ color: t.dim, ...T.meta, fontWeight: "700" }} {...webLang("en")}>{[item.source, when].filter(Boolean).join(" · ")}</Text>
         {item.scope === "county" && item.county ? <Tag tone="water" label={item.county} /> : null}
       </View>
-      <Text {...(item.title_sw && lang === "sw" ? {} : webLang("en"))} style={{ color: t.ink, fontSize: 17, lineHeight: 24, fontWeight: "800" }} numberOfLines={3}>{title}</Text>
+      <Text {...(item.title_sw && lang === "sw" ? {} : webLang("en"))} style={{ color: t.ink, ...T.headline }} numberOfLines={3}>{title}</Text>
       {item.summary ? <Text {...webLang("en")} style={{ color: t.ink, ...T.meta }} numberOfLines={3}>{item.summary}</Text> : null}
       <Btn
         kind="ghost"
