@@ -6,7 +6,8 @@
  * Logic: lib/scouting.ts. History lives with the farm (lib/farm.ts).
  */
 import React, { useEffect, useState } from "react";
-import { View, Text } from "react-native";
+import { View } from "react-native";
+import Text from "./Text";
 import { router } from "expo-router";
 import { useTheme } from "../lib/theme-context";
 import { useLang } from "../lib/session";

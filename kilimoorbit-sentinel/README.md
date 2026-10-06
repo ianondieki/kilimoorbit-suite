@@ -13,7 +13,7 @@ An AI agri-logistics decision engine for Kenyan smallholder farmers, powered by 
 npm install
 cp .env.example .env       # then paste your GEMINI_API_KEY into .env
 npm test                   # APEX (30) + Soko (12) + weather, prices, pest watch, news & shows (34) + HTTP (45) + fallback (7)
-npm start                  # launches Mission Control → http://localhost:4517
+npm start                  # launches Mission Control → http://localhost:4517 (or `npm start` at the repository root)
 npm run dev                # same, with auto-restart on file changes
 ```
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
-import { Text, Animated, StyleSheet } from "react-native";
+import { Animated, StyleSheet } from "react-native";
+import Text from "./Text";
 import { useTheme } from "../lib/theme-context";
 
 export default function Pill({

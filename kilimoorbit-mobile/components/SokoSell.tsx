@@ -5,7 +5,8 @@
  * "My Soko listings" follows each listing to claimed / delivered.
  */
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, TextInput } from "react-native";
+import { View, TextInput } from "react-native";
+import Text from "./Text";
 import { useTheme } from "../lib/theme-context";
 import { useLang, useSession } from "../lib/session";
 import { announce } from "../lib/ui";

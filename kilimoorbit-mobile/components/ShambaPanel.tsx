@@ -5,7 +5,8 @@
  * "tiles" (medium widths).
  */
 import React, { useEffect, useState } from "react";
-import { View, Text, Pressable, type LayoutChangeEvent } from "react-native";
+import { View, Pressable, type LayoutChangeEvent } from "react-native";
+import Text from "./Text";
 import Animated, {
   Easing, FadeIn, ReduceMotion, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withTiming,
 } from "react-native-reanimated";

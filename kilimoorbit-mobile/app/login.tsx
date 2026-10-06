@@ -6,10 +6,12 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  View, Text, ScrollView, Pressable, KeyboardAvoidingView, Platform, TextInput,
+  View, ScrollView, Pressable, KeyboardAvoidingView, Platform, TextInput,
   useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent,
   type StyleProp, type ViewStyle,
 } from "react-native";
+import Text from "../components/Text";
+import { haptic } from "../lib/haptics";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
   FadeIn, FadeInDown, ReduceMotion, useAnimatedStyle, useReducedMotion, useSharedValue,
@@ -357,6 +359,7 @@ function LoginScreen({ edit, leaving }: { edit: boolean; leaving: React.MutableR
         : { ...base, serverAck: true, delivery: res.status };
       if (res.channel === "phone" || (!res.channel && !req.email)) {
         setSuccessLabel(edit ? tt("edit.saved") : tt("cta.success", { name: firstName(values.name) }));
+        haptic.success();
         setCta("success");
         await sleep(reduce ? 400 : 700);
         // Left during the hold (e.g. Back in edit mode): keep the saved details,
@@ -542,7 +545,7 @@ function LoginScreen({ edit, leaving }: { edit: boolean; leaving: React.MutableR
             <Text
               accessibilityRole="header"
               accessibilityLanguage={lang}
-              style={[{ color: t.ink, fontWeight: "800", flexShrink: 1 }, headlineSize]}
+              display style={[{ color: t.ink, fontWeight: "700", flexShrink: 1 }, headlineSize]}
             >
               {edit ? tt("edit.headline") : tt("form.headline")}
             </Text>
@@ -581,7 +584,7 @@ function LoginScreen({ edit, leaving }: { edit: boolean; leaving: React.MutableR
       height={inputH}
       // Empty: the placeholder draws lighter (500, no tracking) so "07XX XXX XXX"
       // never reads as a number that is already filled in.
-      inputStyle={phone ? { fontSize: 22, fontFamily: "monospace", fontWeight: "700", letterSpacing: 0.5 } : { fontSize: 22, fontFamily: "monospace", fontWeight: "500", letterSpacing: 0 }}
+      inputStyle={phone ? { fontSize: 22, fontWeight: "700", letterSpacing: 0.5 } : { fontSize: 22, fontWeight: "500", letterSpacing: 0 }}
       status={phoneStatus}
       valid={phoneCheck.ok}
       error={!!errs.phone}
@@ -764,7 +767,7 @@ function LoginScreen({ edit, leaving }: { edit: boolean; leaving: React.MutableR
         >
           {signal ? <SignalOffGlyph size={30} color={t.ink} /> : <CheckGlyph size={34} color={good ? t.field : t.ink} />}
         </View>
-        <Text accessibilityRole="header" accessibilityLanguage={lang} style={{ marginTop: 16, color: t.ink, fontSize: 26, lineHeight: 32, fontWeight: "800" }}>{copy.title}</Text>
+        <Text accessibilityRole="header" accessibilityLanguage={lang} display style={{ marginTop: 16, color: t.ink, fontSize: 26, lineHeight: 32 }}>{copy.title}</Text>
         <Text style={{ marginTop: 8, color: t.ink, fontSize: 17, lineHeight: 24, fontWeight: "500" }}>{copy.body}</Text>
         {!phoneBp && primaryCta({ marginTop: 24 })}
         {/* Phone: both actions live in the action bar, primary first. */}

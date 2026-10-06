@@ -4,7 +4,8 @@
  * the input calculator), and a money record for the daftari.
  */
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, Pressable, TextInput } from "react-native";
+import { View, Pressable, TextInput } from "react-native";
+import Text from "./Text";
 import { useTheme } from "../lib/theme-context";
 import { useLang } from "../lib/session";
 import { announce, focusRing, webCursor, type PressState } from "../lib/ui";

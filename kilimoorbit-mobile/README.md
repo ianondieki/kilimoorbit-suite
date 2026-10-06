@@ -41,6 +41,11 @@ On a phone the app reaches the server at the laptop's Wi-Fi address (auto-detect
 - Every server answer and every cached copy of one passes through `lib/validate.ts` before the UI reads it; every store (`ko-farm`, `ko-herd`, `ko-soko`, `ko-alerts`, chat log, profile) re-validates what it loads and is bounded in size. Malformed data shows "no data", never a crash.
 - The e2e suite fails on any uncaught page error or crashed card, and includes corrupted storage, broken JSON and a server answering garbage.
 
+### Type and feel
+
+- Two bundled typefaces, so every phone shows the same letters whatever its system font: **Fraunces** (a soft serif) for the greeting, screen and sheet titles, news headlines, show names and the trivia questions; **Nunito Sans** for everything else, 11px eyebrows to the 40° temperature. `components/Text.tsx` wraps every piece of text and maps `fontWeight` to the right file (Android cannot pick a weight out of a custom family), so no screen falls back to a fake bold; the splash stays up until the fonts are ready (`app/_layout.tsx`). Type scale in `components/Kit.tsx` (`T`).
+- Haptics (`lib/haptics.ts`, no-op on the web): a light tap on primary buttons and trivia answers, a success or error pulse for a right or wrong answer, a task ticked, a booking made, a connection test; a tick when a chip, a segment or a slider page changes. Primary buttons spring under the finger, a ticked box pops, the right trivia answer pops and the wrong one shakes (all off under the system's reduce-motion setting), and the trivia slider's dots turn green or red as the day's questions are answered.
+
 ## Prerequisites
 
 - Node.js 20.19.4+ (or 22.13+), the **Expo Go** app on your Android phone (Play Store), and the **kilimoorbit-sentinel server running** (it is the brain — this app is the face).
@@ -50,18 +55,15 @@ On a phone the app reaches the server at the laptop's Wi-Fi address (auto-detect
 ## Run it
 
 ```bash
-# 1. Start the backend (in the kilimoorbit-sentinel folder)
-npm start                    # Mission Control + API on :4517
+# 1. Start the backend (in the kilimoorbit-sentinel folder, or `npm start` at the repository root)
+npm start                    # Mission Control + API on :4517; prints "From a phone on this Wi-Fi: http://192.168.x.x:4517  (Wi-Fi)"
 
-# 2. Point the app at the backend — edit lib/config.ts:
-#    Android emulator:        http://10.0.2.2:4517
-#    Physical phone (same Wi-Fi): http://<your-laptop-LAN-IP>:4517   ← run `ipconfig`/`ip a`
-#    Deployed backend:        https://your-sentinel.onrender.com
-
-# 3. Start the app (in this folder)
+# 2. Start the app (in this folder, or `npm run app` at the repository root)
 npm install
-npm start                    # scan the QR with Expo Go on Android
+npm start                    # scan the QR with Expo Go on Android, phone on the same Wi-Fi as the computer
 ```
+
+The app finds the server by itself: `EXPO_PUBLIC_API_BASE` when set, otherwise the computer Expo is running on (port 4517), `localhost` in the browser and `10.0.2.2` on the Android emulator. If Today shows **Offline**, tap **Fix connection** and type the address the server printed. A deployed backend (`https://your-sentinel.onrender.com`) goes in the same place, or in `EXPO_PUBLIC_API_BASE` in `.env`.
 
 `npm run typecheck` runs the strict TypeScript check (passes clean).
 

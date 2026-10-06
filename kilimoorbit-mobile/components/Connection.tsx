@@ -6,7 +6,9 @@
  * lib/config.ts.
  */
 import React, { useEffect, useState } from "react";
-import { View, Text } from "react-native";
+import { View } from "react-native";
+import Text from "./Text";
+import { haptic } from "../lib/haptics";
 import { useTheme } from "../lib/theme-context";
 import { useLang } from "../lib/session";
 import { announce, isWeb } from "../lib/ui";
@@ -29,6 +31,7 @@ export function ConnectionSheet({ visible, onClose }: { visible: boolean; onClos
     setBusy(true);
     const p = await probe(b);
     setResult({ base: b, p });
+    if (p.ok) haptic.success(); else haptic.error();
     setBusy(false);
     announce(p.ok ? tt("conn.okA11y") : tt(`conn.fail.${p.reason}` as Key));
   };

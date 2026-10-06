@@ -6,7 +6,9 @@
  * Data and the farmer's bookings: lib/events.ts.
  */
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, Platform } from "react-native";
+import { View, Platform } from "react-native";
+import Text from "./Text";
+import { haptic } from "../lib/haptics";
 import { useTheme } from "../lib/theme-context";
 import { useLang, useSession } from "../lib/session";
 import { announce, isWeb, webLang } from "../lib/ui";
@@ -79,7 +81,7 @@ function ShowPage({ s, today, booked, onOpen }: { s: Show; today: string; booked
         {s.estimated && <Tag tone="warn" label={tt("shows.estimated")} />}
         {booked && <Tag tone="ok" label={tt("shows.going")} />}
       </View>
-      <Text {...webLang("en")} style={{ color: t.ink, fontSize: 17, lineHeight: 24, fontWeight: "800" }} numberOfLines={2}>{s.name}</Text>
+      <Text {...webLang("en")} style={{ color: t.ink, ...T.headline }} numberOfLines={2}>{s.name}</Text>
       <Text style={{ color: t.ink, ...T.meta }}>
         {whenText(lang, s.start, s.end)} · {s.town}{s.distance_km > 0 ? ` · ${tt("shows.km", { n: s.distance_km.toLocaleString("en-KE") })}` : ""}
       </Text>
@@ -130,7 +132,7 @@ export function ShowSheet({ show, onClose }: { show: Show | null; onClose: () =>
   // The agent's steps appear one at a time, so the farmer can read what was done.
   useEffect(() => {
     if (phase !== "working" || !result) return;
-    if (shown >= result.steps.length) { setPhase("done"); return; }
+    if (shown >= result.steps.length) { haptic.success(); setPhase("done"); return; }
     const id = setTimeout(() => setShown((n) => n + 1), 420);
     return () => clearTimeout(id);
   }, [phase, result, shown]);
@@ -152,7 +154,7 @@ export function ShowSheet({ show, onClose }: { show: Show | null; onClose: () =>
       setResult(r);
       announce(tt("shows.booked"));
     } catch {
-      if (alive.current) setPhase("failed");
+      if (alive.current) { haptic.error(); setPhase("failed"); }
     }
   };
   const cancel = async () => {

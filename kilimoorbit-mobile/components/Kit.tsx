@@ -7,25 +7,34 @@
  */
 import React, { useEffect, useRef, useState } from "react";
 import {
-  View, Text, Pressable, Modal, ScrollView, KeyboardAvoidingView, Platform, useWindowDimensions,
+  View, Pressable, Modal, ScrollView, KeyboardAvoidingView, Platform, useWindowDimensions,
   type StyleProp, type ViewStyle,
 } from "react-native";
+import Text from "./Text";
 import Animated, {
-  Easing, ReduceMotion, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming,
+  Easing, ReduceMotion, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withSpring, withTiming,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../lib/theme-context";
 import { useLang } from "../lib/session";
 import { focusElement, focusRing, isWeb, spaceActivates, webCursor, type PressState } from "../lib/ui";
+import { haptic } from "../lib/haptics";
+import { SERIF } from "../lib/typography";
 import { CheckGlyph, CrossGlyph, MinusGlyph, PlusGlyph } from "./Glyphs";
 
-/* ── type scale ── */
+/* ── type scale (Nunito Sans; the three serif presets are Fraunces) ── */
 export const T = {
-  title: { fontSize: 17, lineHeight: 22, fontWeight: "800" as const },
-  body: { fontSize: 15, lineHeight: 22 },
+  title: { fontSize: 17, lineHeight: 22, fontWeight: "700" as const },
+  body: { fontSize: 15.5, lineHeight: 22 },
   meta: { fontSize: 13, lineHeight: 18 },
   big: { fontSize: 32, lineHeight: 38, fontWeight: "800" as const },
+  /** A headline inside a card: a news title, a show's name, a trivia question. */
+  headline: { fontFamily: SERIF["600"], fontSize: 19, lineHeight: 26 },
+  /** A screen's greeting or a sheet's title. */
+  display: { fontFamily: SERIF["600"], fontSize: 24, lineHeight: 30 },
+  /** The one big line on a screen. */
+  displayLg: { fontFamily: SERIF["700"], fontSize: 30, lineHeight: 36 },
 };
 
 /** "#RRGGBB" + alpha (0..1) → "#RRGGBBAA". Theme colours are all 6-digit hex. */
@@ -53,7 +62,7 @@ export function Eyebrow({ text, right, style }: { text: string; right?: React.Re
       <Text
         accessibilityRole="header"
         aria-level={2}
-        style={{ flexShrink: 1, color: t.dim, fontSize: 11, lineHeight: 14, fontFamily: "monospace", fontWeight: "700", letterSpacing: 1.6 }}
+        style={{ flexShrink: 1, color: t.dim, fontSize: 11.5, lineHeight: 14, fontWeight: "800", letterSpacing: 1.3, textTransform: "uppercase" }}
       >
         {text}
       </Text>
@@ -73,33 +82,46 @@ export function Btn({
   const t = useTheme();
   const fg = kind === "primary" || kind === "danger" ? t.field : kind === "ghost" ? t.accent : t.ink;
   const bg = kind === "primary" ? t.accent : kind === "danger" ? t.alert : "transparent";
+  // The whole pill springs under the finger; the actions that commit something
+  // (primary, danger) also give a light tap. The caller's style (flex, alignSelf)
+  // sits on the outer view so the pill keeps its own shape.
+  const s = useSharedValue(1);
+  const press = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
+  const down = () => {
+    s.value = withSpring(0.97, { damping: 20, stiffness: 420, reduceMotion: ReduceMotion.System });
+    if (kind === "primary" || kind === "danger") haptic.tap();
+  };
+  const up = () => { s.value = withSpring(1, { damping: 14, stiffness: 260, reduceMotion: ReduceMotion.System }); };
   return (
-    <Pressable
-      testID={testID}
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityLabel={a11yLabel ?? label}
-      accessibilityState={{ disabled: !!disabled }}
-      style={({ pressed, hovered, focused }: PressState) => [
-        {
-          minHeight: small ? 44 : 52, borderRadius: 14, paddingHorizontal: kind === "ghost" ? 4 : 18,
-          flexDirection: "row", alignItems: "center", justifyContent: kind === "ghost" ? "flex-start" : "center", gap: 8,
-          backgroundColor: bg,
-          ...(kind === "secondary" ? { borderWidth: 2, borderColor: t.dim } : null),
-          opacity: disabled ? 0.45 : pressed ? 0.85 : 1,
-        },
-        hovered && !disabled && (kind === "secondary" ? { backgroundColor: t.raised } : kind === "ghost" ? { opacity: 0.8 } : { opacity: 0.92 }),
-        webCursor,
-        focusRing(focused, t.accent),
-        style,
-      ]}
-    >
-      {icon?.(fg)}
-      <Text maxFontSizeMultiplier={1.4} style={{ color: fg, fontSize: small ? 15 : 16, lineHeight: 22, fontWeight: kind === "primary" || kind === "danger" ? "800" : "700" }}>
-        {label}
-      </Text>
-    </Pressable>
+    <Animated.View style={[style, press]}>
+      <Pressable
+        testID={testID}
+        onPress={onPress}
+        onPressIn={down}
+        onPressOut={up}
+        disabled={disabled}
+        accessibilityRole="button"
+        accessibilityLabel={a11yLabel ?? label}
+        accessibilityState={{ disabled: !!disabled }}
+        style={({ pressed, hovered, focused }: PressState) => [
+          {
+            minHeight: small ? 44 : 52, borderRadius: 14, paddingHorizontal: kind === "ghost" ? 4 : 18,
+            flexDirection: "row", alignItems: "center", justifyContent: kind === "ghost" ? "flex-start" : "center", gap: 8,
+            backgroundColor: bg,
+            ...(kind === "secondary" ? { borderWidth: 2, borderColor: t.dim } : null),
+            opacity: disabled ? 0.45 : pressed ? 0.9 : 1,
+          },
+          hovered && !disabled && (kind === "secondary" ? { backgroundColor: t.raised } : kind === "ghost" ? { opacity: 0.8 } : { opacity: 0.92 }),
+          webCursor,
+          focusRing(focused, t.accent),
+        ]}
+      >
+        {icon?.(fg)}
+        <Text maxFontSizeMultiplier={1.4} style={{ color: fg, fontSize: small ? 15 : 16, lineHeight: 22, fontWeight: kind === "primary" || kind === "danger" ? "800" : "700" }}>
+          {label}
+        </Text>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -113,11 +135,12 @@ export function Chip({
 }) {
   const t = useTheme();
   const toggle = role !== "button";
+  const press = () => { haptic.select(); onPress(); };
   return (
     <Pressable
       ref={pressRef}
       testID={testID}
-      onPress={onPress}
+      onPress={press}
       {...(role === "checkbox" ? spaceActivates(onPress) : null)}
       {...keys}
       accessibilityRole={role}
@@ -141,7 +164,7 @@ export function Chip({
         <Text maxFontSizeMultiplier={1.4} style={{ color: t.ink, fontSize: 15, lineHeight: 20, fontWeight: selected ? "700" : "500" }}>
           {label}
         </Text>
-        {sub ? <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={{ color: t.dim, fontSize: 12, lineHeight: 15, fontFamily: "monospace", fontWeight: "700" }}>{sub}</Text> : null}
+        {sub ? <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={{ color: t.dim, fontSize: 12.5, lineHeight: 15, fontWeight: "700" }}>{sub}</Text> : null}
       </View>
     </Pressable>
   );
@@ -177,11 +200,23 @@ export function CheckRow({
 }) {
   const t = useTheme();
   const { t: tt } = useLang();
+  // The box pops when a task gets ticked (not on first paint), with a success tick.
+  const pop = useSharedValue(1);
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) { mounted.current = true; return; }
+    if (checked) pop.value = withSequence(
+      withSpring(1.22, { damping: 9, stiffness: 420, reduceMotion: ReduceMotion.System }),
+      withSpring(1, { damping: 12, stiffness: 240, reduceMotion: ReduceMotion.System }),
+    );
+  }, [checked]);
+  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
+  const toggle = () => { if (checked) haptic.select(); else haptic.success(); onToggle(); };
   return (
     <Pressable
       testID={testID}
-      onPress={onToggle}
-      {...spaceActivates(onToggle)}
+      onPress={toggle}
+      {...spaceActivates(toggle)}
       accessibilityRole="checkbox"
       accessibilityLabel={a11yLabel ?? [title, meta, !checked && hint ? hint.text : null].filter(Boolean).join(", ")}
       accessibilityState={{ checked }}
@@ -193,15 +228,15 @@ export function CheckRow({
         webCursor, focusRing(focused, t.accent),
       ]}
     >
-      <View
-        style={{
+      <Animated.View
+        style={[{
           width: 26, height: 26, borderRadius: 8, borderWidth: 2,
           borderColor: checked ? t.ok : t.dim, backgroundColor: checked ? t.ok : "transparent",
           alignItems: "center", justifyContent: "center",
-        }}
+        }, popStyle]}
       >
         {checked && <CheckGlyph size={15} color={t.field} />}
-      </View>
+      </Animated.View>
       {leading}
       <View style={{ flex: 1 }}>
         <Text
@@ -241,7 +276,7 @@ export function Stepper({
     const disabled = dir < 0 ? value <= min : value >= max;
     return (
       <Pressable
-        onPress={() => onChange(clamp(value + dir * step))}
+        onPress={() => { haptic.select(); onChange(clamp(value + dir * step)); }}
         disabled={disabled}
         accessibilityRole="button"
         accessibilityLabel={`${label} ${dir < 0 ? "−" : "+"}${format(step)}`}
@@ -358,7 +393,7 @@ export function Sheet({
         >
           {!dialog && <View style={{ alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: t.line, marginTop: 8 }} />}
           <View style={{ flexDirection: "row", alignItems: "center", paddingLeft: 20, paddingRight: 6, minHeight: 56 }}>
-            <Text accessibilityRole="header" style={{ flex: 1, color: t.ink, fontSize: 19, lineHeight: 24, fontWeight: "800" }}>{title}</Text>
+            <Text accessibilityRole="header" style={{ flex: 1, color: t.ink, ...T.display, fontSize: 21, lineHeight: 27 }}>{title}</Text>
             <Pressable
               ref={closeRef}
               onPress={onClose}

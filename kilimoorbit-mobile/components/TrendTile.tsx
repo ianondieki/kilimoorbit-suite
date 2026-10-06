@@ -6,7 +6,8 @@
  * low/high line and the accessibility summary carry every number without it.
  */
 import React, { useState } from "react";
-import { View, Text, Pressable, type LayoutChangeEvent } from "react-native";
+import { View, Pressable, type LayoutChangeEvent } from "react-native";
+import Text from "./Text";
 import { useTheme } from "../lib/theme-context";
 import { useLang } from "../lib/session";
 import { isWeb } from "../lib/ui";

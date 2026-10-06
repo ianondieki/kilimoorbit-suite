@@ -1,8 +1,10 @@
 /** Radio group of two or three options (Kiswahili | English; Calendar | Livestock | Records). */
 import React, { useRef } from "react";
-import { View, Text, Pressable } from "react-native";
+import { View, Pressable } from "react-native";
+import Text from "./Text";
 import { useTheme } from "../lib/theme-context";
 import { focusElement, focusRing, radioKeys, webCursor, type PressState } from "../lib/ui";
+import { haptic } from "../lib/haptics";
 
 type Option<V extends string> = { value: V; label: string };
 
@@ -30,7 +32,7 @@ export default function Segmented<V extends string>({
           <Pressable
             key={o.value}
             ref={(el: View | null) => { refs.current[i] = el; }}
-            onPress={() => onChange(o.value)}
+            onPress={() => { if (!selected) haptic.select(); onChange(o.value); }}
             {...radioKeys({
               index: i, count: options.length, selected,
               onSelect: (n) => onChange(options[n].value),

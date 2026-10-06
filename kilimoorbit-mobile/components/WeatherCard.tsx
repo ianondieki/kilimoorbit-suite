@@ -4,7 +4,8 @@
  * good day: Thursday"). Sample forecasts carry the DEMO / MAJARIBIO tag.
  */
 import React from "react";
-import { View, Text } from "react-native";
+import { View } from "react-native";
+import Text from "./Text";
 import { useTheme } from "../lib/theme-context";
 import { useLang } from "../lib/session";
 import { isWeb } from "../lib/ui";

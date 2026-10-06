@@ -7,6 +7,7 @@ import { useLang, useSession } from "../../lib/session";
 import { MenuProvider, useMenu } from "../../components/MenuContext";
 import Sidebar from "../../components/Sidebar";
 import { BarsGlyph, ChatGlyph, LensGlyph, SproutGlyph, SunGlyph } from "../../components/Glyphs";
+import { SANS } from "../../lib/typography";
 
 export default function TabLayout() {
   const t = useTheme();
@@ -52,7 +53,7 @@ function TabShell() {
             tabBarActiveTintColor: t.accent,
             tabBarInactiveTintColor: t.dim,
             // Five tabs: labels are kept to one short word or two so 12px fits a 360px phone.
-            tabBarLabelStyle: { fontSize: 12, lineHeight: 16, fontWeight: "700", flexShrink: 0 },
+            tabBarLabelStyle: { fontFamily: SANS["700"], fontSize: 12, lineHeight: 16, flexShrink: 0 },
             sceneStyle: { backgroundColor: t.bg },
           }}
         >

@@ -6,7 +6,8 @@
  */
 import React, { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "expo-router";
-import { View, Text, Pressable } from "react-native";
+import { View, Pressable } from "react-native";
+import Text from "./Text";
 import { useTheme } from "../lib/theme-context";
 import { useLang } from "../lib/session";
 import { announce, focusRing, webCursor, type PressState } from "../lib/ui";

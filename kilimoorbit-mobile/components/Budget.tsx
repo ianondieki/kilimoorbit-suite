@@ -5,7 +5,9 @@
  * interest, and the same land under each other crop. Logic: lib/budget.ts.
  */
 import React, { useEffect, useState } from "react";
-import { View, Text, TextInput, Pressable } from "react-native";
+import { View, TextInput, Pressable } from "react-native";
+import Text from "./Text";
+import { SANS } from "../lib/typography";
 import { useTheme } from "../lib/theme-context";
 import { useLang } from "../lib/session";
 import { focusRing, noOutline, webCursor, type PressState } from "../lib/ui";
@@ -46,7 +48,7 @@ function PriceInput({ value, onChange, onDone, label, testID }: { value: string;
       selectTextOnFocus
       testID={testID}
       style={[
-        { width: 96, height: 44, borderWidth: 2, borderColor: focused ? t.accent : t.line, borderRadius: 10, paddingHorizontal: 10, backgroundColor: t.field, color: t.ink, fontSize: 16, fontWeight: "700" },
+        { width: 96, height: 44, borderWidth: 2, borderColor: focused ? t.accent : t.line, borderRadius: 10, paddingHorizontal: 10, backgroundColor: t.field, color: t.ink, fontSize: 16, fontFamily: SANS["700"] },
         noOutline,
       ]}
     />
