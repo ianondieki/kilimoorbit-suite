@@ -24,7 +24,7 @@ export default defineConfig({
       command: "npm --prefix ../kilimoorbit-sentinel start",
       url: "http://localhost:4517/api/health",
       reuseExistingServer: !process.env.CI,
-      env: { APEX_MOCK: "1", RATE_LIMIT_DISABLED: "1" },
+      env: { APEX_MOCK: "1", RATE_LIMIT_DISABLED: "1", WEATHER_PROVIDER: "sample" },
       timeout: 60_000,
     },
     {

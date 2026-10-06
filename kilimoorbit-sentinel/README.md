@@ -94,7 +94,7 @@ Listings move through **open → claimed → delivered** (or **open → cancelle
 
 ## Farm weather — forecast + farming windows
 
-`GET /api/weather?county=Meru` returns a 7-day forecast for any of Kenya's 47 counties (case-, space- and apostrophe-insensitive: `muranga` finds Murang'a), and on every day the three verdicts smallholders act on:
+`GET /api/weather?county=Meru` returns a 7-day forecast — real Open-Meteo data by default (free, no key, cached 30 minutes per county; a failure falls back to a labelled SAMPLE forecast, and `WEATHER_PROVIDER=sample` forces it) — for any of Kenya's 47 counties (case-, space- and apostrophe-insensitive: `muranga` finds Murang'a), and on every day the three verdicts smallholders act on:
 
 | Window | Good when | Why |
 |---|---|---|

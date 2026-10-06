@@ -21,6 +21,8 @@ import { router, usePathname } from "expo-router";
 import { useTheme, useThemeControls } from "../lib/theme-context";
 import { useApiBase } from "../lib/config";
 import { hostOf } from "../lib/connection";
+import { getFontStatus } from "../lib/typography";
+import Icon from "./Icon";
 import { ConnectionSheet } from "./Connection";
 import { THEMES, type Theme } from "../lib/themes";
 import { useLang, useSession } from "../lib/session";
@@ -29,7 +31,7 @@ import { focusElement, focusRing, radioKeys, spaceActivates, webCursor, isWeb, t
 import type { Key } from "../lib/i18n";
 import { useMenu, type CloseOpts } from "./MenuContext";
 import Segmented from "./Segmented";
-import { ArrowGlyph, BarsGlyph, ChatGlyph, CheckCoin, CheckGlyph, ChevronGlyph, CrossGlyph, ExitGlyph, LeafGlyph, LensGlyph, MoonGlyph, PersonGlyph, PhoneGlyph, PlusGlyph, RouteGlyph, SignalOffGlyph, SpeakerGlyph, SproutGlyph, SunGlyph } from "./Glyphs";
+import { ArrowGlyph, BarsGlyph, ChatGlyph, CheckCoin, CheckGlyph, ChevronGlyph, CrossGlyph, ExitGlyph, LeafGlyph, LensGlyph, MoonGlyph, PersonGlyph, PhoneGlyph, PlusGlyph, SignalOffGlyph, SpeakerGlyph, SunGlyph } from "./Glyphs";
 
 type Variant = "drawer" | "docked";
 
@@ -158,6 +160,8 @@ function SidebarBody({ variant, open }: { variant: Variant; open: boolean }) {
   const tileRefs = useRef<(View | null)[]>([]);
   const [conn, setConn] = useState(false);
   const { base: apiBase } = useApiBase();
+  const appVersion = Constants.expoConfig?.version ?? "?";
+  const fontsOk = getFontStatus() === "ready";
 
   useEffect(() => {
     if (!drawer) return;
@@ -233,17 +237,17 @@ function SidebarBody({ variant, open }: { variant: Variant; open: boolean }) {
         {/* 3. Nenda */}
         <Eyebrow text={tt("eyebrow.nav")} />
         <NavRow label={tt("nav.today")} active={isActive("/")} drawer={drawer}
-          glyph={(c) => <SunGlyph size={22} color={c} />} onPress={() => go("/")} />
+          glyph={(c) => <Icon name="white-balance-sunny" size={24} color={c} />} onPress={() => go("/")} />
         <NavRow label={tt("nav.farm")} active={isActive("/shamba")} drawer={drawer}
-          glyph={(c) => <SproutGlyph size={24} color={c} />} onPress={() => go("/shamba")} />
+          glyph={(c) => <Icon name="barn" size={24} color={c} />} onPress={() => go("/shamba")} />
         <NavRow label={tt("nav.markets")} active={isActive("/masoko")} drawer={drawer}
-          glyph={(c) => <BarsGlyph size={22} color={c} />} onPress={() => go("/masoko")} />
+          glyph={(c) => <Icon name="storefront-outline" size={24} color={c} />} onPress={() => go("/masoko")} />
         <NavRow label={tt("nav.doctor")} active={isActive("/daktari")} drawer={drawer}
-          glyph={(c) => <LensGlyph size={22} color={c} />} onPress={() => go("/daktari")} />
+          glyph={(c) => <Icon name="stethoscope" size={24} color={c} />} onPress={() => go("/daktari")} />
         <NavRow label={tt("nav.chat")} active={isActive("/chat")} drawer={drawer}
-          glyph={(c) => <ChatGlyph size={24} color={c} />} onPress={() => go("/chat")} />
+          glyph={(c) => <Icon name="chat-processing-outline" size={24} color={c} />} onPress={() => go("/chat")} />
         <NavRow label={tt("nav.autopilot")} active={isActive("/autopilot")} drawer={drawer}
-          glyph={(c) => <RouteGlyph size={26} color={c} />} onPress={() => go("/autopilot")} />
+          glyph={(c) => <Icon name="robot-outline" size={24} color={c} />} onPress={() => go("/autopilot")} />
 
         {/* 4. Mipangilio */}
         <Eyebrow text={tt("eyebrow.settings")} />
@@ -314,6 +318,15 @@ function SidebarBody({ variant, open }: { variant: Variant; open: boolean }) {
           </View>
           <ChevronGlyph size={12} color={t.dim} dir="right" />
         </Pressable>
+
+        {/* What is running: the app version and whether the bundled fonts loaded, so an old bundle or a font that failed is visible at a glance. */}
+        <View accessible accessibilityLabel={`${tt("settings.app")}: ${appVersion}, ${tt(fontsOk ? "settings.fontsOk" : "settings.fontsFail")}`} testID="settings-app" style={{ minHeight: 48, paddingHorizontal: 20, flexDirection: "row", alignItems: "center", gap: 14 }}>
+          <LeafGlyph size={22} color={t.ink} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "600" }}>{tt("settings.app")}</Text>
+            <Text numberOfLines={1} style={{ color: fontsOk ? t.dim : t.alert, fontSize: 12.5, lineHeight: 16, fontWeight: "700" }}>v{appVersion} · {tt(fontsOk ? "settings.fontsOk" : "settings.fontsFail")}</Text>
+          </View>
+        </View>
         <ConnectionSheet visible={conn} onClose={() => setConn(false)} />
 
         {/* 6. Footer: its own line at the end of the scrolling body, for

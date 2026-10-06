@@ -14,6 +14,7 @@ Three projects in one repository:
 npm install          # once, from this folder: installs the root tools and all three projects
 npm start            # the server → http://localhost:4517 (it prints the address a phone should use)
 npm run app          # in a second terminal: the KilimoOrbit app → scan the QR code with Expo Go
+npm run update       # later: drops local lockfile changes, pulls the latest, reinstalls
 ```
 
 - Put your Gemini key in `kilimoorbit-sentinel/.env` (`cp .env.example .env` in that folder). Without one the server runs its offline mock engine, so everything still works.

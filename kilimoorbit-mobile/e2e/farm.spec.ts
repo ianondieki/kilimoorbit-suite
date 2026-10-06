@@ -747,3 +747,38 @@ test("Trivia: the slider's dots turn green for a right answer and red for a wron
   await expect(page.getByTestId("trivia-dot-1").locator("div").first()).toHaveCSS("background-color", "rgb(224, 83, 47)"); // Loam: alert
   await expect(page.getByText("2/5 today")).toBeVisible();
 });
+
+test("Design: every section label wears its section's colour with an icon badge; buttons that commit carry an icon", async ({ page }) => {
+  await start(page, "/", "en", { county: "Nakuru" });
+  await expect(page.getByTestId("eyebrow-weather").first().getByRole("heading")).toHaveCSS("color", "rgb(142, 197, 232)"); // Loam: water
+  await expect(page.getByTestId("eyebrow-farm").first().getByRole("heading")).toHaveCSS("color", "rgb(111, 191, 115)"); // Loam: ok
+  await expect(page.getByTestId("eyebrow-quiz").first().getByRole("heading")).toHaveCSS("color", "rgb(124, 212, 193)"); // Loam: teal
+  await expect(page.getByTestId("eyebrow-news").first().getByRole("heading")).toHaveCSS("color", "rgb(201, 185, 242)"); // Loam: violet
+  // the badge is a tinted square before the label
+  const badge = page.getByTestId("eyebrow-weather").first().getByTestId("icon-badge");
+  await expect(badge).toHaveCSS("background-color", "rgba(142, 197, 232, 0.16)");
+  // a committing button shows its icon next to the label
+  await page.getByTestId("trivia-card").scrollIntoViewIfNeeded();
+  const first = byId(pickDaily(todayKey(), {})[0])!;
+  await page.getByTestId(`trivia-option-1-${first.answer}`).click();
+  const next = page.getByTestId("trivia-next").first();
+  await expect(next).toBeVisible();
+  expect(await next.locator("div").count()).toBeGreaterThan(0); // the arrow glyph
+});
+
+test("Weather: the hero draws the sky for the conditions and the hour, with stat tiles; a live forecast says so", async ({ page, context }) => {
+  // A rainy evening: the forecast is stubbed from the server's own sample, the clock fixed at 20:30.
+  const base = await (await fetch("http://localhost:4517/api/weather?county=Nakuru")).json();
+  const rainy = { ...base, source: "OPEN_METEO", days: base.days.map((d: any, i: number) => (i === 0 ? { ...d, sky: "rain", rain_chance: 82, rain_mm: 14 } : d)) };
+  await context.route("http://localhost:4517/api/weather**", (r) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(rainy) }));
+  const evening = new Date(); evening.setHours(20, 30, 0, 0);
+  await page.clock.setFixedTime(evening);
+  await start(page, "/", "en", { county: "Nakuru" });
+  const hero = page.getByTestId("wx-hero");
+  await expect(hero).toBeVisible();
+  await expect(page.getByTestId("sky-rain-night")).toBeVisible();
+  await expect(hero).toContainText("Rain");
+  await expect(page.getByTestId("wx-stat-rain")).toContainText("82%");
+  await expect(page.getByTestId("wx-live")).toContainText("Open-Meteo");
+  await expect(page.getByTestId("eyebrow-weather").first().getByText("DEMO", { exact: true })).toHaveCount(0); // a live forecast carries no sample tag (other cards may)
+});

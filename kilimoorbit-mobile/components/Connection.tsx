@@ -8,6 +8,7 @@
 import React, { useEffect, useState } from "react";
 import { View } from "react-native";
 import Text from "./Text";
+import { CheckGlyph, LensGlyph } from "./Glyphs";
 import { haptic } from "../lib/haptics";
 import { useTheme } from "../lib/theme-context";
 import { useLang } from "../lib/session";
@@ -64,7 +65,7 @@ export function ConnectionSheet({ visible, onClose }: { visible: boolean; onClos
       footer={
         <View style={{ flexDirection: "row", gap: 10, flex: 1 }}>
           {override ? <Btn kind="secondary" label={tt("conn.useAuto")} onPress={useAuto} style={{ flex: 1 }} testID="conn-auto" /> : null}
-          <Btn label={tt("conn.save")} onPress={save} disabled={!!input.trim() && !typed} style={{ flex: 1 }} testID="conn-save" />
+          <Btn label={tt("conn.save")} onPress={save} disabled={!!input.trim() && !typed} style={{ flex: 1 }} icon={(c) => <CheckGlyph size={15} color={c} />} testID="conn-save" />
         </View>
       }
     >
@@ -107,7 +108,7 @@ export function ConnectionSheet({ visible, onClose }: { visible: boolean; onClos
           statusMinHeight={0}
           inputProps={{ placeholder: "192.168.0.12:4517", autoCapitalize: "none", autoCorrect: false, keyboardType: isWeb ? undefined : "url", testID: "conn-input" } as any}
         />
-        <Btn kind="secondary" small label={tt("conn.test")} onPress={() => candidate && test(candidate)} disabled={busy || !candidate} style={{ alignSelf: "flex-start" }} testID="conn-test" />
+        <Btn kind="secondary" small label={tt("conn.test")} onPress={() => candidate && test(candidate)} disabled={busy || !candidate} style={{ alignSelf: "flex-start" }} icon={(c) => <LensGlyph size={15} color={c} />} testID="conn-test" />
       </Group>
       <Text style={{ color: t.dim, fontSize: 12.5, lineHeight: 17 }}>{tt("conn.note")}</Text>
     </Sheet>

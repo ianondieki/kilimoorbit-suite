@@ -44,3 +44,9 @@ export function weightKey(w: string | number | undefined | null): SansWeight {
 }
 
 export const isBundled = (family: unknown): family is keyof typeof FONTS => typeof family === "string" && family in FONTS;
+
+/** Whether the bundled fonts loaded on this device (shown under Settings, so "nothing changed" has an answer). */
+export type FontStatus = "loading" | "ready" | "failed";
+let fontStatus: FontStatus = "loading";
+export const setFontStatus = (s: FontStatus) => { fontStatus = s; };
+export const getFontStatus = () => fontStatus;

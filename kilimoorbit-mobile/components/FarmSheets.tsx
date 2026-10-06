@@ -136,7 +136,7 @@ export function FarmProfileSheet({ visible, onClose }: { visible: boolean; onClo
       onClose={onClose}
       title={tt("farm.sheet")}
       testID="sheet-farm"
-      footer={<Btn label={tt("edit.save")} onPress={save} disabled={!county} style={{ flex: 1 }} testID="farm-save" />}
+      footer={<Btn label={tt("edit.save")} onPress={save} disabled={!county} style={{ flex: 1 }} icon={(c) => <CheckGlyph size={15} color={c} />} testID="farm-save" />}
     >
       <Group label={tt("farm.size")}>
         <Stepper value={acres} onChange={setAcres} step={0.25} min={0.25} max={500} format={acresFmt} label={tt("farm.size")} />
@@ -327,7 +327,7 @@ export function RecordSheet({
       onClose={onClose}
       title={tt("rec.add")}
       testID="sheet-record"
-      footer={<Btn label={tt("rec.save")} onPress={save} style={{ flex: 1 }} testID="record-save" />}
+      footer={<Btn label={tt("rec.save")} onPress={save} style={{ flex: 1 }} icon={(c) => <CheckGlyph size={15} color={c} />} testID="record-save" />}
     >
       <Segmented
         accessibilityLabel={tt("rec.kind")}

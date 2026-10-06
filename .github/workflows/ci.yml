@@ -26,6 +26,7 @@ jobs:
       - run: npm test
         env:
           APEX_MOCK: "1"
+          WEATHER_PROVIDER: "sample"
   docker:
     runs-on: ubuntu-latest
     needs: test

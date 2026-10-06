@@ -5,6 +5,7 @@
  * and the two mobile apps depend on.
  */
 process.env.APEX_MOCK = "1";
+process.env.WEATHER_PROVIDER = "sample"; // deterministic forecasts in tests
 process.env.SOKO_STORE_PATH = process.env.SOKO_STORE_PATH
   || `${process.env.TEMP || process.env.TMPDIR || "/tmp"}/soko_test_${process.pid}.json`;
 

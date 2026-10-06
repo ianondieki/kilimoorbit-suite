@@ -445,3 +445,98 @@ export function MinusGlyph({ size = 24, color, style }: GlyphProps) {
     </Root>
   );
 }
+
+/* ── section marks (news, shows, trivia, store, money, milk, eggs) ── */
+
+/** Three lines of different lengths: a news story. */
+export function NewsGlyph({ size = 24, color, style }: GlyphProps) {
+  const s = strokeFor(size);
+  const w = r(size * 0.7);
+  return (
+    <Root size={size} style={style}>
+      <View style={{ width: w, gap: Math.max(2, r(size * 0.12)) }}>
+        {[1, 0.72, 0.5].map((f, i) => (
+          <View key={i} style={{ width: r(w * f), height: s, borderRadius: s / 2, backgroundColor: color }} />
+        ))}
+      </View>
+    </Root>
+  );
+}
+
+/** A calendar page: a bordered box with a header bar and two day dots. */
+export function CalendarGlyph({ size = 24, color, style }: GlyphProps) {
+  const s = strokeFor(size);
+  const w = r(size * 0.74), h = r(size * 0.68);
+  const dot = Math.max(2, r(size * 0.12));
+  return (
+    <Root size={size} style={style}>
+      <View style={{ width: w, height: h, borderRadius: r(size * 0.14), borderWidth: s, borderColor: color, overflow: "hidden" }}>
+        <View style={{ height: r(h * 0.28), backgroundColor: color }} />
+        <View style={{ flexDirection: "row", gap: dot, paddingHorizontal: r(size * 0.1), paddingTop: r(size * 0.09) }}>
+          <View style={{ width: dot, height: dot, borderRadius: dot / 2, backgroundColor: color }} />
+          <View style={{ width: dot, height: dot, borderRadius: dot / 2, backgroundColor: color }} />
+        </View>
+      </View>
+    </Root>
+  );
+}
+
+/** A light bulb: ideas, questions. */
+export function BulbGlyph({ size = 24, color, style }: GlyphProps) {
+  const s = strokeFor(size);
+  const d = r(size * 0.56);
+  const base = { w: r(size * 0.3), h: Math.max(2, r(size * 0.11)) };
+  return (
+    <Root size={size} style={style}>
+      <View style={{ width: d, height: d, borderRadius: d / 2, borderWidth: s, borderColor: color, marginBottom: r(size * 0.2) }} />
+      <View style={{ position: "absolute", bottom: r(size * 0.1), width: base.w, height: base.h, borderRadius: base.h / 2, backgroundColor: color }} />
+    </Root>
+  );
+}
+
+/** A storage box with its lid line. */
+export function BoxGlyph({ size = 24, color, style }: GlyphProps) {
+  const s = strokeFor(size);
+  const w = r(size * 0.74), h = r(size * 0.62);
+  return (
+    <Root size={size} style={style}>
+      <View style={{ width: w, height: h, borderRadius: r(size * 0.12), borderWidth: s, borderColor: color, overflow: "hidden" }}>
+        <View style={{ position: "absolute", left: 0, right: 0, top: r(h * 0.28), height: s, backgroundColor: color }} />
+        <View style={{ position: "absolute", alignSelf: "center", top: r(h * 0.28) + s + r(size * 0.06), width: r(w * 0.26), height: Math.max(2, r(s * 0.9)), borderRadius: 2, backgroundColor: color }} />
+      </View>
+    </Root>
+  );
+}
+
+/** A coin: money, prices, records. */
+export function CoinGlyph({ size = 24, color, style }: GlyphProps) {
+  const s = strokeFor(size);
+  const d = r(size * 0.74), inner = r(size * 0.3);
+  return (
+    <Root size={size} style={style}>
+      <View style={{ width: d, height: d, borderRadius: d / 2, borderWidth: s, borderColor: color, alignItems: "center", justifyContent: "center" }}>
+        <View style={{ width: inner, height: inner, borderRadius: inner / 2, backgroundColor: color }} />
+      </View>
+    </Root>
+  );
+}
+
+/** A drop: milk, water. */
+export function DropGlyph({ size = 24, color, style }: GlyphProps) {
+  const d = r(size * 0.5);
+  return (
+    <Root size={size} style={style}>
+      <View style={{ width: d, height: d, backgroundColor: color, borderRadius: d / 2, borderTopLeftRadius: 0, transform: [{ rotate: "45deg" }], marginTop: r(size * 0.08) }} />
+    </Root>
+  );
+}
+
+/** An egg. */
+export function EggGlyph({ size = 24, color, style }: GlyphProps) {
+  const w = r(size * 0.56), h = r(size * 0.74);
+  return (
+    <Root size={size} style={style}>
+      <View style={{ width: w, height: h, backgroundColor: color, borderTopLeftRadius: r(w * 0.62), borderTopRightRadius: r(w * 0.62), borderBottomLeftRadius: r(w / 2), borderBottomRightRadius: r(w / 2) }} />
+    </Root>
+  );
+}

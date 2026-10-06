@@ -192,7 +192,7 @@ export function createApp(opts = {}) {
     createSokoRouter({ liveFeed: liveCommodityFeed }));
 
   // Farm weather: 7-day forecast for a county plus the spray / plant / dry
-  // windows. SAMPLE by default (deterministic); WEATHER_PROVIDER=open-meteo for real data.
+  // windows. Real Open-Meteo forecasts by default (SAMPLE when they fail); WEATHER_PROVIDER=sample forces the deterministic sample.
   app.get("/api/weather", rateLimit({ windowMs: 60_000, max: 120, name: "weather" }), async (req, res) => {
     // Only a plain string: ?county[]=… or repeated keys arrive as arrays/objects.
     const name = typeof req.query.county === "string" ? req.query.county.trim().slice(0, 40) : "";

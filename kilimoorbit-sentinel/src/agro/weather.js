@@ -10,11 +10,11 @@
  *          grain (wet grain is how aflatoxin starts).
  *
  * Providers:
- *   SAMPLE      (default) deterministic, plausible weather from the county's
+ *   SAMPLE      (WEATHER_PROVIDER=sample, and the fallback) deterministic, plausible weather from the county's
  *               altitude, rainfall region and the Kenyan season. Same county +
  *               same date → same numbers, so a refresh never "changes the
  *               forecast". Always labelled sample data in the apps.
- *   OPEN_METEO  WEATHER_PROVIDER=open-meteo — real forecasts from
+ *   OPEN_METEO  (default) real forecasts from
  *               api.open-meteo.com (free, no key). Any failure falls back to
  *               SAMPLE and says so (`fallback`).
  *
@@ -234,7 +234,7 @@ export async function openMeteoForecast(county, { fetchImpl = fetch, timeoutMs =
  * live provider falls back to SAMPLE with `fallback` saying why.
  */
 export async function forecastFor(county, {
-  provider = process.env.WEATHER_PROVIDER, now = new Date(), fetchImpl,
+  provider = process.env.WEATHER_PROVIDER ?? "open-meteo", now = new Date(), fetchImpl,
 } = {}) {
   const season = seasonOfMonth(new Date(now.getTime() + EAT_MS).getUTCMonth());
   const base = { county: county.name, altitude_m: county.alt, timezone: "Africa/Nairobi", season, generated_at: now.toISOString() };

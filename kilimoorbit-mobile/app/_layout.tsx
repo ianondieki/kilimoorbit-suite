@@ -6,7 +6,7 @@ import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { ThemeProvider, useTheme } from "../lib/theme-context";
 import { SessionProvider, useLang } from "../lib/session";
-import { FONTS } from "../lib/typography";
+import { FONTS, setFontStatus } from "../lib/typography";
 
 // The splash stays up until the bundled fonts are ready, so no screen is ever
 // drawn in the system font and then redrawn.
@@ -39,8 +39,13 @@ export default function RootLayout() {
   const [fontsReady, fontError] = useFonts(FONTS);
   const ready = fontsReady || !!fontError; // a font that fails to load falls back to the system font, never a blank app
   useEffect(() => {
+    if (fontsReady) setFontStatus("ready");
+    else if (fontError) {
+      setFontStatus("failed");
+      console.warn("[KilimoOrbit] the bundled fonts did not load; using the system font", fontError);
+    }
     if (ready) SplashScreen.hideAsync().catch(() => {});
-  }, [ready]);
+  }, [ready, fontsReady, fontError]);
   if (!ready) return null;
   return (
     <ThemeProvider>

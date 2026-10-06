@@ -7,6 +7,8 @@
 import React, { useEffect, useState } from "react";
 import { View, Pressable, type LayoutChangeEvent } from "react-native";
 import Text from "./Text";
+import { Eyebrow } from "./Kit";
+import Icon from "./Icon";
 import Animated, {
   Easing, FadeIn, ReduceMotion, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withTiming,
 } from "react-native-reanimated";
@@ -21,7 +23,7 @@ import { focusRing, isWeb, webCursor, type PressState } from "../lib/ui";
 import { Wordmark } from "./auth/Controls";
 import SeasonOrbit from "./SeasonOrbit";
 import { Skeleton } from "./Motion";
-import { ChevronGlyph, SignalOffGlyph } from "./Glyphs";
+import { ChevronGlyph, SignalOffGlyph, CoinGlyph, LeafGlyph } from "./Glyphs";
 
 type Props = {
   variant: "side" | "strip" | "tiles";
@@ -105,15 +107,6 @@ export function DemoTag() {
     <View style={{ borderWidth: 1.5, borderColor: t.dim, borderRadius: 999, paddingHorizontal: 8, minHeight: 22, justifyContent: "center", alignSelf: "center" }}>
       <Text style={{ color: t.ink, fontSize: 11, fontFamily: "monospace", fontWeight: "700" }}>{tt("prices.demo")}</Text>
     </View>
-  );
-}
-
-function Eyebrow({ text }: { text: string }) {
-  const t = useTheme();
-  return (
-    <Text style={{ color: t.dim, fontSize: 11, lineHeight: 14, fontFamily: "monospace", fontWeight: "700", letterSpacing: 2 }}>
-      {text}
-    </Text>
   );
 }
 
@@ -358,7 +351,7 @@ function Side({ board, season, width, height }: Props) {
         <Wordmark size="panel" />
 
         <View style={{ marginTop: 36, flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <Eyebrow text={tt("season.eyebrow")} />
+          <Eyebrow domain="season" icon={(c) => <LeafGlyph size={15} color={c} />} text={tt("season.eyebrow")} />
           <Text style={{ color: t.dim, fontSize: 12, fontFamily: "monospace" }}>
             {season.day} {monthName(lang, season.monthIndex)} {season.year}
           </Text>
@@ -384,7 +377,7 @@ function Side({ board, season, width, height }: Props) {
         <View style={{ marginTop: 32 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <Eyebrow text={tt("prices.eyebrow")} />
+              <Eyebrow domain="money" icon={(c) => <CoinGlyph size={15} color={c} />} text={tt("prices.eyebrow")} />
               {isDemoBoard(board) && <DemoTag />}
             </View>
             {!!fresh && <Text style={{ color: t.dim, fontSize: 12, fontFamily: "monospace" }}>{fresh}</Text>}
@@ -406,7 +399,7 @@ function Side({ board, season, width, height }: Props) {
 
       {showCaps && (
         <View style={{ paddingTop: 32 }} onLayout={(e: LayoutChangeEvent) => setCapsH(Math.ceil(e.nativeEvent.layout.height))}>
-          <Eyebrow text={tt("caps.eyebrow")} />
+          <Eyebrow domain="farm" icon={(c) => <Icon name="sprout" size={17} color={c} />} text={tt("caps.eyebrow")} />
           <View style={{ marginTop: 8 }}>
             {(["caps.1", "caps.2", "caps.3", "caps.4"] as const).map((k) => (
               <View key={k} style={{ minHeight: 40, flexDirection: "row", gap: 12, alignItems: "center" }}>

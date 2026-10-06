@@ -7,6 +7,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { View, TextInput } from "react-native";
 import Text from "./Text";
+import { BarsGlyph } from "./Glyphs";
 import { useTheme } from "../lib/theme-context";
 import { useLang, useSession } from "../lib/session";
 import { announce } from "../lib/ui";
@@ -176,7 +177,7 @@ export function MyListings() {
 
   return (
     <Card>
-      <Eyebrow text={tt("soko.mine")} />
+      <Eyebrow domain="market" icon={(c) => <BarsGlyph size={15} color={c} />} text={tt("soko.mine")} />
       {mine.map((l, i) => (
         <View key={l.id} style={{ paddingVertical: 10, gap: 8, borderTopWidth: i ? 1 : 0, borderTopColor: t.line }} testID={`listing-${l.crop}`}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
