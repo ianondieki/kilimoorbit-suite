@@ -6,6 +6,7 @@
   "scripts": {
     "postinstall": "npm --prefix kilimoorbit-sentinel install && npm --prefix kilimoorbit-mobile install && npm --prefix soko-mobile install",
     "install:all": "npm install",
+    "update": "git checkout -- . && git pull --ff-only && npm install",
     "start": "npm --prefix kilimoorbit-sentinel start",
     "app": "npm --prefix kilimoorbit-mobile start",
     "soko": "npm --prefix soko-mobile start",

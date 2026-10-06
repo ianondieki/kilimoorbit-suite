@@ -17,6 +17,7 @@ import Animated, {
 import { scheduleOnRN } from "react-native-worklets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../lib/theme-context";
+import type { Theme } from "../lib/themes";
 import { useLang } from "../lib/session";
 import { focusElement, focusRing, isWeb, spaceActivates, webCursor, type PressState } from "../lib/ui";
 import { haptic } from "../lib/haptics";
@@ -41,31 +42,68 @@ export const T = {
 export const tint = (hex: string, a: number) =>
   /^#[0-9a-f]{6}$/i.test(hex) ? hex + Math.round(a * 255).toString(16).padStart(2, "0") : hex;
 
-/* ── Card ── */
-export function Card({
-  children, style, tone = "plain",
-}: { children: React.ReactNode; style?: StyleProp<ViewStyle>; tone?: "plain" | "alert" | "accent" }) {
-  const t = useTheme();
-  const border = tone === "alert" ? t.alert : tone === "accent" ? t.accent : t.line;
+/* ── section hues: each kind of card has a colour, worn by its label and icon badge ── */
+export type Domain = "weather" | "farm" | "market" | "money" | "doctor" | "alerts" | "news" | "season" | "shows" | "store" | "soil" | "quiz" | "herd";
+export function domainColor(t: Theme, d?: Domain): string {
+  switch (d) {
+    case "weather": return t.water;
+    case "farm": return t.ok;
+    case "market": case "money": return t.accent;
+    case "doctor": case "alerts": return t.alert;
+    case "news": case "season": return t.violet;
+    case "shows": case "store": case "soil": return t.amber;
+    case "quiz": return t.teal;
+    case "herd": return t.rose;
+    default: return t.dim;
+  }
+}
+
+/** A small tinted square holding a glyph: the mark of a section. */
+export function IconBadge({ color, size = 28, children }: { color: string; size?: number; children: React.ReactNode }) {
   return (
-    <View style={[{ backgroundColor: t.panel, borderColor: border, borderWidth: 1, borderRadius: 16, padding: 16 }, style]}>
+    <View testID="icon-badge" style={{ width: size, height: size, borderRadius: Math.round(size * 0.34), backgroundColor: tint(color, 0.16), alignItems: "center", justifyContent: "center" }}>
       {children}
     </View>
   );
 }
 
-/* ── Eyebrow: the small mono section label, with an optional right slot ── */
-export function Eyebrow({ text, right, style }: { text: string; right?: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+/* ── Card ── */
+export function Card({
+  children, style, tone = "plain",
+}: { children: React.ReactNode; style?: StyleProp<ViewStyle>; tone?: "plain" | "alert" | "accent" }) {
   const t = useTheme();
+  const light = t.key === "savanna";
+  const border = tone === "alert" ? t.alert : tone === "accent" ? t.accent : t.line;
+  // Depth: a soft shadow on the light theme; on the dark ones a lighter top edge, as if lit from above.
+  const depth: ViewStyle = light
+    ? ({ boxShadow: "0 2px 10px rgba(60, 44, 16, 0.08)" } as ViewStyle)
+    : tone === "plain" ? { borderTopColor: tint(t.ink, 0.14) } : {};
   return (
-    <View style={[{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, minHeight: 22, marginBottom: 10 }, style]}>
-      <Text
-        accessibilityRole="header"
-        aria-level={2}
-        style={{ flexShrink: 1, color: t.dim, fontSize: 11.5, lineHeight: 14, fontWeight: "800", letterSpacing: 1.3, textTransform: "uppercase" }}
-      >
-        {text}
-      </Text>
+    <View style={[{ backgroundColor: t.panel, borderColor: border, borderWidth: 1, borderRadius: 18, padding: 16 }, depth, style]}>
+      {children}
+    </View>
+  );
+}
+
+/* ── Eyebrow: the section label, in its section's colour with an icon badge, and an optional right slot ── */
+export function Eyebrow({
+  text, right, style, domain, icon,
+}: { text: string; right?: React.ReactNode; style?: StyleProp<ViewStyle>; domain?: Domain; icon?: (color: string) => React.ReactNode }) {
+  const t = useTheme();
+  const c = domainColor(t, domain);
+  return (
+    <View style={[{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: icon ? 28 : 22, marginBottom: 12 }, style]} testID={domain ? `eyebrow-${domain}` : undefined}>
+      <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10 }}>
+        {icon ? <IconBadge color={c}>{icon(c)}</IconBadge> : null}
+        <Text
+          accessibilityRole="header"
+          aria-level={2}
+          numberOfLines={2}
+          style={{ flexShrink: 1, color: domain ? c : t.dim, fontSize: 11.5, lineHeight: 14, fontWeight: "800", letterSpacing: 1.3, textTransform: "uppercase" }}
+        >
+          {text}
+        </Text>
+      </View>
       {right}
     </View>
   );
@@ -109,6 +147,7 @@ export function Btn({
             flexDirection: "row", alignItems: "center", justifyContent: kind === "ghost" ? "flex-start" : "center", gap: 8,
             backgroundColor: bg,
             ...(kind === "secondary" ? { borderWidth: 2, borderColor: t.dim } : null),
+            ...(kind === "primary" || kind === "danger" ? { borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.28)" } : null),
             opacity: disabled ? 0.45 : pressed ? 0.9 : 1,
           },
           hovered && !disabled && (kind === "secondary" ? { backgroundColor: t.raised } : kind === "ghost" ? { opacity: 0.8 } : { opacity: 0.92 }),
@@ -180,10 +219,10 @@ export function Tag({ label, tone = "dim", block = false }: { label: string; ton
     <View
       style={[
         { flexDirection: "row", alignItems: block ? "flex-start" : "center", gap: 8, minHeight: 26, paddingHorizontal: 10, backgroundColor: tint(c, 0.16) },
-        block ? { alignSelf: "stretch", borderRadius: 10, paddingVertical: 8 } : { alignSelf: "flex-start", borderRadius: 999 },
+        block ? { alignSelf: "stretch", borderRadius: 12, paddingVertical: 9, paddingLeft: 12, borderLeftWidth: 3, borderLeftColor: c } : { alignSelf: "flex-start", borderRadius: 999 },
       ]}
     >
-      <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: c, marginTop: block ? 5 : 0 }} />
+      {!block && <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: c }} />}
       <Text maxFontSizeMultiplier={1.3} style={{ flexShrink: 1, color: t.ink, fontSize: block ? 13.5 : 12.5, lineHeight: block ? 18 : 16, fontWeight: block ? "600" : "700" }}>{label}</Text>
     </View>
   );

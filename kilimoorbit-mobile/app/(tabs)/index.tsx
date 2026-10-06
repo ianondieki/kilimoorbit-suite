@@ -33,7 +33,7 @@ import { AddCropSheet, FarmProfileSheet, RecordSheet } from "../../components/Fa
 import { Btn, Card, Eyebrow, T, Tag } from "../../components/Kit";
 import { Enter, CountUp, Skeleton } from "../../components/Motion";
 import { DemoTag } from "../../components/ShambaPanel";
-import { ArrowGlyph, BarsGlyph, ChatGlyph, CheckCoin, LensGlyph, PlusGlyph, SignalOffGlyph, SproutGlyph } from "../../components/Glyphs";
+import { ArrowGlyph, BarsGlyph, ChatGlyph, CheckCoin, LensGlyph, PlusGlyph, SignalOffGlyph, SproutGlyph, LeafGlyph } from "../../components/Glyphs";
 import { useTheme } from "../../lib/theme-context";
 import { useLang, useSession } from "../../lib/session";
 import { webLang } from "../../lib/ui";
@@ -214,7 +214,7 @@ function ProblemBanner({ onFix }: { onFix: () => void }) {
       <Text style={{ flex: 1, color: t.ink, ...T.meta, fontWeight: "600" }}>{text}</Text>
       {problem.kind === "apex"
         ? <Btn kind="ghost" small label={tt("result.retry")} onPress={reload} disabled={refreshing} />
-        : <Btn kind="ghost" small label={tt("sentinel.fix")} onPress={onFix} testID="fix-connection" />}
+        : <Btn kind="ghost" small label={tt("sentinel.fix")} onPress={onFix} icon={(c) => <SignalOffGlyph size={14} color={c} />} testID="fix-connection" />}
     </View>
   );
 }
@@ -239,7 +239,7 @@ function TasksCard({ onAddCrop, onAddAnimal, days }: { onAddCrop: () => void; on
 
   return (
     <Card>
-      <Eyebrow text={tt("tasks.eyebrow")} />
+      <Eyebrow domain="farm" icon={(c) => <SproutGlyph size={15} color={c} />} text={tt("tasks.eyebrow")} />
       {!ready || !herdReady ? (
         <Skeleton height={48} color={t.raised} radius={12} />
       ) : !hasCrops && !hasAnimals && !hasStore ? (
@@ -288,7 +288,7 @@ function MarketCard() {
   if (status !== "ready" && !arb)
     return (
       <Card>
-        <Eyebrow text={tt("nav.markets").toUpperCase()} />
+        <Eyebrow domain="market" icon={(c) => <BarsGlyph size={15} color={c} />} text={tt("nav.markets").toUpperCase()} />
         <Skeleton height={14} width={180} color={t.raised} />
         <Skeleton height={36} width={220} color={t.raised} style={{ marginTop: 12 }} />
         <Skeleton height={26} width={160} color={t.raised} radius={999} style={{ marginTop: 12 }} />
@@ -302,7 +302,7 @@ function MarketCard() {
 
   return (
     <Card>
-      <Eyebrow text={tt("market.eyebrow", { crop: cropName(lang, c.crop_type).toUpperCase() })} right={demo ? <DemoTag /> : null} />
+      <Eyebrow domain="market" icon={(c) => <BarsGlyph size={15} color={c} />} text={tt("market.eyebrow", { crop: cropName(lang, c.crop_type).toUpperCase() })} right={demo ? <DemoTag /> : null} />
       <Text style={{ color: t.ink, ...T.title }} {...webLang("en")}>{c.optimal_market_destination}</Text>
       {c.live_market_wholesale_price_per_kg != null && (
         <Text style={{ color: t.dim, ...T.meta, fontFamily: "monospace" }}>KES {c.live_market_wholesale_price_per_kg}/kg</Text>
@@ -343,7 +343,7 @@ function ClimateCard() {
   const tone = lvl === "Low" ? "ok" : lvl === "Medium" ? "warn" : "bad";
   return (
     <Card tone={lvl === "High" || lvl === "Critical" ? "alert" : "plain"}>
-      <Eyebrow text={tt("climate.eyebrow")} right={<Tag label={tt(`climate.level.${lvl}` as Key)} tone={tone} />} />
+      <Eyebrow domain="season" icon={(c) => <LeafGlyph size={15} color={c} />} text={tt("climate.eyebrow")} right={<Tag label={tt(`climate.level.${lvl}` as Key)} tone={tone} />} />
       <Text style={{ color: t.ink, ...T.title }}>
         {risks.length ? tt("climate.watch", { list: risks.join(", ") }) : tt("climate.calm")}
       </Text>

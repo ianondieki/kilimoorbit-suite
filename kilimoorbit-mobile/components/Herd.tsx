@@ -28,7 +28,7 @@ import { DateNudge } from "./FarmSheets";
 import { dueText } from "./TaskRows";
 import TrendTile from "./TrendTile";
 import Field from "./Field";
-import { ChevronGlyph, CrossGlyph, PlusGlyph } from "./Glyphs";
+import { ChevronGlyph, CrossGlyph, PlusGlyph, CoinGlyph, DropGlyph, EggGlyph, CheckGlyph } from "./Glyphs";
 
 /* ── coin ── */
 export function AnimalCoin({ species, size }: { species: Species; size: number }) {
@@ -93,7 +93,7 @@ export function AddAnimalSheet({
       onClose={onClose}
       title={tt("herd.addTitle")}
       testID="sheet-add-animal"
-      footer={<Btn label={tt("herd.add")} onPress={save} style={{ flex: 1 }} testID="animal-save" />}
+      footer={<Btn label={tt("herd.add")} onPress={save} style={{ flex: 1 }} icon={(c) => <CheckGlyph size={15} color={c} />} testID="animal-save" />}
     >
       <Group label={tt("herd.which")}>
         <ChipRow role="radiogroup" label={tt("herd.which")}>
@@ -186,7 +186,7 @@ export function EventSheet({
       onClose={onClose}
       title={tt("ev.title", { event: tt(`ev.${kind}` as Key), name: names })}
       testID="sheet-event"
-      footer={<Btn label={tt("rec.save")} onPress={save} style={{ flex: 1 }} testID="event-save" />}
+      footer={<Btn label={tt("rec.save")} onPress={save} style={{ flex: 1 }} icon={(c) => <CheckGlyph size={15} color={c} />} testID="event-save" />}
     >
       <Group label={tt("ev.date")}>
         <ChipRow role="radiogroup" label={tt("ev.date")}>
@@ -249,7 +249,7 @@ export function MilkSheet({ visible, onClose, animalId }: { visible: boolean; on
       onClose={onClose}
       title={tt("milk.title")}
       testID="sheet-milk"
-      footer={<Btn label={tt("rec.save")} onPress={save} disabled={!who} style={{ flex: 1 }} testID="milk-save" />}
+      footer={<Btn label={tt("rec.save")} onPress={save} disabled={!who} style={{ flex: 1 }} icon={(c) => <CheckGlyph size={15} color={c} />} testID="milk-save" />}
     >
       {milkers.length > 1 && (
         <Group label={tt("milk.who")}>
@@ -334,7 +334,7 @@ export function EggSheet({ visible, onClose, flockId }: { visible: boolean; onCl
       onClose={onClose}
       title={tt("egg.title")}
       testID="sheet-eggs"
-      footer={<Btn label={tt("rec.save")} onPress={save} disabled={!who} style={{ flex: 1 }} testID="egg-save" />}
+      footer={<Btn label={tt("rec.save")} onPress={save} disabled={!who} style={{ flex: 1 }} icon={(c) => <CheckGlyph size={15} color={c} />} testID="egg-save" />}
     >
       {layers.length > 1 && (
         <Group label={tt("egg.who")}>
@@ -471,10 +471,10 @@ function AnimalCard({ a, onRecord, onMilk, onEggs }: { a: Animal; onRecord: (k: 
           <Text style={{ color: t.dim, ...T.meta }}>{sub}</Text>
         </View>
         {isMilker(a) && (
-          <Btn kind="secondary" small label={tt("milk.add")} onPress={onMilk} testID={`milk-${a.id}`} />
+          <Btn kind="secondary" small label={tt("milk.add")} onPress={onMilk} icon={(c) => <PlusGlyph size={13} color={c} />} testID={`milk-${a.id}`} />
         )}
         {canLay(a, today) && (
-          <Btn kind="secondary" small label={tt("egg.add")} onPress={onEggs} testID={`eggs-${a.id}`} />
+          <Btn kind="secondary" small label={tt("egg.add")} onPress={onEggs} icon={(c) => <PlusGlyph size={13} color={c} />} testID={`eggs-${a.id}`} />
         )}
       </View>
       <StatusBlock a={a} />
@@ -575,7 +575,7 @@ function MilkCard({ onAdd }: { onAdd: () => void }) {
   const any = litres.length >= 3;
   return (
     <Card>
-      <Eyebrow text={tt("milk.eyebrow")} />
+      <Eyebrow domain="herd" icon={(c) => <DropGlyph size={15} color={c} />} text={tt("milk.eyebrow")} />
       {any ? (
         <TrendTile
           testID="milk-trend"
@@ -660,7 +660,7 @@ function DeliverySheet({ visible, onClose }: { visible: boolean; onClose: () => 
   };
   const num = (v: string) => v.replace(/[^\d.]/g, "").slice(0, 6);
   return (
-    <Sheet visible={visible} onClose={onClose} title={tt("coop.addTitle")} testID="sheet-delivery" footer={<Btn label={tt("rec.save")} onPress={save} style={{ flex: 1 }} testID="delivery-save" />}>
+    <Sheet visible={visible} onClose={onClose} title={tt("coop.addTitle")} testID="sheet-delivery" footer={<Btn label={tt("rec.save")} onPress={save} style={{ flex: 1 }} icon={(c) => <CheckGlyph size={15} color={c} />} testID="delivery-save" />}>
       <Group label={tt("coop.litres")}>
         <Stepper value={litres} onChange={setLitres} step={0.5} min={0} max={500} format={(v) => `${v} L`} label={tt("coop.litres")} />
       </Group>
@@ -729,7 +729,7 @@ function CoopCard() {
   const st = monthStatement(herd.deliveries, month, herd.coop);
   return (
     <Card>
-      <Eyebrow text={tt("coop.eyebrow", { month: MONTHS[lang][Number(month.slice(5, 7)) - 1].toUpperCase() })} />
+      <Eyebrow domain="money" icon={(c) => <CoinGlyph size={15} color={c} />} text={tt("coop.eyebrow", { month: MONTHS[lang][Number(month.slice(5, 7)) - 1].toUpperCase() })} />
       {herd.deliveries.length === 0 ? (
         <Text style={{ color: t.ink, ...T.body }}>{tt("coop.empty")}</Text>
       ) : (
@@ -773,7 +773,7 @@ function HatchSheet({ visible, onClose }: { visible: boolean; onClose: () => voi
   };
   const today = todayKey();
   return (
-    <Sheet visible={visible} onClose={onClose} title={tt("hatch.title")} testID="sheet-hatch" footer={<Btn label={tt("hatch.save")} onPress={save} disabled={!valid} style={{ flex: 1 }} testID="hatch-save" />}>
+    <Sheet visible={visible} onClose={onClose} title={tt("hatch.title")} testID="sheet-hatch" footer={<Btn label={tt("hatch.save")} onPress={save} disabled={!valid} style={{ flex: 1 }} icon={(c) => <CheckGlyph size={15} color={c} />} testID="hatch-save" />}>
       <Group label={tt("hatch.method")}>
         <ChipRow role="radiogroup" label={tt("hatch.method")}>
           <Chip role="radio" selected={method === "hen"} onPress={() => { setMethod("hen"); if (eggs === "50") setEggs("12"); }} label={tt("hatch.hen")} testID="hatch-hen" />
@@ -809,7 +809,7 @@ function HatchCard() {
   if (!herd.hatches.length) return null;
   return (
     <Card>
-      <Eyebrow text={tt("hatch.eyebrow")} />
+      <Eyebrow domain="herd" icon={(c) => <EggGlyph size={15} color={c} />} text={tt("hatch.eyebrow")} />
       {herd.hatches.map((h, i) => {
         const day = daysBetween(h.set, today);
         const next = hatchSteps(h).find((s) => addDays(h.set, s.day) >= today);
@@ -906,7 +906,7 @@ function EggCard({ onAdd }: { onAdd: () => void }) {
   const trays = week.thisWeek / TRAY;
   return (
     <Card>
-      <Eyebrow text={tt("egg.eyebrow")} />
+      <Eyebrow domain="herd" icon={(c) => <EggGlyph size={15} color={c} />} text={tt("egg.eyebrow")} />
       {any ? (
         <TrendTile
           testID="egg-trend"

@@ -16,7 +16,7 @@ import type { NewsItem } from "../lib/api";
 import { Btn, Card, Eyebrow, T, Tag } from "./Kit";
 import { DemoTag } from "./ShambaPanel";
 import { Skeleton } from "./Motion";
-import { ArrowGlyph, SignalOffGlyph } from "./Glyphs";
+import { ArrowGlyph, SignalOffGlyph, NewsGlyph } from "./Glyphs";
 import Pager from "./Pager";
 
 export function NewsCard({ county }: { county: string | null }) {
@@ -27,7 +27,7 @@ export function NewsCard({ county }: { county: string | null }) {
   const name = (d?.county ?? county ?? "").toUpperCase();
   return (
     <Card>
-      <Eyebrow text={name ? tt("news.eyebrow", { county: name }) : tt("news.eyebrowAll")} right={d?.source === "SAMPLE" ? <DemoTag /> : null} />
+      <Eyebrow domain="news" icon={(c) => <NewsGlyph size={15} color={c} />} text={name ? tt("news.eyebrow", { county: name }) : tt("news.eyebrowAll")} right={d?.source === "SAMPLE" ? <DemoTag /> : null} />
       {news.status === "loading" && !d ? (
         <View style={{ gap: 10 }}>
           <Skeleton height={14} width={"40%"} color={t.raised} />

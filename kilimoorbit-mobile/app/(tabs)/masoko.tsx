@@ -14,7 +14,7 @@ import { Bounded } from "../../components/Bounded";
 import { Btn, Card, Chip, ChipRow, Eyebrow, T, Tag } from "../../components/Kit";
 import { Enter, CountUp, Skeleton } from "../../components/Motion";
 import { CropCoin, DemoTag } from "../../components/ShambaPanel";
-import { ArrowGlyph, RouteGlyph, SignalOffGlyph } from "../../components/Glyphs";
+import { ArrowGlyph, RouteGlyph, SignalOffGlyph, BarsGlyph } from "../../components/Glyphs";
 import TrendTile from "../../components/TrendTile";
 import { Guard } from "../../components/ScreenError";
 import { MyListings, SokoSheet } from "../../components/SokoSell";
@@ -99,7 +99,7 @@ export default function Masoko() {
               </View>
               <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
                 <Btn kind="secondary" label={tt("result.retry")} onPress={s.reload} style={{ flex: 1 }} />
-                <Btn kind="ghost" label={tt("sentinel.fix")} onPress={() => setSheet("connection")} style={{ flex: 1 }} testID="mk-fix-connection" />
+                <Btn kind="ghost" label={tt("sentinel.fix")} onPress={() => setSheet("connection")} style={{ flex: 1 }} icon={(c) => <SignalOffGlyph size={15} color={c} />} testID="mk-fix-connection" />
               </View>
             </Card>
           ) : (
@@ -193,7 +193,7 @@ function PricesCard({
 
   return (
     <Card>
-      <Eyebrow text={tt("mk.prices", { crop: cropName(lang, c.crop).toUpperCase() })} right={demo ? <DemoTag /> : null} />
+      <Eyebrow domain="market" icon={(c) => <BarsGlyph size={15} color={c} />} text={tt("mk.prices", { crop: cropName(lang, c.crop).toUpperCase() })} right={demo ? <DemoTag /> : null} />
       {fresh ? <Text style={{ color: t.dim, ...T.meta, marginTop: -6, marginBottom: 10 }}>{fresh}</Text> : null}
 
       <Field
@@ -293,7 +293,7 @@ function RunCard() {
   const c = arb?.cargo_optimized_route;
   if (!c) {
     if (problem?.kind === "apex")
-      return <Card><Eyebrow text={tt("mk.run")} /><Text style={{ color: t.dim, ...T.body }}>{tt("sentinel.apex")}</Text></Card>;
+      return <Card><Eyebrow domain="market" icon={(c) => <RouteGlyph size={15} color={c} />} text={tt("mk.run")} /><Text style={{ color: t.dim, ...T.body }}>{tt("sentinel.apex")}</Text></Card>;
     return null;
   }
   const flag = c.logistics_risk_flag;
@@ -302,7 +302,7 @@ function RunCard() {
 
   return (
     <Card>
-      <Eyebrow text={tt("mk.run")} right={isDemoBoard({ engine: meta?.engine }) ? <DemoTag /> : null} />
+      <Eyebrow domain="market" icon={(c) => <RouteGlyph size={15} color={c} />} text={tt("mk.run")} right={isDemoBoard({ engine: meta?.engine }) ? <DemoTag /> : null} />
       <Text style={{ color: t.ink, ...T.title }}>
         {tt("mk.runTo", { crop: cropName(lang, c.crop_type), market: c.optimal_market_destination })}
       </Text>
@@ -366,7 +366,7 @@ function DeliveryCard() {
   if (!d) return null;
   return (
     <Card>
-      <Eyebrow text={tt("mk.delivery")} right={<Tag label={tt("mk.inTransit")} tone="warn" />} />
+      <Eyebrow domain="market" icon={(c) => <RouteGlyph size={15} color={c} />} text={tt("mk.delivery")} right={<Tag label={tt("mk.inTransit")} tone="warn" />} />
       <Text style={{ color: t.ink, ...T.title }}>
         {cropName(lang, String(d.crop_type ?? "").toLowerCase())} · <Text style={{ fontFamily: "monospace", fontSize: 14 }}>{d.delivery_id}</Text>
       </Text>

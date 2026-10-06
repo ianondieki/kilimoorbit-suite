@@ -28,7 +28,7 @@ import { DateNudge } from "./FarmSheets";
 import { dueText } from "./TaskRows";
 import Field from "./Field";
 import Segmented from "./Segmented";
-import { ArrowGlyph, CrossGlyph, PlusGlyph } from "./Glyphs";
+import { ArrowGlyph, CrossGlyph, PlusGlyph, BoxGlyph, CheckGlyph } from "./Glyphs";
 
 type TT = (k: Key, v?: Vars) => string;
 
@@ -83,7 +83,7 @@ export function StoreSheet({
       onClose={onClose}
       title={tt("store.addTitle")}
       testID="sheet-store"
-      footer={<Btn label={tt("store.save")} onPress={save} style={{ flex: 1 }} testID="store-save" />}
+      footer={<Btn label={tt("store.save")} onPress={save} style={{ flex: 1 }} icon={(c) => <CheckGlyph size={15} color={c} />} testID="store-save" />}
     >
       <Group label={tt("store.crop")}>
         <ChipRow role="radiogroup" label={tt("store.crop")}>
@@ -323,7 +323,7 @@ export function StoreCard({ onAdd, onSell }: { onAdd: () => void; onSell: (l: Lo
   const lots = farm.store;
   return (
     <Card>
-      <Eyebrow text={tt("store.eyebrow")} />
+      <Eyebrow domain="store" icon={(c) => <BoxGlyph size={15} color={c} />} text={tt("store.eyebrow")} />
       {lots.length === 0 ? (
         <>
           <Text style={{ color: t.ink, ...T.body }}>{tt("store.emptyBody")}</Text>
@@ -449,7 +449,7 @@ export function HoldCard({ crop, qtyKg, demo }: { crop: string; qtyKg: number; d
 
   return (
     <Card>
-      <Eyebrow text={tt("hold.eyebrow", { crop: cropName(lang, crop).toUpperCase() })} right={demo ? <DemoTag /> : null} />
+      <Eyebrow domain="store" icon={(c) => <BoxGlyph size={15} color={c} />} text={tt("hold.eyebrow", { crop: cropName(lang, crop).toUpperCase() })} right={demo ? <DemoTag /> : null} />
       {inStore > 0 && <Text style={{ color: t.dim, ...T.meta, marginTop: -6, marginBottom: 8 }}>{tt("hold.mine", { kg: inStore.toLocaleString("en-KE") })}</Text>}
       <Text style={{ color: plan.worthIt ? t.ok : t.ink, ...T.title }} testID="hold-verdict">
         {plan.worthIt ? tt("hold.yes", { month: MONTHS[lang][best.month], gain: approx(best.gain) }) : tt("hold.no")}

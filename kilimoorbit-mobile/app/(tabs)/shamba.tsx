@@ -24,7 +24,7 @@ import { isStoreCrop, type Lot, type StoreCrop } from "../../lib/postharvest";
 import { Btn, Card, Chip, ChipRow, Empty, Eyebrow, T, Tag, tint } from "../../components/Kit";
 import { Enter, LevelBar } from "../../components/Motion";
 import { CropCoin } from "../../components/ShambaPanel";
-import { ArrowGlyph, BarsGlyph, ChevronGlyph, CrossGlyph, PlusGlyph, SproutGlyph } from "../../components/Glyphs";
+import { ArrowGlyph, BarsGlyph, ChevronGlyph, CrossGlyph, PlusGlyph, SproutGlyph, CoinGlyph } from "../../components/Glyphs";
 import { useTheme } from "../../lib/theme-context";
 import { useLang, useSession } from "../../lib/session";
 import { announce, focusRing, webCursor, webLang, type PressState } from "../../lib/ui";
@@ -348,7 +348,7 @@ function SuggestCard({ onPick, onBudget }: { onPick: (k: CropKey) => void; onBud
   );
   return (
     <Card>
-      <Eyebrow text={tt("suggest.eyebrow", { season: tt(`season.${season.key}.name` as Key).toUpperCase() })} />
+      <Eyebrow domain="farm" icon={(c) => <SproutGlyph size={15} color={c} />} text={tt("suggest.eyebrow", { season: tt(`season.${season.key}.name` as Key).toUpperCase() })} />
       {rainfed.length ? (
         <View style={{ gap: 8 }}>
           <Text style={{ color: t.ink, ...T.body }}>{tt("suggest.rains")}</Text>
@@ -424,7 +424,7 @@ function Records({ onAdd }: { onAdd: () => void }) {
         </View>
         {crops.length > 0 && (
           <View style={{ marginTop: 16 }}>
-            <Eyebrow text={tt("rec.byCrop")} />
+            <Eyebrow domain="money" icon={(c) => <CoinGlyph size={15} color={c} />} text={tt("rec.byCrop")} />
             {crops.map(({ crop, t: c, avgPerKg }) => {
               const best = avgPerKg ? bestQuote(meta?.commodity_feed, crop) : null;
               return (
@@ -470,7 +470,7 @@ function Records({ onAdd }: { onAdd: () => void }) {
       </View>
 
       <Card>
-        <Eyebrow text={tt("rec.recent")} />
+        <Eyebrow domain="money" icon={(c) => <CoinGlyph size={15} color={c} />} text={tt("rec.recent")} />
         {entries.length === 0 ? (
           <Text style={{ color: t.dim, ...T.body }}>{tt("rec.emptyPeriod")}</Text>
         ) : (

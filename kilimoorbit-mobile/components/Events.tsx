@@ -22,7 +22,7 @@ import type { Key } from "../lib/i18n";
 import { Btn, Card, Chip, ChipRow, Eyebrow, Group, Sheet, T, Tag } from "./Kit";
 import { Skeleton } from "./Motion";
 import Field from "./Field";
-import { ArrowGlyph, CheckCoin, SignalOffGlyph } from "./Glyphs";
+import { ArrowGlyph, CheckCoin, SignalOffGlyph, CalendarGlyph } from "./Glyphs";
 import Pager from "./Pager";
 
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/;
@@ -38,7 +38,7 @@ export function ShowsCard({ county }: { county: string }) {
   const list = d?.events.slice(0, 6) ?? [];
   return (
     <Card>
-      <Eyebrow text={tt("shows.eyebrow", { county: (d?.county ?? county).toUpperCase() })} />
+      <Eyebrow domain="shows" icon={(c) => <CalendarGlyph size={15} color={c} />} text={tt("shows.eyebrow", { county: (d?.county ?? county).toUpperCase() })} />
       {shows.status === "loading" && !d ? (
         <View style={{ gap: 10 }}>
           <Skeleton height={44} color={t.raised} radius={10} />
@@ -174,10 +174,10 @@ export function ShowSheet({ show, onClose }: { show: Show | null; onClose: () =>
       testID="sheet-show"
       footer={
         phase === "form" && !mine
-          ? <Btn label={tt("shows.confirm")} onPress={book} style={{ flex: 1 }} testID="show-book" />
+          ? <Btn label={tt("shows.confirm")} onPress={book} style={{ flex: 1 }} icon={(c) => <CalendarGlyph size={16} color={c} />} testID="show-book" />
           : phase === "working"
             ? <Btn label={tt("shows.working")} onPress={() => {}} disabled style={{ flex: 1 }} />
-            : <Btn label={tt("shows.openCalendar")} onPress={() => openLink(calendarUrl)} style={{ flex: 1 }} testID="show-calendar" />
+            : <Btn label={tt("shows.openCalendar")} onPress={() => openLink(calendarUrl)} style={{ flex: 1 }} icon={(c) => <CalendarGlyph size={16} color={c} />} testID="show-calendar" />
       }
     >
       <View style={{ gap: 4 }}>

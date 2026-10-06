@@ -747,3 +747,21 @@ test("Trivia: the slider's dots turn green for a right answer and red for a wron
   await expect(page.getByTestId("trivia-dot-1").locator("div").first()).toHaveCSS("background-color", "rgb(224, 83, 47)"); // Loam: alert
   await expect(page.getByText("2/5 today")).toBeVisible();
 });
+
+test("Design: every section label wears its section's colour with an icon badge; buttons that commit carry an icon", async ({ page }) => {
+  await start(page, "/", "en", { county: "Nakuru" });
+  await expect(page.getByTestId("eyebrow-weather").first().getByRole("heading")).toHaveCSS("color", "rgb(142, 197, 232)"); // Loam: water
+  await expect(page.getByTestId("eyebrow-farm").first().getByRole("heading")).toHaveCSS("color", "rgb(111, 191, 115)"); // Loam: ok
+  await expect(page.getByTestId("eyebrow-quiz").first().getByRole("heading")).toHaveCSS("color", "rgb(124, 212, 193)"); // Loam: teal
+  await expect(page.getByTestId("eyebrow-news").first().getByRole("heading")).toHaveCSS("color", "rgb(201, 185, 242)"); // Loam: violet
+  // the badge is a tinted square before the label
+  const badge = page.getByTestId("eyebrow-weather").first().getByTestId("icon-badge");
+  await expect(badge).toHaveCSS("background-color", "rgba(142, 197, 232, 0.16)");
+  // a committing button shows its icon next to the label
+  await page.getByTestId("trivia-card").scrollIntoViewIfNeeded();
+  const first = byId(pickDaily(todayKey(), {})[0])!;
+  await page.getByTestId(`trivia-option-1-${first.answer}`).click();
+  const next = page.getByTestId("trivia-next").first();
+  await expect(next).toBeVisible();
+  expect(await next.locator("div").count()).toBeGreaterThan(0); // the arrow glyph
+});

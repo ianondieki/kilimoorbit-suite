@@ -16,7 +16,7 @@ import { useSentinel } from "../lib/sentinel";
 import type { Commodity } from "../lib/api";
 import { Btn, Card, Eyebrow, Group, Sheet, Stepper, T } from "./Kit";
 import { CropCoin } from "./ShambaPanel";
-import { ArrowGlyph, CrossGlyph } from "./Glyphs";
+import { ArrowGlyph, CrossGlyph, CoinGlyph } from "./Glyphs";
 
 const bestOf = (c: Commodity) => c.quotes.reduce((m, q) => (q.price > m.price ? q : m));
 
@@ -83,7 +83,7 @@ export function AlertsCard() {
   if (!hits.length) return null;
   return (
     <Card tone="accent">
-      <Eyebrow text={tt("alert.eyebrow")} />
+      <Eyebrow domain="money" icon={(c) => <CoinGlyph size={15} color={c} />} text={tt("alert.eyebrow")} />
       {hits.map((h) => (
         <View key={h.alert.id} style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: 48 }} testID={`alert-hit-${h.alert.crop}`}>
           <CropCoin cropKey={h.alert.crop} size={30} />

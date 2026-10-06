@@ -8,6 +8,7 @@ import { MenuProvider, useMenu } from "../../components/MenuContext";
 import Sidebar from "../../components/Sidebar";
 import { BarsGlyph, ChatGlyph, LensGlyph, SproutGlyph, SunGlyph } from "../../components/Glyphs";
 import { SANS } from "../../lib/typography";
+import { tint } from "../../components/Kit";
 
 export default function TabLayout() {
   const t = useTheme();
@@ -22,6 +23,16 @@ export default function TabLayout() {
     <MenuProvider>
       <TabShell />
     </MenuProvider>
+  );
+}
+
+/** The active tab's icon sits on a tinted pill, the others on nothing. */
+function TabIcon({ focused, children }: { focused: boolean; children: React.ReactNode }) {
+  const t = useTheme();
+  return (
+    <View style={{ width: 54, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: focused ? tint(t.accent, 0.2) : "transparent" }}>
+      {children}
+    </View>
   );
 }
 
@@ -48,7 +59,7 @@ function TabShell() {
               : {
                   backgroundColor: t.panel, borderTopColor: t.line,
                   // Room for 13px farmer-facing labels without clipping.
-                  height: 68 + insets.bottom, paddingTop: 4, paddingBottom: Math.max(8, insets.bottom),
+                  height: 72 + insets.bottom, paddingTop: 6, paddingBottom: Math.max(8, insets.bottom),
                 },
             tabBarActiveTintColor: t.accent,
             tabBarInactiveTintColor: t.dim,
@@ -57,11 +68,11 @@ function TabShell() {
             sceneStyle: { backgroundColor: t.bg },
           }}
         >
-          <Tabs.Screen name="index" options={{ title: tt("nav.today"), tabBarIcon: ({ color }) => <SunGlyph size={22} color={ink(color)} /> }} />
-          <Tabs.Screen name="shamba" options={{ title: tt("nav.farm"), tabBarIcon: ({ color }) => <SproutGlyph size={24} color={ink(color)} /> }} />
-          <Tabs.Screen name="masoko" options={{ title: tt("nav.markets"), tabBarIcon: ({ color }) => <BarsGlyph size={22} color={ink(color)} /> }} />
-          <Tabs.Screen name="daktari" options={{ title: tt("nav.doctorTab"), tabBarAccessibilityLabel: tt("nav.doctor"), tabBarIcon: ({ color }) => <LensGlyph size={22} color={ink(color)} /> }} />
-          <Tabs.Screen name="chat" options={{ title: tt("nav.chatTab"), tabBarAccessibilityLabel: tt("nav.chat"), tabBarIcon: ({ color }) => <ChatGlyph size={22} color={ink(color)} /> }} />
+          <Tabs.Screen name="index" options={{ title: tt("nav.today"), tabBarIcon: ({ color, focused }) => <TabIcon focused={focused}><SunGlyph size={22} color={ink(color)} /></TabIcon> }} />
+          <Tabs.Screen name="shamba" options={{ title: tt("nav.farm"), tabBarIcon: ({ color, focused }) => <TabIcon focused={focused}><SproutGlyph size={24} color={ink(color)} /></TabIcon> }} />
+          <Tabs.Screen name="masoko" options={{ title: tt("nav.markets"), tabBarIcon: ({ color, focused }) => <TabIcon focused={focused}><BarsGlyph size={22} color={ink(color)} /></TabIcon> }} />
+          <Tabs.Screen name="daktari" options={{ title: tt("nav.doctorTab"), tabBarAccessibilityLabel: tt("nav.doctor"), tabBarIcon: ({ color, focused }) => <TabIcon focused={focused}><LensGlyph size={22} color={ink(color)} /></TabIcon> }} />
+          <Tabs.Screen name="chat" options={{ title: tt("nav.chatTab"), tabBarAccessibilityLabel: tt("nav.chat"), tabBarIcon: ({ color, focused }) => <TabIcon focused={focused}><ChatGlyph size={22} color={ink(color)} /></TabIcon> }} />
           {/* Reached from Markets and the sidebar; not a bar tab (five is the most a phone bar holds well). */}
           <Tabs.Screen name="autopilot" options={{ title: tt("nav.autopilot"), href: null }} />
         </Tabs>

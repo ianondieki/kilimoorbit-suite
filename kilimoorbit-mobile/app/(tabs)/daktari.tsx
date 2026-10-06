@@ -16,7 +16,7 @@ import { Bounded } from "../../components/Bounded";
 import { Btn, Card, Chip, ChipRow, Eyebrow, T, Tag } from "../../components/Kit";
 import { Enter } from "../../components/Motion";
 import { CropCoin } from "../../components/ShambaPanel";
-import { ChatGlyph, ChevronGlyph, CrossGlyph } from "../../components/Glyphs";
+import { ChatGlyph, ChevronGlyph, CrossGlyph, LensGlyph } from "../../components/Glyphs";
 import { useTheme } from "../../lib/theme-context";
 import { useLang } from "../../lib/session";
 import { focusRing, webCursor, webLang, type PressState } from "../../lib/ui";
@@ -131,7 +131,7 @@ export default function Daktari() {
           >
             {picked.length > 0 ? (
               <>
-                <Eyebrow text={tt("dr.results")} style={{ marginBottom: 0, marginTop: 4 }} />
+                <Eyebrow domain="doctor" icon={(c) => <LensGlyph size={15} color={c} />} text={tt("dr.results")} style={{ marginBottom: 0, marginTop: 4 }} />
                 {matches.length === 0 ? (
                   <Card><Text style={{ color: t.ink, ...T.body }}>{tt("dr.none")}</Text></Card>
                 ) : (
@@ -144,7 +144,7 @@ export default function Daktari() {
               </>
             ) : (
               <>
-                <Eyebrow text={tt("dr.common", { crop: name.toUpperCase() })} style={{ marginBottom: 0, marginTop: 4 }} />
+                <Eyebrow domain="doctor" icon={(c) => <LensGlyph size={15} color={c} />} text={tt("dr.common", { crop: name.toUpperCase() })} style={{ marginBottom: 0, marginTop: 4 }} />
                 {problemsForSeason(crop, seasonFor().key).map((p, i) => (
                   <Enter key={`c:${crop}:${p.id}`} index={i}>
                     <ProblemCard p={p} crop={crop} />

@@ -17,7 +17,7 @@ import type { Key, Lang, Vars } from "../lib/i18n";
 import { Btn, Card, Eyebrow, T } from "./Kit";
 import { DemoTag } from "./ShambaPanel";
 import { Skeleton } from "./Motion";
-import { CheckCoin, ChevronGlyph, CrossGlyph, SignalOffGlyph, WeatherGlyph } from "./Glyphs";
+import { CheckCoin, ChevronGlyph, CrossGlyph, SignalOffGlyph, WeatherGlyph, SunGlyph } from "./Glyphs";
 
 export type Win = "spray" | "plant" | "dry";
 
@@ -30,7 +30,7 @@ export default function WeatherCard({
 
   return (
     <Card>
-      <Eyebrow
+      <Eyebrow domain="weather" icon={(c) => <SunGlyph size={15} color={c} />}
         text={tt("wx.eyebrow", { county: county.toUpperCase() })}
         right={f?.source === "SAMPLE" ? <DemoTag /> : null}
       />

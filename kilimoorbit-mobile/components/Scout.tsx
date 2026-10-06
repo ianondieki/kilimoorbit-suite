@@ -19,7 +19,7 @@ import { shareScout, usePestWatch } from "../lib/pestwatch";
 import type { Key } from "../lib/i18n";
 import { Btn, Card, CheckRow, Chip, ChipRow, Eyebrow, Group, Sheet, Stepper, T, Tag } from "./Kit";
 import { CropCoin, DemoTag } from "./ShambaPanel";
-import { ArrowGlyph, LensGlyph } from "./Glyphs";
+import { ArrowGlyph, LensGlyph, CheckGlyph } from "./Glyphs";
 
 const acresFmt = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/0$/, ""));
 /** A field the app doesn't know: the farmer says how old the crop is. */
@@ -69,7 +69,7 @@ export function ScoutSheet({ visible, onClose, plantingId }: { visible: boolean;
       onClose={onClose}
       title={tt("scout.title")}
       testID="sheet-scout"
-      footer={<Btn label={tt("scout.save")} onPress={save} style={{ flex: 1 }} testID="scout-save" />}
+      footer={<Btn label={tt("scout.save")} onPress={save} style={{ flex: 1 }} icon={(c) => <CheckGlyph size={15} color={c} />} testID="scout-save" />}
     >
       <Text style={{ color: t.ink, ...T.body }}>{tt("scout.how")}</Text>
       <Text style={{ color: t.dim, ...T.meta }}>{tt("scout.look")}</Text>
@@ -180,7 +180,7 @@ export function ScoutCard({ onScout, onPushPull }: { onScout: () => void; onPush
   const ago = last ? daysBetween(last.date, todayKey()) : 0;
   return (
     <Card tone={v?.act ? "alert" : "plain"}>
-      <Eyebrow text={tt("scout.eyebrow")} />
+      <Eyebrow domain="doctor" icon={(c) => <LensGlyph size={15} color={c} />} text={tt("scout.eyebrow")} />
       {last && v ? (
         <View testID="scout-last">
           <Text style={{ color: t.dim, ...T.meta }}>{tt("scout.lastOn", { date: ago === 0 ? tt("common.today") : dayMonth(lang, last.date) })}</Text>
@@ -225,7 +225,7 @@ export function PestWatchCard({ county, compact = false }: { county: string; com
   const tone = w.level === "high" ? "bad" : w.level === "low" ? "warn" : "ok";
   return (
     <Card tone={compact ? "alert" : "plain"}>
-      <Eyebrow text={tt("watch.eyebrow", { county: w.county.toUpperCase() })} right={w.source === "SAMPLE" ? <DemoTag /> : null} />
+      <Eyebrow domain="alerts" icon={(c) => <LensGlyph size={15} color={c} />} text={tt("watch.eyebrow", { county: w.county.toUpperCase() })} right={w.source === "SAMPLE" ? <DemoTag /> : null} />
       <View testID="pest-watch">
         <Text style={{ color: t.ink, ...T.title }}>
           {w.reports === 0 ? tt("watch.none", { n: w.window_days }) : tt(w.reports === 1 ? "watch.one" : "watch.some", { n: w.reports, d: w.window_days })}

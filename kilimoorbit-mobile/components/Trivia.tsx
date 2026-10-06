@@ -22,7 +22,7 @@ import { byId, liveStreak, todayScore, type Trivia } from "../lib/trivia";
 import { quizActions, useQuiz } from "../lib/quiz";
 import type { Key } from "../lib/i18n";
 import { Btn, Card, Eyebrow, T, Tag, tint } from "./Kit";
-import { CheckGlyph, CrossGlyph } from "./Glyphs";
+import { CheckGlyph, CrossGlyph, BulbGlyph, ArrowGlyph } from "./Glyphs";
 import Pager, { type PagerHandle } from "./Pager";
 
 const LETTERS = ["A", "B", "C", "D"];
@@ -58,7 +58,7 @@ export function TriviaCard() {
 
   return (
     <Card>
-      <Eyebrow
+      <Eyebrow domain="quiz" icon={(c) => <BulbGlyph size={15} color={c} />}
         text={tt("quiz.eyebrow")}
         right={<Animated.View style={bumpStyle}><Tag tone={score.done === score.of ? "ok" : "dim"} label={tt("quiz.score", { done: score.done, of: score.of })} /></Animated.View>}
       />
@@ -134,7 +134,7 @@ function Question({
       {answered && (
         <Animated.View entering={reduce ? undefined : FadeInDown.duration(220)} style={{ gap: 8 }} testID="trivia-why">
           <Tag block tone={ok ? "ok" : "warn"} label={`${tt(ok ? "quiz.right" : "quiz.wrong")} ${pick(lang, item.why)}`} />
-          <Btn kind="secondary" small label={tt(last ? "quiz.finish" : "quiz.next")} onPress={onNext} style={{ alignSelf: "flex-start" }} testID="trivia-next" />
+          <Btn kind="secondary" small label={tt(last ? "quiz.finish" : "quiz.next")} onPress={onNext} style={{ alignSelf: "flex-start" }} icon={(c) => <ArrowGlyph size={15} color={c} />} testID="trivia-next" />
         </Animated.View>
       )}
     </View>
