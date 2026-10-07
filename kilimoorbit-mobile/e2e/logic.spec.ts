@@ -22,7 +22,8 @@ import { alertHits, suggestTarget } from "../lib/pricewatch";
 import { taskHint } from "../lib/advice";
 import { CROPS, CROP_KEYS, acresFromSteps, bagsFor, inputsFor } from "../lib/agronomy";
 import { diagnose } from "../lib/pests";
-import { cleanArb, cleanBooking, cleanFeed, cleanForecast, cleanListing, cleanNews, cleanPestWatch, cleanShows } from "../lib/validate";
+import { cleanArb, cleanBooking, cleanFeed, cleanForecast, cleanListing, cleanNews, cleanPestWatch, cleanShows, cleanNurseryPlan } from "../lib/validate";
+import { fareText, kmText, mapsUrl, minutesText, needLabel } from "../lib/nurseries";
 import type { WxDay } from "../lib/api";
 
 const TODAY = "2026-10-05";
@@ -529,4 +530,36 @@ test.describe("news and shows answers are cleaned", () => {
     expect(b.email).toBe("SIMULATED");
     expect(cleanBooking({ booking_id: "b", token: "t", calendar_url: "data:text/html", ics: "x", remind_on: "2026-10-04", event: {} })).toBeNull();
   });
+});
+
+test("Nurseries: the plan validator keeps well-formed rows, drops malformed ones, clamps lengths; the helpers read right", () => {
+  const good = {
+    need: "avocado", need_label: { en: "Avocado seedlings", sw: "Miche ya parachichi" }, from: { county: "Nakuru", lat: -0.3, lon: 36.07, gps: false }, acres: 2,
+    per_acre: { n: 80, unit: "seedlings", spacing: "7 m × 7 m" },
+    nurseries: [
+      { id: "a", name: "A", kind: "research", town: "T", county: "Nakuru", lat: -0.3, lon: 36.0, carries: ["avocado", 7], url: "https://a.example", distance_km: 3.14, carries_need: true, transport: { mode: "boda", one_way_kes: 100, round_trip_kes: 200, minutes: 7 } },
+      { id: "b", name: "B", kind: "weird", town: "T", county: "Nakuru", lat: -0.3, lon: 36.0, carries: [], url: "javascript:alert(1)", distance_km: 30, carries_need: "yes", transport: { mode: "matatu", round_trip_kes: 300 } },
+      { id: "c" },
+      null,
+    ],
+    advice: { text: "x".repeat(2000), source: "LIVE", lang: "sw" }, steps: [{ agent: "Scout", action: "s", latency_ms: 1 }, { agent: 3 }], generated_at: "now",
+  };
+  const p = cleanNurseryPlan(good)!;
+  expect(p.nurseries.map((n) => n.id)).toEqual(["a", "b"]);
+  expect(p.nurseries[0].carries).toEqual(["avocado"]);
+  expect(p.nurseries[1]).toMatchObject({ kind: "supplier", url: null, carries_need: false, transport: { mode: "matatu", one_way_kes: 0, minutes: 0 } });
+  expect(p.advice.text).toHaveLength(1200);
+  expect(p.advice.source).toBe("LIVE");
+  expect(p.steps).toHaveLength(1);
+  expect(cleanNurseryPlan({ need: "x" })).toBeNull();
+  expect(cleanNurseryPlan("nope")).toBeNull();
+  expect(kmText(0.84)).toBe("0.8 km");
+  expect(kmText(13.8)).toBe("14 km");
+  expect(fareText("en", { mode: "boda", round_trip_kes: 360, minutes: 20 })).toBe("≈ KES 360 by boda, 20 min");
+  expect(fareText("sw", { mode: "matatu", round_trip_kes: 910, minutes: 132 })).toBe("≈ KES 910 kwa matatu, saa 2 dakika 12");
+  expect(fareText("en", { mode: "matatu", round_trip_kes: 1120, minutes: 166 })).toBe("≈ KES 1,120 by matatu, 2 h 46 min"); // long trips read in hours, money with a separator
+  expect(minutesText("en", 120)).toBe("2 h");
+  expect(minutesText("sw", 45)).toBe("dakika 45");
+  expect(mapsUrl(-0.33, 35.95)).toBe("https://www.google.com/maps/dir/?api=1&destination=-0.33000,35.95000");
+  expect(needLabel("sw", "potato")).toBe("Mbegu za viazi");
 });

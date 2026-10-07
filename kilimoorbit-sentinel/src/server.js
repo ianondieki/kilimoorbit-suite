@@ -22,7 +22,8 @@ import nodemailer from "nodemailer";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
-import { callApex, engineMode, MODEL } from "./apex_client.js";
+import { callApex, engineMode, generateText, MODEL } from "./apex_client.js";
+import { NEEDS, nurseriesNear, farmerPosition, planNurseries, validatePlanRequest } from "./agro/nurseries.js";
 import { createSokoRouter } from "./soko/routes.js";
 import { findCounty, forecastFor } from "./agro/weather.js";
 import { boardFor, historyFor } from "./agro/prices.js";
@@ -265,6 +266,26 @@ export function createApp(opts = {}) {
       : null;
   };
   // Sends email, so it is capped like sign-in.
+  // ── Seedlings and seed near the farmer (src/agro/nurseries.js) ─────────
+  const llm = opts.llm === undefined ? generateText : opts.llm;
+  app.get("/api/nurseries", rateLimit({ windowMs: 60_000, max: 60, name: "nurseries" }), (req, res) => {
+    const from = farmerPosition({ county: String(req.query.county ?? ""), lat: Number(req.query.lat), lon: Number(req.query.lon) });
+    if (!from) return res.status(400).json({ error: req.query.county ? "UNKNOWN_COUNTY" : "MISSING_COUNTY" });
+    const need = String(req.query.need ?? "").toLowerCase();
+    if (need && !NEEDS[need]) return res.status(400).json({ error: "UNKNOWN_NEED", needs: Object.keys(NEEDS) });
+    res.json({ from, need: need || null, nurseries: nurseriesNear({ lat: from.lat, lon: from.lon, need: need || undefined, limit: 8 }) });
+  });
+  app.post("/api/nurseries/plan", rateLimit({ windowMs: 60 * 60_000, max: 30, name: "nursery-plan" }), async (req, res) => {
+    const v = validatePlanRequest(req.body);
+    if (v.error) return res.status(400).json(v);
+    try {
+      res.json(await planNurseries(v.input, { llm }));
+    } catch (err) {
+      console.error("[nurseries] plan failed:", err?.message ?? err);
+      res.status(500).json({ error: "PLAN_FAILED" });
+    }
+  });
+
   app.post("/api/events/book", rateLimit({ windowMs: 60 * 60_000, max: 10, name: "booking" }), async (req, res) => {
     const v = validateBooking(req.body);
     if (v.error) return res.status(400).json({ error: v.error, error_type: "VALIDATION_ERROR", fields: v.fields });

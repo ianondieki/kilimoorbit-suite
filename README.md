@@ -4,7 +4,7 @@ Three projects in one repository:
 
 | Folder | What it is | Runs on |
 |---|---|---|
-| `kilimoorbit-sentinel/` | The server: the Gemini-backed APEX engine, farm weather, market prices, the county pest watch, farm news, farm shows with the booking agent, and the Mission Control dashboard | Node.js 20+, port 4517 |
+| `kilimoorbit-sentinel/` | The server: the Gemini-backed APEX engine, farm weather, market prices, the county pest watch, farm news, farm shows with the booking agent, the nursery agent (nearest seedlings and seed, with fares), and the Mission Control dashboard | Node.js 20+, port 4517 |
 | `kilimoorbit-mobile/` | The farmer's app, KilimoOrbit (Expo SDK 57, Kiswahili and English) | Expo Go on Android, or the browser |
 | `soko-mobile/` | The Soko marketplace app (Expo) | Expo Go on Android, or the browser |
 

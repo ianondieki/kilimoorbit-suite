@@ -1,7 +1,7 @@
 /**
  * The app's type, bundled so every phone shows the same letters whatever its
- * system font: Fraunces (a soft serif) for titles, greetings, headlines and
- * the trivia questions; Nunito Sans for everything else, from the 11px
+ * system font: Space Grotesk for titles, greetings, headlines and the trivia
+ * questions; Nunito Sans for everything else, from the 11px
  * eyebrows to the 40° temperature. Android cannot pick a weight out of a
  * custom family by itself, so each weight is its own file and
  * components/Text.tsx maps fontWeight to the right one.
@@ -12,8 +12,8 @@ export const FONTS = {
   NunitoSans_600SemiBold: require("@expo-google-fonts/nunito-sans/600SemiBold/NunitoSans_600SemiBold.ttf"),
   NunitoSans_700Bold: require("@expo-google-fonts/nunito-sans/700Bold/NunitoSans_700Bold.ttf"),
   NunitoSans_800ExtraBold: require("@expo-google-fonts/nunito-sans/800ExtraBold/NunitoSans_800ExtraBold.ttf"),
-  Fraunces_600SemiBold: require("@expo-google-fonts/fraunces/600SemiBold/Fraunces_600SemiBold.ttf"),
-  Fraunces_700Bold: require("@expo-google-fonts/fraunces/700Bold/Fraunces_700Bold.ttf"),
+  SpaceGrotesk_600SemiBold: require("@expo-google-fonts/space-grotesk/600SemiBold/SpaceGrotesk_600SemiBold.ttf"),
+  SpaceGrotesk_700Bold: require("@expo-google-fonts/space-grotesk/700Bold/SpaceGrotesk_700Bold.ttf"),
 };
 
 export type SansWeight = "400" | "500" | "600" | "700" | "800";
@@ -24,10 +24,13 @@ export const SANS: Record<SansWeight, keyof typeof FONTS> = {
   "700": "NunitoSans_700Bold",
   "800": "NunitoSans_800ExtraBold",
 };
-export const SERIF: Record<"600" | "700", keyof typeof FONTS> = {
-  "600": "Fraunces_600SemiBold",
-  "700": "Fraunces_700Bold",
+/** The display face (titles, greetings, headlines, questions). */
+export const DISPLAY: Record<"600" | "700", keyof typeof FONTS> = {
+  "600": "SpaceGrotesk_600SemiBold",
+  "700": "SpaceGrotesk_700Bold",
 };
+/** @deprecated name kept for older imports; the display face is no longer a serif. */
+export const SERIF = DISPLAY;
 
 /** Any React Native fontWeight → the nearest bundled sans weight. */
 export function weightKey(w: string | number | undefined | null): SansWeight {

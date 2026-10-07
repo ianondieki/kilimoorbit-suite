@@ -339,6 +339,21 @@ await check("GET /api/soko/stats → counts by status", async () => {
   return { ok: r.status === 200 && r.body.delivered >= 1 && r.body.cancelled >= 1 && typeof r.body.total === "number", detail: JSON.stringify(r.body) };
 });
 
+await check("GET /api/nurseries → sources near the county, nearest carrying the need first; bad county/need → 400", async () => {
+  const r = await get("/api/nurseries?county=Nakuru&need=potato");
+  const bad = await get("/api/nurseries?county=Nowhere");
+  const badNeed = await get("/api/nurseries?county=Nakuru&need=unicorns");
+  const missing = await get("/api/nurseries");
+  return { ok: r.status === 200 && r.body.from.county === "Nakuru" && r.body.nurseries.length === 8 && r.body.nurseries[0].id === "kalro-njoro" && bad.status === 400 && badNeed.status === 400 && Array.isArray(badNeed.body.needs) && missing.status === 400, detail: `${r.body?.nurseries?.length} rows · ${bad.body?.error}/${badNeed.body?.error}/${missing.body?.error}` };
+});
+
+await check("POST /api/nurseries/plan → the agent's three steps, a plan and the shortlist; hostile bodies → 400", async () => {
+  const r = await post("/api/nurseries/plan", { need: "avocado", county: "Nakuru", acres: 2, lang: "sw", lat: -0.72, lon: 36.43 });
+  const bad = await post("/api/nurseries/plan", { need: "x", county: null, acres: "lots" });
+  const junk = await post("/api/nurseries/plan", "not json at all");
+  return { ok: r.status === 200 && r.body.steps.length === 3 && r.body.advice.source === "MOCK" && r.body.advice.lang === "sw" && r.body.from.gps === true && r.body.nurseries.length === 5 && /miche/.test(r.body.advice.text) && bad.status === 400 && bad.body.fields.need && junk.status === 400, detail: `${r.body?.steps?.map((s) => s.agent).join(">")} · ${bad.body?.error} · junk ${junk.status}` };
+});
+
 await check("Boot: lanAddresses puts the Wi-Fi adapter first and flags vEthernet/WSL/Docker ones", async () => {
   const fake = {
     "vEthernet (WSL (Hyper-V firewall))": [{ address: "172.22.0.1", family: "IPv4", internal: false }],

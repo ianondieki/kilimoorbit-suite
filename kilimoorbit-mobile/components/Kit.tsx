@@ -21,21 +21,21 @@ import type { Theme } from "../lib/themes";
 import { useLang } from "../lib/session";
 import { focusElement, focusRing, isWeb, spaceActivates, webCursor, type PressState } from "../lib/ui";
 import { haptic } from "../lib/haptics";
-import { SERIF } from "../lib/typography";
+import { DISPLAY } from "../lib/typography";
 import { CheckGlyph, CrossGlyph, MinusGlyph, PlusGlyph } from "./Glyphs";
 
-/* ── type scale (Nunito Sans; the three serif presets are Fraunces) ── */
+/* ── type scale (Nunito Sans; the three display presets are Space Grotesk) ── */
 export const T = {
   title: { fontSize: 17, lineHeight: 22, fontWeight: "700" as const },
   body: { fontSize: 15.5, lineHeight: 22 },
   meta: { fontSize: 13, lineHeight: 18 },
   big: { fontSize: 32, lineHeight: 38, fontWeight: "800" as const },
   /** A headline inside a card: a news title, a show's name, a trivia question. */
-  headline: { fontFamily: SERIF["600"], fontSize: 19, lineHeight: 26 },
+  headline: { fontFamily: DISPLAY["600"], fontSize: 19, lineHeight: 26 },
   /** A screen's greeting or a sheet's title. */
-  display: { fontFamily: SERIF["600"], fontSize: 24, lineHeight: 30 },
+  display: { fontFamily: DISPLAY["600"], fontSize: 24, lineHeight: 30 },
   /** The one big line on a screen. */
-  displayLg: { fontFamily: SERIF["700"], fontSize: 30, lineHeight: 36 },
+  displayLg: { fontFamily: DISPLAY["700"], fontSize: 30, lineHeight: 36 },
 };
 
 /** "#RRGGBB" + alpha (0..1) → "#RRGGBBAA". Theme colours are all 6-digit hex. */
@@ -76,7 +76,7 @@ export function Card({
   const border = tone === "alert" ? t.alert : tone === "accent" ? t.accent : t.line;
   // Depth: a soft shadow on the light theme; on the dark ones a lighter top edge, as if lit from above.
   const depth: ViewStyle = light
-    ? ({ boxShadow: "0 2px 10px rgba(60, 44, 16, 0.08)" } as ViewStyle)
+    ? ({ boxShadow: "0 1px 2px rgba(16, 42, 29, 0.05), 0 2px 8px rgba(16, 42, 29, 0.06)" } as ViewStyle)
     : tone === "plain" ? { borderTopColor: tint(t.ink, 0.14) } : {};
   return (
     <View style={[{ backgroundColor: t.panel, borderColor: border, borderWidth: 1, borderRadius: 18, padding: 16 }, depth, style]}>

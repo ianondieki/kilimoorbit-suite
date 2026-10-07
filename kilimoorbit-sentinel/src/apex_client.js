@@ -896,6 +896,29 @@ async function generateLive(payload) {
   throw lastErr;
 }
 
+/**
+ * Free text for the small agents (the nursery advisor): LIVE answers come from
+ * the model; MOCK, no key, or any failure returns null so the caller writes
+ * its own deterministic text. Never throws.
+ */
+export async function generateText({ system, prompt, maxOutputTokens = 420, temperature = 0.3 }) {
+  if (engineMode() !== "LIVE") return null;
+  try {
+    const response = await withTimeout(
+      getClient().models.generateContent({
+        model: MODEL,
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        config: { systemInstruction: system, temperature, maxOutputTokens },
+      }),
+      LIVE_TIMEOUT_MS
+    );
+    const text = String(response.text ?? "").trim();
+    return text || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function callApex(payload) {
   try {
     const p = isObj(payload) ? payload : {};

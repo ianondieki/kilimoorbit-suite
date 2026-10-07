@@ -361,6 +361,64 @@ await check("shows: the booking agent runs scout → planner → messenger → r
   };
 });
 
+/* ── seedlings near the farmer (src/agro/nurseries.js) ── */
+const nz = await import("../agro/nurseries.js");
+
+await check("Nurseries: every entry has a known county, coordinates in Kenya and known needs", async () => {
+  const bad = nz.NURSERIES.filter((n) => !findCounty(n.county) || !(n.lat > -5 && n.lat < 5.5 && n.lon > 33.5 && n.lon < 42) || n.carries.some((c) => !nz.NEEDS[c]) || !/^https:\/\//.test(n.url));
+  const ids = new Set(nz.NURSERIES.map((n) => n.id));
+  return { ok: bad.length === 0 && ids.size === nz.NURSERIES.length && nz.NURSERIES.length >= 30, detail: `${nz.NURSERIES.length} entries, ${bad.length} bad` };
+});
+
+await check("Nurseries: sources carrying the need come first, nearest first, then the nearest others", async () => {
+  const rows = nz.nurseriesNear({ lat: -0.3, lon: 36.07, need: "potato", limit: 5 }); // Nakuru town
+  const carrying = rows.filter((r) => r.carries_need);
+  const sorted = carrying.every((r, i) => i === 0 || r.distance_km >= carrying[i - 1].distance_km);
+  return { ok: rows.length === 5 && carrying.length >= 3 && carrying[0].id === "kalro-njoro" && sorted && rows.every((r) => r.transport.round_trip_kes > 0), detail: rows.map((r) => `${r.id} ${r.distance_km}km${r.carries_need ? "" : " (other)"}`).join(", ") };
+});
+
+await check("Nurseries: transport quotes the cheaper of boda and matatu, so the fare grows with distance", async () => {
+  const a = nz.transportEstimate(4), b = nz.transportEstimate(40), c = nz.transportEstimate(13.8);
+  const fares = [1, 3, 6, 7, 10, 14, 20, 45, 120].map((km) => nz.transportEstimate(km).round_trip_kes);
+  const monotonic = fares.every((f, i) => i === 0 || f >= fares[i - 1]);
+  return {
+    ok: a.mode === "boda" && b.mode === "matatu" && c.mode === "matatu" && monotonic && b.round_trip_kes > a.round_trip_kes && a.minutes >= 5 && b.minutes > a.minutes && c.round_trip_kes === 430 && c.minutes === 36,
+    detail: `${a.mode} KES ${a.round_trip_kes} · ${c.mode} KES ${c.round_trip_kes} · ${b.mode} KES ${b.round_trip_kes} · ${fares.join("<")}`,
+  };
+});
+
+await check("Nurseries: the farmer's position is the GPS fix when plausible, else the county centre", async () => {
+  const gps = nz.farmerPosition({ county: "Nakuru", lat: -0.72, lon: 36.43 });
+  const far = nz.farmerPosition({ county: "Nakuru", lat: 48.8, lon: 2.3 }); // Paris: ignored
+  const none = nz.farmerPosition({ county: "Atlantis" });
+  return { ok: gps.gps === true && gps.lat === -0.72 && far.gps === false && far.county === "Nakuru" && none === null, detail: `${gps.lat},${gps.lon} · fallback ${far.lat},${far.lon}` };
+});
+
+await check("Nurseries: validation names each bad field; acres default to 1", async () => {
+  const bad = nz.validatePlanRequest({ need: "unicorns", county: "Nowhere", acres: -3 });
+  const ok = nz.validatePlanRequest({ need: "Avocado", county: "nakuru" });
+  return { ok: bad.error === "VALIDATION_ERROR" && bad.fields.need && bad.fields.county && bad.fields.acres && ok.input.need === "avocado" && ok.input.county === "Nakuru" && ok.input.acres === 1 && ok.input.lang === "en", detail: JSON.stringify(bad.fields) };
+});
+
+await check("Nurseries: the agent writes a deterministic plan without a model, and uses the model's text when it answers", async () => {
+  const fixed = () => new Date("2026-10-07T08:00:00Z");
+  const mock = await nz.planNurseries({ need: "avocado", county: "Nakuru", acres: 2, lang: "en" }, { llm: null, now: fixed });
+  const live = await nz.planNurseries({ need: "avocado", county: "Nakuru", acres: 2, lang: "sw" }, { llm: async () => "  **Nenda** KALRO kwanza.  ", now: fixed });
+  const steps = mock.steps.map((s) => s.agent).join(">");
+  return {
+    ok: steps === "Scout>Planner>Advisor" && mock.advice.source === "MOCK" && /160 seedlings/.test(mock.advice.text) && /Confirm/.test(mock.advice.text)
+      && live.advice.source === "LIVE" && live.advice.text === "Nenda KALRO kwanza." && mock.per_acre.n === 80 && mock.nurseries.length === 5 && mock.from.gps === false
+      && /^Searched 39 sources near Nakuru$/.test(mock.steps[0].action) && /^Imetafuta vyanzo 39 karibu na Nakuru$/.test(live.steps[0].action) && /modeli/.test(live.steps[2].action), // the step lines follow the farmer's language
+    detail: `${steps} · ${mock.advice.text.slice(0, 60)}…`,
+  };
+});
+
+await check("Nurseries: a model that throws or answers nothing falls back to the directory plan", async () => {
+  const boom = await nz.planNurseries({ need: "tea", county: "Kericho", acres: 0.5, lang: "en" }, { llm: async () => { throw new Error("quota"); } });
+  const empty = await nz.planNurseries({ need: "tea", county: "Kericho", acres: 0.5, lang: "en" }, { llm: async () => "" });
+  return { ok: boom.advice.source === "MOCK" && empty.advice.source === "MOCK" && boom.nurseries[0].id === "tri-kericho" && /2,800 cuttings/.test(boom.advice.text), detail: boom.advice.text.slice(0, 80) };
+});
+
 console.log("─".repeat(57));
 const ok = passed === total;
 console.log((ok ? C.green : C.red)(C.bold(`  ${ok ? "✓" : "✗"} ${passed}/${total} farm weather, prices, pest watch, news + shows tests passed`)));

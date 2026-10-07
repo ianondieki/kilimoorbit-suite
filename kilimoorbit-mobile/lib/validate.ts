@@ -5,9 +5,7 @@
  * proxy error page or a half-written cache shows "no data", never a crash.
  * Each cleaner returns null when there's nothing usable.
  */
-import type {
-  ArbitrageResult, Booking, CommodityFeed, Forecast, Meta, News, NewsItem, PestWatch, PriceHistory, Show, Shows, Sky, SokoListing, SokoStatus, Verdict, WxDay,
-} from "./api";
+import type { ArbitrageResult, Booking, CommodityFeed, Forecast, Meta, News, NewsItem, PestWatch, PriceHistory, Show, Shows, Sky, SokoListing, SokoStatus, Verdict, WxDay, Nursery, NurseryPlan } from "./api";
 
 const obj = (v: unknown): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v);
 const num = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -236,6 +234,33 @@ export function cleanShows(s: unknown): Shows | null {
 }
 
 const EMAIL_STATES = ["SENT", "SIMULATED", "NONE", "FAILED"] as const;
+const NURSERY_KINDS = ["research", "forestry", "training", "seed", "supplier"];
+/** A nursery plan from the server, or null when it is not one. */
+export function cleanNurseryPlan(p: unknown): NurseryPlan | null {
+  if (!obj(p) || !str(p.need) || !obj(p.from) || !str(p.from.county) || !num(p.from.lat) || !num(p.from.lon) || !obj(p.advice) || !str(p.advice.text) || !obj(p.per_acre)) return null;
+  const nurseries = arr(p.nurseries)
+    .filter((n) => obj(n) && str(n.id) && str(n.name) && str(n.town) && str(n.county) && num(n.lat) && num(n.lon) && num(n.distance_km) && obj(n.transport) && num(n.transport.round_trip_kes))
+    .slice(0, 8)
+    .map((n): Nursery => ({
+      id: n.id.slice(0, 40), name: n.name.slice(0, 120), kind: NURSERY_KINDS.includes(n.kind) ? n.kind : "supplier", town: n.town.slice(0, 40), county: n.county.slice(0, 40),
+      lat: n.lat, lon: n.lon, carries: arr(n.carries).filter((c) => typeof c === "string").map((c: string) => c.slice(0, 20)).slice(0, 12),
+      url: httpUrl(n.url) ? n.url.slice(0, 300) : null, distance_km: Math.max(0, n.distance_km), carries_need: n.carries_need === true,
+      transport: { mode: n.transport.mode === "boda" ? "boda" : "matatu", one_way_kes: num(n.transport.one_way_kes) ? n.transport.one_way_kes : 0, round_trip_kes: n.transport.round_trip_kes, minutes: num(n.transport.minutes) ? n.transport.minutes : 0 },
+    }));
+  const steps = arr(p.steps)
+    .filter((x) => obj(x) && str(x.agent) && str(x.action))
+    .map((x) => ({ agent: x.agent.slice(0, 20), action: x.action.slice(0, 200), latency_ms: num(x.latency_ms) ? x.latency_ms : 0 }));
+  return {
+    need: p.need.slice(0, 20),
+    need_label: { en: obj(p.need_label) && str(p.need_label.en) ? p.need_label.en.slice(0, 60) : p.need, sw: obj(p.need_label) && str(p.need_label.sw) ? p.need_label.sw.slice(0, 60) : p.need },
+    from: { county: p.from.county.slice(0, 40), lat: p.from.lat, lon: p.from.lon, gps: p.from.gps === true },
+    acres: num(p.acres) && p.acres > 0 ? p.acres : 1,
+    per_acre: { n: num(p.per_acre.n) ? p.per_acre.n : 0, unit: str(p.per_acre.unit) ? p.per_acre.unit.slice(0, 20) : "", spacing: str(p.per_acre.spacing) ? p.per_acre.spacing.slice(0, 30) : "" },
+    nurseries, advice: { text: p.advice.text.slice(0, 1200), source: p.advice.source === "LIVE" ? "LIVE" : "MOCK", lang: p.advice.lang === "sw" ? "sw" : "en" },
+    steps, generated_at: str(p.generated_at) ? p.generated_at.slice(0, 40) : "",
+  };
+}
+
 export function cleanBooking(b: unknown): Booking | null {
   if (!obj(b) || !str(b.booking_id) || !str(b.token) || !httpUrl(b.calendar_url) || !str(b.ics) || !str(b.remind_on) || !DAY.test(b.remind_on)) return null;
   const event = cleanShowBase(b.event);

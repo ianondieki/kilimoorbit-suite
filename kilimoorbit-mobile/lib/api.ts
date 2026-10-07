@@ -1,5 +1,5 @@
 import { getApiBase, hydrateApiBase } from "./config";
-import { cleanBooking, cleanForecast, cleanHistory, cleanListing, cleanMeta, cleanNews, cleanPestWatch, cleanShows } from "./validate";
+import { cleanBooking, cleanForecast, cleanHistory, cleanListing, cleanMeta, cleanNews, cleanNurseryPlan, cleanPestWatch, cleanShows } from "./validate";
 
 /* ── Apex v2.0 result types (the fields the app renders) ── */
 export type ArbitrageResult = {
@@ -199,6 +199,20 @@ export type Show = {
   estimated: boolean; days_until: number; distance_km: number;
 };
 export type Shows = { county: string; today: string; theme: string; source: string; events: Show[] };
+
+/* ── seedlings and seed near the farmer ── */
+export type Nursery = {
+  id: string; name: string; kind: "research" | "forestry" | "training" | "seed" | "supplier"; town: string; county: string;
+  lat: number; lon: number; carries: string[]; url: string | null; distance_km: number; carries_need: boolean;
+  transport: { mode: "boda" | "matatu"; one_way_kes: number; round_trip_kes: number; minutes: number };
+};
+export type NurseryPlan = {
+  need: string; need_label: { en: string; sw: string }; from: { county: string; lat: number; lon: number; gps: boolean }; acres: number;
+  per_acre: { n: number; unit: string; spacing: string }; nurseries: Nursery[];
+  advice: { text: string; source: "LIVE" | "MOCK"; lang: "sw" | "en" }; steps: BookingStep[]; generated_at: string;
+};
+export const planNurseries = (body: { need: string; county: string; acres?: number; lang: "sw" | "en"; lat?: number; lon?: number }) =>
+  post<NurseryPlan>("/api/nurseries/plan", body, 60000).then((r) => must(cleanNurseryPlan(r), "nursery plan"));
 export const getShows = async (county: string) =>
   must(cleanShows(await request<unknown>(`/api/events?county=${encodeURIComponent(county)}`, undefined, 10000)), "shows");
 

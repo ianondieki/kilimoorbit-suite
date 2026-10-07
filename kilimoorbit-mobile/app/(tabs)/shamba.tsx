@@ -26,6 +26,7 @@ import { Enter, LevelBar } from "../../components/Motion";
 import { CropCoin } from "../../components/ShambaPanel";
 import { ArrowGlyph, BarsGlyph, ChevronGlyph, CrossGlyph, PlusGlyph, CoinGlyph } from "../../components/Glyphs";
 import Icon from "../../components/Icon";
+import { NurseriesCard } from "../../components/Nurseries";
 import { useTheme } from "../../lib/theme-context";
 import { useLang, useSession } from "../../lib/session";
 import { announce, focusRing, webCursor, webLang, type PressState } from "../../lib/ui";
@@ -176,6 +177,7 @@ function Calendar({ actions }: { actions: CropActions }) {
       {farm.store.length > 0 || farm.plantings.some((p) => isStoreCrop(p.crop) && daysBetween(p.plantedOn, todayKey()) >= CROPS[p.crop].daysToHarvest - 14) ? (
         <Guard name="store"><StoreCard onAdd={actions.onStore} onSell={actions.onSell} /></Guard>
       ) : null}
+      <Guard name="nurseries"><NurseriesCard /></Guard>
       <SuggestCard onPick={onAdd} onBudget={() => actions.onBudget()} />
     </View>
   );

@@ -44,6 +44,7 @@ async function start(
       lang: l, signedInAt: new Date().toISOString(), serverAck: true,
     }));
     localStorage.setItem("ko-lang", l);
+    localStorage.setItem("ko-theme", "loam"); // the colour assertions below are Loam's; the default theme has its own test
     if (f) {
       const key = (n: number) => {
         const d = new Date(); d.setDate(d.getDate() - n);
@@ -648,6 +649,7 @@ test("Farm news: the county's story comes first and opens; a sample tip opens th
 test("Farm shows: the nearest shows slide; booking runs the agent, offers Google Calendar, and can be cancelled", async ({ page, context }) => {
   await context.route("http://localhost:4517/api/events?**", (r) => r.fulfill(json(SHOWS)));
   await context.route("http://localhost:4517/api/events/book", (r) => r.fulfill(json(BOOKING, 201)));
+  await page.clock.setFixedTime(new Date("2026-10-05T10:00:00")); // two days before the stubbed Kitale show, whatever today is
   await start(page, "/", "en", { county: "Nakuru" });
   const card = page.getByTestId("shows-card");
   await card.scrollIntoViewIfNeeded();
@@ -716,18 +718,18 @@ test("Markets: each crop chip carries today's best price; there is no ticker", a
   await expect(page.getByText(/E-BODA/)).toHaveCount(0);
 });
 
-test("Type: the bundled serif and sans are loaded and used (greeting and question in Fraunces, the rest in Nunito Sans)", async ({ page }) => {
+test("Type: the bundled display and text faces are loaded and used (greeting and question in Space Grotesk, the rest in Nunito Sans)", async ({ page }) => {
   await start(page, "/", "en", { county: "Nakuru" });
   await expect(page.getByText("0/5 today")).toBeVisible();
   const loaded = await page.evaluate(async () => {
     await document.fonts.ready;
     return [...document.fonts].filter((f) => f.status === "loaded").map((f) => f.family);
   });
-  expect(loaded).toEqual(expect.arrayContaining(["Fraunces_600SemiBold", "NunitoSans_400Regular", "NunitoSans_700Bold"]));
+  expect(loaded).toEqual(expect.arrayContaining(["SpaceGrotesk_600SemiBold", "NunitoSans_400Regular", "NunitoSans_700Bold"]));
   const greeting = page.getByRole("heading").filter({ hasText: /^(Good (morning|afternoon|evening|night)|Hello|Habari|Jambo)/ }).first();
-  await expect(greeting).toHaveCSS("font-family", /Fraunces_600SemiBold/);
+  await expect(greeting).toHaveCSS("font-family", /SpaceGrotesk_600SemiBold/);
   const first = byId(pickDaily(todayKey(), {})[0])!;
-  await expect(page.getByTestId("trivia-card").getByText(first.q.en)).toHaveCSS("font-family", /Fraunces_600SemiBold/);
+  await expect(page.getByTestId("trivia-card").getByText(first.q.en)).toHaveCSS("font-family", /SpaceGrotesk_600SemiBold/);
   await expect(page.getByText("0/5 today")).toHaveCSS("font-family", /NunitoSans_700Bold/);
   await expect(page.getByTestId("trivia-option-1-0").getByText(first.options[0].en)).toHaveCSS("font-family", /NunitoSans_600SemiBold/);
 });
@@ -781,4 +783,62 @@ test("Weather: the hero draws the sky for the conditions and the hour, with stat
   await expect(page.getByTestId("wx-stat-rain")).toContainText("82%");
   await expect(page.getByTestId("wx-live")).toContainText("Open-Meteo");
   await expect(page.getByTestId("eyebrow-weather").first().getByText("DEMO", { exact: true })).toHaveCount(0); // a live forecast carries no sample tag (other cards may)
+});
+
+const NURSERY_PLAN = {
+  need: "potato", need_label: { en: "Certified seed potato", sw: "Mbegu za viazi zilizothibitishwa" }, from: { county: "Nakuru", lat: -0.3, lon: 36.07, gps: false }, acres: 2,
+  per_acre: { n: 1000, unit: "kg of seed", spacing: "75 cm × 30 cm" },
+  nurseries: [
+    { id: "kalro-njoro", name: "KALRO Njoro (Food Crops Research)", kind: "research", town: "Njoro", county: "Nakuru", lat: -0.33, lon: 35.95, carries: ["potato", "maize", "grass"], url: "https://www.kalro.org", distance_km: 13.8, carries_need: true, transport: { mode: "matatu", one_way_kes: 220, round_trip_kes: 430, minutes: 36 } },
+    { id: "egerton-njoro", name: "Egerton University seed unit, Njoro", kind: "research", town: "Njoro", county: "Nakuru", lat: -0.37, lon: 35.93, carries: ["potato", "vegetables"], url: "https://www.egerton.ac.ke", distance_km: 17.3, carries_need: true, transport: { mode: "matatu", one_way_kes: 230, round_trip_kes: 460, minutes: 41 } },
+    { id: "simlaw-nakuru", name: "Simlaw Seeds, Nakuru", kind: "supplier", town: "Nakuru", county: "Nakuru", lat: -0.29, lon: 36.07, carries: ["vegetables", "maize"], url: "https://simlaw.co.ke", distance_km: 1.1, carries_need: false, transport: { mode: "boda", one_way_kes: 70, round_trip_kes: 140, minutes: 5 }, junk: { nested: true } },
+    { id: "broken", name: 5 },
+  ],
+  advice: { text: "Try KALRO Njoro first (Njoro, about 13.8 km from you): it carries certified seed potato. Ask for certified seed of Shangi. For 2 acres you need about 2,000 kg of seed. Confirm they have stock before travelling.", source: "MOCK", lang: "en" },
+  steps: [{ agent: "Scout", action: "Searched 39 sources near Nakuru", latency_ms: 2 }, { agent: "Planner", action: "Worked out quantities for 2 acre(s) and the fare to each source", latency_ms: 3 }, { agent: "Advisor", action: "Wrote the plan from the directory", latency_ms: 4 }],
+  generated_at: "2026-10-07T08:00:00.000Z",
+};
+
+test("Seedlings near you: pick a need, the agent lists the nearest sources with the fare, a plan, and the verify note", async ({ page, context }) => {
+  await context.route("http://localhost:4517/api/nurseries/plan", (r) => r.fulfill(json(NURSERY_PLAN)));
+  await start(page, "/shamba", "en", { county: "Nakuru", plantings: [planted("potatoes", 10, 2)] });
+  const card = page.getByTestId("nurseries-card");
+  await card.scrollIntoViewIfNeeded();
+  await expect(card).toContainText("Get seedlings and seed without travelling far");
+  await expect(page.getByTestId("nz-need-potato")).toHaveAttribute("aria-checked", "true"); // a potato grower starts on seed potato
+  await page.getByTestId("nz-need-avocado").click();
+  await page.getByTestId("nz-need-potato").click();
+  await page.getByTestId("nz-find").click();
+  const sheet = page.getByTestId("sheet-nurseries");
+  await expect(sheet).toContainText("Seed potato · From the centre of Nakuru county");
+  await expect(page.getByTestId("nz-step-2")).toContainText("Advisor");
+  const results = page.getByTestId("nz-results");
+  await expect(results).toContainText("For 2 acre(s): about 2,000 kg of seed (spacing 75 cm × 30 cm)");
+  await expect(page.getByTestId("nz-row-kalro-njoro")).toContainText("14 km");
+  await expect(page.getByTestId("nz-row-kalro-njoro")).toContainText("Carries seed potato · ≈ KES 430 by matatu, 36 min");
+  await expect(page.getByTestId("nz-row-simlaw-nakuru")).toContainText("Nearest source; ask where to get it");
+  await expect(page.getByTestId("nz-row-broken")).toHaveCount(0); // the malformed row was dropped by the validator
+  await expect(results).toContainText("Try KALRO Njoro first");
+  await expect(results.getByText("DEMO", { exact: true })).toBeVisible(); // no model wrote the plan
+  await expect(results).toContainText("Confirm by phone or through the county agricultural office");
+  await expect(page.getByTestId("nz-directions-kalro-njoro")).toBeVisible();
+});
+
+test("Seedlings near you: a server that fails leaves the sheet with a plain message, never a crash", async ({ page, context }) => {
+  await context.route("http://localhost:4517/api/nurseries/plan", (r) => r.fulfill({ status: 500, contentType: "application/json", body: "{\"error\":\"PLAN_FAILED\"}" }));
+  await start(page, "/shamba", "en", { county: "Nakuru" });
+  await page.getByTestId("nurseries-card").scrollIntoViewIfNeeded();
+  await page.getByTestId("nz-find").click();
+  await expect(page.getByTestId("sheet-nurseries")).toContainText("The agent couldn't search right now");
+});
+
+test("Theme: with nothing chosen the app opens in the daylight Shamba theme; the Today hero carries the stats strip", async ({ page }) => {
+  await start(page, "/", "en", { county: "Nakuru", plantings: [planted("maize", 25, 1.5)] });
+  await page.evaluate(() => localStorage.removeItem("ko-theme"));
+  await page.reload();
+  const hero = page.getByTestId("today-hero");
+  await expect(hero).toBeVisible();
+  await expect(hero).toHaveCSS("background-color", "rgb(0, 35, 26)"); // the forest green of the daylight theme
+  await expect(page.getByTestId("hero-stats")).toContainText("Tasks this week");
+  await expect(page.getByTestId("hero-stats")).toContainText("Next rain");
 });

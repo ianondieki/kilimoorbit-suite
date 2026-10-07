@@ -554,6 +554,16 @@ function LoginScreen({ edit, leaving }: { edit: boolean; leaving: React.MutableR
           {!edit && <Text style={[{ marginTop: wide ? 8 : 6, color: t.dim, fontSize: wide ? 18 : 17, lineHeight: wide ? 26 : 24, fontWeight: "500" }, wide && { maxWidth: 420 }]}>
             {tt("form.sub")}
           </Text>}
+          {!edit && (
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 14 }} testID="login-stats">
+              {([["47", tt("login.stat.counties")], ["7", tt("login.stat.forecast")], ["2", tt("login.stat.langs")]] as const).map(([v, l]) => (
+                <View key={l} style={{ flex: 1, borderRadius: 12, borderWidth: 1, borderColor: t.line, backgroundColor: t.panel, paddingVertical: 10, paddingHorizontal: 10, gap: 2 }}>
+                  <Text display style={{ color: t.ink, fontSize: 22, lineHeight: 26 }}>{v}</Text>
+                  <Text numberOfLines={2} style={{ color: t.dim, fontSize: 10.5, lineHeight: 13, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase" }}>{l}</Text>
+                </View>
+              ))}
+            </View>
+          )}
           {offline && <Banner kind="offline" text={tt("form.offlineBanner")} style={{ marginTop: wide ? 16 : 14 }} />}
           {banner === "rejected" && <Banner kind="rejected" text={tt("form.rejected")} style={{ marginTop: wide ? 16 : 14 }} />}
         </>

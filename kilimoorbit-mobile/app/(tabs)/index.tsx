@@ -7,6 +7,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { View, ScrollView, RefreshControl, useWindowDimensions } from "react-native";
 import Text from "../../components/Text";
 import Icon from "../../components/Icon";
+import { TodayHero, type HeroStat } from "../../components/Hero";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect } from "expo-router";
 import Header from "../../components/Header";
@@ -38,9 +39,9 @@ import { ArrowGlyph, BarsGlyph, ChatGlyph, CheckCoin, LensGlyph, PlusGlyph, Sign
 import { useTheme } from "../../lib/theme-context";
 import { useLang, useSession } from "../../lib/session";
 import { webLang } from "../../lib/ui";
-import { cropName, isDemoBoard } from "../../lib/prices";
+import { bestQuote, cropName, isDemoBoard } from "../../lib/prices";
 import { seasonFor } from "../../lib/season";
-import { longDay, todayKey } from "../../lib/dates";
+import { longDay, todayKey, weekdayShort } from "../../lib/dates";
 import { useFarm, upcomingTasks } from "../../lib/farm";
 import { pick } from "../../lib/agronomy";
 import { useForecast } from "../../lib/weather";
@@ -76,6 +77,25 @@ export default function Today() {
   const season = seasonFor();
 
   // "Listen": the morning glance read aloud (low-literacy friendly), in the farmer's language.
+  // The three numbers on the hero: the next rain, today's best price for the main crop, the tasks due.
+  const heroStats = useMemo<HeroStat[]>(() => {
+    const days = wx.data?.days ?? [];
+    const rainDay = days.find((d) => d.rain_chance >= 50);
+    const feed = sentinel.meta?.commodity_feed;
+    const main = farm.plantings[0]?.crop;
+    const onBoard = (k: string | undefined) => !!k && !!feed?.commodities?.some((c) => c.crop === k);
+    const crop = onBoard(main) ? main : feed?.commodities?.[0]?.crop;
+    const best = crop ? bestQuote(feed, crop) : null;
+    const due = upcomingTasks(farm).length;
+    const out: HeroStat[] = [];
+    if (days.length) out.push(rainDay
+      ? { label: tt("hero.rainLabel"), value: tt("hero.rainNext", { day: rainDay.date === todayKey() ? tt("common.today") : weekdayShort(lang, rainDay.date), p: rainDay.rain_chance }), icon: "weather-pouring" }
+      : { label: tt("hero.rainLabel"), value: tt("hero.rainNone"), icon: "weather-sunny" });
+    if (crop && best) out.push({ label: tt("hero.priceLabel", { crop: cropName(lang, crop) }), value: `KES ${best.price}`, icon: "storefront-outline" });
+    out.push({ label: tt("hero.tasksLabel"), value: due ? String(due) : tt("hero.tasksNone"), icon: "check-circle-outline" });
+    return out;
+  }, [wx.data, sentinel.meta, farm, lang]);
+
   const script = useMemo(() => {
     const parts = [`${first ? `${hello}, ${first}` : hello}.`];
     const days = wx.data?.days;
@@ -126,17 +146,10 @@ export default function Today() {
       >
         <View style={{ width: "100%", maxWidth: wide ? 1120 : 760, alignSelf: "center", padding: 16, gap: 14 }}>
           <Enter index={0}>
-            <View style={{ paddingTop: 4, paddingBottom: 2 }}>
-              <Text accessibilityRole="header" style={{ color: t.ink, ...T.display }}>
-                {first ? `${hello}, ${first}` : hello}
-              </Text>
-              <Text style={{ color: t.dim, ...T.body, marginTop: 2 }}>
-                {longDay(lang, todayKey())} · {tt(`season.${season.key}.name` as Key)}
-              </Text>
-              {/* Hidden by ListenPill itself when the phone has no voice for the language. */}
-              <View style={{ flexDirection: "row", marginTop: 10 }}>
-                <ListenPill script={script} />
-              </View>
+            <TodayHero title={first ? `${hello}, ${first}` : hello} subtitle={`${longDay(lang, todayKey())} · ${tt(`season.${season.key}.name` as Key)}`} stats={heroStats} />
+            {/* Hidden by ListenPill itself when the phone has no voice for the language. */}
+            <View style={{ flexDirection: "row", marginTop: 10 }}>
+              <ListenPill script={script} />
             </View>
           </Enter>
 
