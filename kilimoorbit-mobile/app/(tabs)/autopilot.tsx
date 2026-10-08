@@ -10,6 +10,7 @@ import { Enter, PressScale } from "../../components/Motion";
 import { Bounded } from "../../components/Bounded";
 import { useTheme } from "../../lib/theme-context";
 import { runAutopilot, type AutopilotStep } from "../../lib/api";
+import { PhotoHero } from "../../components/PhotoHero";
 
 export default function Autopilot() {
   const t = useTheme();
@@ -38,14 +39,14 @@ export default function Autopilot() {
         title={tt("nav.autopilot")}
         right={
           <PressScale onPress={engage} disabled={busy} accessibilityLabel={busy ? "Autopilot running" : "Engage autopilot"} focusColor={t.accent} style={[s.engage, { backgroundColor: t.accent, opacity: busy ? 0.5 : 1 }]}>
-            <Text style={{ color: t.field, fontWeight: "800" }}>{busy ? "Running…" : "Engage"}</Text>
+            <Text style={{ color: t.field, fontWeight: "800" }}>{busy ? tt("auto.running") : tt("auto.engage")}</Text>
           </PressScale>
         }
       />
-      <Text style={[s.sub, { color: t.dim }]}>sense → arbitrage → weather gate → broadcast → brief</Text>
-
       <ScrollView contentContainerStyle={s.scroll}>
         <Bounded style={s.body}>
+        <PhotoHero photo="autopilot" icon="robot-outline" eyebrow={tt("ph.auto.eyebrow")} title={tt("ph.auto.title")} subtitle={tt("ph.auto.sub")} style={{ marginTop: 12 }} testID="autopilot-hero" />
+        <Text style={[s.sub, { color: t.dim }]}>sense → arbitrage → weather gate → broadcast → brief</Text>
         {busy && <ActivityIndicator color={t.accent} style={{ marginTop: 30 }} />}
         {err && <Text style={{ color: t.alert, marginTop: 20 }}>{err}</Text>}
         {!steps && !busy && !err && (
@@ -142,7 +143,7 @@ const s = StyleSheet.create({
   scroll: { flexGrow: 1 },
   body: { padding: 14, paddingBottom: 40 },
   engage: { borderRadius: 12, paddingHorizontal: 18, minHeight: 40, justifyContent: "center", marginVertical: -4 },
-  sub: { fontFamily: "monospace", fontSize: 10, paddingHorizontal: 16, paddingTop: 8, letterSpacing: 0.5 },
+  sub: { fontSize: 11, paddingTop: 10, letterSpacing: 1.2, textTransform: "uppercase", fontWeight: "700" },
   emptyBox: { borderWidth: 1, borderStyle: "dashed", borderRadius: 14, padding: 22, marginTop: 24 },
   stepRow: { flexDirection: "row", gap: 12 },
   railCol: { alignItems: "center", width: 26 },

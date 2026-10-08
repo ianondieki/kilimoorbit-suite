@@ -1,6 +1,6 @@
 {
   "name": "kilimoorbit-sentinel",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "KilimoOrbit Sentinel — Gemini-powered agri-logistics intelligence engine (APEX) with 5 execution routes, hardened error schemas, and a Mission Control dashboard.",
   "type": "module",
   "main": "src/server.js",
@@ -10,7 +10,7 @@
     "test:soko": "node src/tests/soko_tests.js",
     "test:agro": "node src/tests/agro_tests.js",
     "test:server": "node src/tests/server_tests.js",
-    "check": "node --check src/server.js && node --check src/apex_client.js && node --check src/suite.js && node --check src/soko/store.js && node --check src/soko/routes.js && node --check src/agro/weather.js && node --check src/agro/prices.js && node --check src/agro/pests.js && node --check src/agro/news.js && node --check src/agro/events.js && node --check src/agro/nurseries.js",
+    "check": "node --check src/server.js && node --check src/apex_client.js && node --check src/suite.js && node --check src/soko/store.js && node --check src/soko/routes.js && node --check src/agro/weather.js && node --check src/agro/prices.js && node --check src/agro/pests.js && node --check src/agro/news.js && node --check src/agro/events.js && node --check src/agro/nurseries.js && node --check src/agro/saccos.js",
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "route:arbitrage": "node src/routes/arbitrage.js",

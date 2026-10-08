@@ -5,7 +5,7 @@
  * proxy error page or a half-written cache shows "no data", never a crash.
  * Each cleaner returns null when there's nothing usable.
  */
-import type { ArbitrageResult, Booking, CommodityFeed, Forecast, Meta, News, NewsItem, PestWatch, PriceHistory, Show, Shows, Sky, SokoListing, SokoStatus, Verdict, WxDay, Nursery, NurseryPlan } from "./api";
+import type { ArbitrageResult, Booking, CommodityFeed, Forecast, Meta, News, NewsItem, PestWatch, PriceHistory, Show, Shows, Sky, SokoListing, SokoStatus, Verdict, WxDay, Nursery, NurseryPlan, Sacco, SaccoApplication, SaccoFocus, SaccoList, SaccoService } from "./api";
 
 const obj = (v: unknown): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v);
 const num = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -234,7 +234,7 @@ export function cleanShows(s: unknown): Shows | null {
 }
 
 const EMAIL_STATES = ["SENT", "SIMULATED", "NONE", "FAILED"] as const;
-const NURSERY_KINDS = ["research", "forestry", "training", "seed", "supplier"];
+const NURSERY_KINDS = ["research", "forestry", "training", "seed", "supplier", "hatchery"];
 /** A nursery plan from the server, or null when it is not one. */
 export function cleanNurseryPlan(p: unknown): NurseryPlan | null {
   if (!obj(p) || !str(p.need) || !obj(p.from) || !str(p.from.county) || !num(p.from.lat) || !num(p.from.lon) || !obj(p.advice) || !str(p.advice.text) || !obj(p.per_acre)) return null;
@@ -256,8 +256,45 @@ export function cleanNurseryPlan(p: unknown): NurseryPlan | null {
     from: { county: p.from.county.slice(0, 40), lat: p.from.lat, lon: p.from.lon, gps: p.from.gps === true },
     acres: num(p.acres) && p.acres > 0 ? p.acres : 1,
     per_acre: { n: num(p.per_acre.n) ? p.per_acre.n : 0, unit: str(p.per_acre.unit) ? p.per_acre.unit.slice(0, 20) : "", spacing: str(p.per_acre.spacing) ? p.per_acre.spacing.slice(0, 30) : "" },
+    quantity: obj(p.quantity) && num(p.quantity.n) && p.quantity.n >= 0 && num(p.quantity.amount) && (p.quantity.basis === "acres" || p.quantity.basis === "pond_m2")
+      ? { n: p.quantity.n, unit: str(p.quantity.unit) ? p.quantity.unit.slice(0, 20) : "", basis: p.quantity.basis, amount: p.quantity.amount } : null,
     nurseries, advice: { text: p.advice.text.slice(0, 1200), source: p.advice.source === "LIVE" ? "LIVE" : "MOCK", lang: p.advice.lang === "sw" ? "sw" : "en" },
     steps, generated_at: str(p.generated_at) ? p.generated_at.slice(0, 40) : "",
+  };
+}
+
+/* ── SACCOs ── */
+const SACCO_KINDS = ["sacco", "dairy_coop", "union", "office"];
+const SACCO_SERVICES: SaccoService[] = ["input_credit", "inputs_shop", "asset_finance", "feeds_vet", "produce_marketing", "savings_credit", "insurance", "register"];
+const SACCO_FOCUS: SaccoFocus[] = ["dairy", "tea", "coffee", "horticulture", "grain", "general"];
+function cleanSaccoBase(s: any) {
+  if (!obj(s) || !str(s.id) || !str(s.name) || !str(s.town) || !str(s.county) || !num(s.lat) || !num(s.lon)) return null;
+  return {
+    id: s.id.slice(0, 60), name: s.name.slice(0, 120), kind: (SACCO_KINDS.includes(s.kind) ? s.kind : "sacco") as Sacco["kind"],
+    town: s.town.slice(0, 40), county: s.county.slice(0, 40), lat: s.lat, lon: s.lon,
+    focus: arr(s.focus).filter((f): f is SaccoFocus => SACCO_FOCUS.includes(f as SaccoFocus)).slice(0, 6),
+    services: arr(s.services).filter((f): f is SaccoService => SACCO_SERVICES.includes(f as SaccoService)).slice(0, 8),
+  };
+}
+export function cleanSaccoList(r: unknown): SaccoList | null {
+  if (!obj(r) || !obj(r.from) || !str(r.from.county) || !num(r.from.lat) || !num(r.from.lon)) return null;
+  const saccos = arr(r.saccos).map((s: any): Sacco | null => {
+    const b = cleanSaccoBase(s);
+    if (!b || !num(s.distance_km) || !obj(s.transport) || !num(s.transport.round_trip_kes)) return null;
+    return { ...b, distance_km: Math.max(0, s.distance_km), matches_focus: s.matches_focus === true,
+      transport: { mode: s.transport.mode === "boda" ? "boda" : "matatu", one_way_kes: num(s.transport.one_way_kes) ? s.transport.one_way_kes : 0, round_trip_kes: s.transport.round_trip_kes, minutes: num(s.transport.minutes) ? s.transport.minutes : 0 } };
+  }).filter((s): s is Sacco => !!s).slice(0, 10);
+  return { from: { county: r.from.county.slice(0, 40), lat: r.from.lat, lon: r.from.lon, gps: r.from.gps === true }, focus: SACCO_FOCUS.includes(r.focus as SaccoFocus) ? (r.focus as SaccoFocus) : null, saccos };
+}
+export function cleanSaccoApplication(a: unknown): SaccoApplication | null {
+  if (!obj(a) || !str(a.application_id) || !str(a.token) || !str(a.reference)) return null;
+  const sacco = cleanSaccoBase(a.sacco);
+  if (!sacco) return null;
+  return {
+    application_id: a.application_id.slice(0, 64), token: a.token.slice(0, 64), reference: a.reference.slice(0, 16), status: "PENDING", sacco,
+    checklist: arr(a.checklist).filter((c: any) => obj(c) && str(c.en) && str(c.sw)).map((c: any) => ({ en: c.en.slice(0, 200), sw: c.sw.slice(0, 200) })).slice(0, 10),
+    email: EMAIL_STATES.includes(a.email as any) ? (a.email as SaccoApplication["email"]) : "NONE",
+    steps: arr(a.steps).filter((x) => obj(x) && str(x.agent) && str(x.action)).map((x) => ({ agent: x.agent.slice(0, 20), action: x.action.slice(0, 200), latency_ms: num(x.latency_ms) ? x.latency_ms : 0 })),
   };
 }
 

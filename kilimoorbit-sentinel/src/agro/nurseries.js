@@ -33,13 +33,14 @@ export const NEEDS = {
   potato:     { en: "Certified seed potato",        sw: "Mbegu za viazi zilizothibitishwa", per_acre: 1000, unit: "kg of seed", spacing: "75 cm × 30 cm", ask: { en: "certified seed of Shangi, Dutch Robijn or Unica, with the KEPHIS label", sw: "mbegu zilizothibitishwa za Shangi, Dutch Robijn au Unica zenye lebo ya KEPHIS" } },
   maize:      { en: "Certified maize seed",         sw: "Mbegu za mahindi zilizothibitishwa", per_acre: 10, unit: "kg of seed", spacing: "75 cm × 25 cm", ask: { en: "a sealed 10 kg bag of a hybrid for your altitude, from a stockist with a KEPHIS sticker", sw: "mfuko wa kilo 10 uliofungwa wa mbegu chotara ya urefu wako, kutoka kwa muuzaji mwenye stika ya KEPHIS" } },
   grass:      { en: "Napier / Brachiaria splits",   sw: "Vipandikizi vya Napier / Brachiaria", per_acre: 4500, unit: "canes or splits", spacing: "90 cm × 60 cm", ask: { en: "disease-free Napier (Kakamega 1/2) or Brachiaria splits", sw: "Napier (Kakamega 1/2) isiyo na ugonjwa au vipandikizi vya Brachiaria" } },
+  fingerlings: { en: "Fish fingerlings (tilapia, catfish)", sw: "Vifaranga vya samaki (perege, kambale)", per_acre: 12000, per_m2: 3, unit: "fingerlings", spacing: "3 per m² of pond", ask: { en: "all-male (sex-reversed) Nile tilapia or African catfish fingerlings of 3–5 g from a hatchery certified by the Kenya Fisheries Service, packed in oxygenated bags", sw: "vifaranga vya perege dume (sex-reversed) au kambale vya gramu 3–5 kutoka kwa hatchery iliyothibitishwa na Kenya Fisheries Service, kwenye mifuko yenye oksijeni" } },
   coconut:    { en: "Coconut & cashew seedlings",   sw: "Miche ya nazi na korosho",   per_acre: 70,    unit: "seedlings", spacing: "8 m × 8 m",   ask: { en: "East African Tall coconut or grafted cashew seedlings", sw: "miche ya nazi ya East African Tall au korosho iliyopandikizwa" } },
 };
 export const NEED_KEYS = Object.keys(NEEDS);
 
 /**
  * id, name, kind, town, county, lat, lon (town-level), what it carries, site.
- * kind: research | forestry | training | seed | supplier.
+ * kind: research | forestry | training | seed | supplier | hatchery.
  */
 export const NURSERIES = [
   { id: "kalro-thika", name: "KALRO Horticulture Research Institute, Thika", kind: "research", town: "Thika", county: "Kiambu", lat: -1.033, lon: 37.069, carries: ["avocado", "mango", "macadamia", "passion", "pawpaw", "citrus", "banana"], url: "https://www.kalro.org" },
@@ -78,6 +79,9 @@ export const NURSERIES = [
   { id: "simlaw-eldoret", name: "Simlaw Seeds, Eldoret", kind: "supplier", town: "Eldoret", county: "Uasin Gishu", lat: 0.51, lon: 35.27, carries: ["vegetables", "maize"], url: "https://simlaw.co.ke" },
   { id: "simlaw-kisumu", name: "Simlaw Seeds, Kisumu", kind: "supplier", town: "Kisumu", county: "Kisumu", lat: -0.09, lon: 34.76, carries: ["vegetables", "maize"], url: "https://simlaw.co.ke" },
   { id: "amiran-nairobi", name: "Amiran Kenya, Nairobi", kind: "supplier", town: "Nairobi", county: "Nairobi", lat: -1.31, lon: 36.86, carries: ["vegetables"], url: "https://amirankenya.com" },
+  { id: "sagana-aqua", name: "Sagana Aquaculture Centre (fish hatchery)", kind: "hatchery", town: "Sagana", county: "Kirinyaga", lat: -0.67, lon: 37.21, carries: ["fingerlings"], url: "https://www.kmfri.go.ke" },
+  { id: "kmfri-kegati", name: "KMFRI Kegati Aquaculture Centre, Kisii", kind: "hatchery", town: "Kegati", county: "Kisii", lat: -0.71, lon: 34.79, carries: ["fingerlings"], url: "https://www.kmfri.go.ke" },
+  { id: "kmfri-kisumu", name: "KMFRI Kisumu (fish hatchery)", kind: "hatchery", town: "Kisumu", county: "Kisumu", lat: -0.1, lon: 34.75, carries: ["fingerlings"], url: "https://www.kmfri.go.ke" },
   { id: "wambugu-atc", name: "Wambugu Agricultural Training Centre, Nyeri", kind: "training", town: "Nyeri", county: "Nyeri", lat: -0.42, lon: 36.95, carries: ["avocado", "mango", "vegetables", "trees", "grass"], url: "https://www.nyeri.go.ke" },
   { id: "bukura-atc", name: "Bukura Agricultural College, Kakamega", kind: "training", town: "Bukura", county: "Kakamega", lat: 0.26, lon: 34.63, carries: ["vegetables", "trees", "banana", "grass"], url: "https://www.bukuracollege.ac.ke" },
   { id: "mabanga-atc", name: "Mabanga Agricultural Training Centre, Bungoma", kind: "training", town: "Bungoma", county: "Bungoma", lat: 0.6, lon: 34.6, carries: ["vegetables", "trees", "grass", "banana"], url: "https://www.bungoma.go.ke" },
@@ -136,22 +140,31 @@ export function validatePlanRequest(body) {
   const acres = Number.isFinite(acresRaw) && acresRaw > 0 && acresRaw <= 500 ? Math.round(acresRaw * 4) / 4 : null;
   if (acres == null) fields.acres = "INVALID";
   const lang = b.lang === "sw" ? "sw" : "en";
+  // A fish pond is sized in square metres (fingerlings only).
+  let pond_m2 = null;
+  if (b.pond_m2 != null && b.pond_m2 !== "") {
+    const m = Number(b.pond_m2);
+    if (Number.isFinite(m) && m >= 10 && m <= 100000) pond_m2 = Math.round(m); else fields.pond_m2 = "INVALID";
+  }
   if (Object.keys(fields).length) return { error: "VALIDATION_ERROR", fields };
-  return { input: { need, county: county.name, acres, lang, lat: b.lat, lon: b.lon } };
+  return { input: { need, county: county.name, acres, lang, lat: b.lat, lon: b.lon, pond_m2: NEEDS[need].per_m2 ? pond_m2 : null } };
 }
 
 const ADVISOR_SYSTEM = `You are a Kenyan agricultural extension officer helping a smallholder farmer find seedlings or seed close to home.
 Write 3 to 5 short sentences in plain words, in the language asked. No markdown, no lists, no headings.
 Use ONLY the nurseries in the JSON you are given: never invent a nursery, a phone number, a price or an opening time.
-Say which listed source to try first and why (distance, what it carries), what exactly to ask for, roughly how many seedlings or how much seed the farmer's acres need, the transport estimate given, and that stock should be confirmed (by phone or through the county agricultural office) before travelling.`;
+Say which listed source to try first and why (distance, what it carries), what exactly to ask for, roughly how many seedlings, how much seed or how many fingerlings the farmer needs (the total is given), the transport estimate given, and that stock should be confirmed (by phone or through the county agricultural or fisheries office) before travelling.`;
 
 /** The deterministic plan, used when there is no model or it fails. */
-export function fallbackAdvice({ need, acres, lang, nurseries, per_acre }) {
+export function fallbackAdvice({ need, acres, lang, nurseries, per_acre, quantity }) {
   const n = NEEDS[need];
   const first = nurseries.find((x) => x.carries_need) ?? nurseries[0];
   const second = nurseries.find((x) => x !== first && x.carries_need);
-  const total = per_acre.n ? Math.round(per_acre.n * acres) : null;
-  const qty = total ? (lang === "sw" ? `Kwa ekari ${acres}, utahitaji takriban ${total.toLocaleString("en-KE")} ${per_acre.unit_sw}.` : `For ${acres} acre${acres === 1 ? "" : "s"} you need about ${total.toLocaleString("en-KE")} ${per_acre.unit}.`) : "";
+  const total = quantity?.n ?? (per_acre.n ? Math.round(per_acre.n * acres) : null);
+  const pond = quantity?.basis === "pond_m2";
+  const qty = !total ? "" : pond
+    ? (lang === "sw" ? `Kwa bwawa la m² ${quantity.amount}, utahitaji takriban vifaranga ${total.toLocaleString("en-KE")} (${n.per_m2} kwa kila m²).` : `For a ${quantity.amount} m² pond you need about ${total.toLocaleString("en-KE")} fingerlings (${n.per_m2} per m²).`)
+    : (lang === "sw" ? `Kwa ekari ${acres}, utahitaji takriban ${total.toLocaleString("en-KE")} ${per_acre.unit_sw}.` : `For ${acres} acre${acres === 1 ? "" : "s"} you need about ${total.toLocaleString("en-KE")} ${per_acre.unit}.`);
   if (!first) return lang === "sw" ? "Hakuna chanzo kwenye orodha yetu karibu nawe bado. Uliza afisa wa kilimo wa kaunti yako." : "No source in our directory is near you yet. Ask your county agricultural office.";
   const t = first.transport;
   if (lang === "sw") {
@@ -161,7 +174,7 @@ export function fallbackAdvice({ need, acres, lang, nurseries, per_acre }) {
       qty,
       `Nauli ya kwenda na kurudi kwa ${t.mode} ni takriban KES ${t.round_trip_kes} (dakika ${t.minutes} njia moja).`,
       second ? `Mbadala: ${second.name}, km ${second.distance_km}.` : "",
-      "Thibitisha kuwa wana miche kabla ya kusafiri — piga simu au uliza ofisi ya kilimo ya kaunti; miche huisha mwanzoni mwa mvua.",
+      need === "fingerlings" ? "Thibitisha kuwa wana vifaranga kabla ya kusafiri, na uulize afisa wa uvuvi wa kaunti kuhusu hatchery zilizothibitishwa karibu nawe; safirisha vifaranga asubuhi na mapema au jioni." : "Thibitisha kuwa wana miche kabla ya kusafiri — piga simu au uliza ofisi ya kilimo ya kaunti; miche huisha mwanzoni mwa mvua.",
     ].filter(Boolean).join(" ");
   }
   return [
@@ -170,7 +183,7 @@ export function fallbackAdvice({ need, acres, lang, nurseries, per_acre }) {
     qty,
     `Getting there and back by ${t.mode} is about KES ${t.round_trip_kes} (${t.minutes} minutes each way).`,
     second ? `Alternative: ${second.name}, ${second.distance_km} km away.` : "",
-    "Confirm they have stock before travelling — call, or ask the county agricultural office; seedlings sell out when the rains start.",
+    need === "fingerlings" ? "Confirm they have fingerlings before travelling, and ask the county fisheries officer for certified private hatcheries closer to you; carry the fish in the cool of the morning or evening." : "Confirm they have stock before travelling — call, or ask the county agricultural office; seedlings sell out when the rains start.",
   ].filter(Boolean).join(" ");
 }
 
@@ -191,18 +204,23 @@ export async function planNurseries(input, { llm, now = () => new Date() } = {})
   const sw = input.lang === "sw";
   const where = from.gps ? (sw ? "mahali ulipo" : "your location") : from.county;
   step("Scout", sw ? `Imetafuta vyanzo ${NURSERIES.length} karibu na ${where}` : `Searched ${NURSERIES.length} sources near ${where}`, `${nurseries.filter((n) => n.carries_need).length} carry ${need.en.toLowerCase()}; nearest ${nurseries[0]?.distance_km ?? "?"} km`);
-  const per_acre = { n: need.per_acre, unit: need.unit, unit_sw: need.unit === "seedlings" ? "miche" : need.unit === "plantlets" ? "miche" : need.unit === "cuttings" ? "vipandikizi" : need.unit === "kg of seed" ? "kg za mbegu" : "vipandikizi", spacing: need.spacing };
-  const total = Math.round(need.per_acre * input.acres);
-  step("Planner", sw ? `Imekadiria kiasi kwa ekari ${input.acres} na nauli kwa kila chanzo` : `Worked out quantities for ${input.acres} acre(s) and the fare to each source`, `${total.toLocaleString("en-KE")} ${need.unit}; nearest round trip ≈ KES ${nurseries[0]?.transport.round_trip_kes ?? "?"}`);
+  const per_acre = { n: need.per_acre, unit: need.unit, unit_sw: need.unit === "seedlings" ? "miche" : need.unit === "plantlets" ? "miche" : need.unit === "cuttings" ? "vipandikizi" : need.unit === "kg of seed" ? "kg za mbegu" : need.unit === "fingerlings" ? "vifaranga" : "vipandikizi", spacing: need.spacing };
+  const pond = input.pond_m2 && need.per_m2 ? input.pond_m2 : null;
+  const quantity = pond
+    ? { n: Math.round(need.per_m2 * pond), unit: need.unit, basis: "pond_m2", amount: pond }
+    : { n: Math.round(need.per_acre * input.acres), unit: need.unit, basis: "acres", amount: input.acres };
+  const total = quantity.n;
+  const forWhat = pond ? (sw ? `bwawa la m² ${pond}` : `a ${pond} m² pond`) : (sw ? `ekari ${input.acres}` : `${input.acres} acre(s)`);
+  step("Planner", sw ? `Imekadiria kiasi kwa ${forWhat} na nauli kwa kila chanzo` : `Worked out quantities for ${forWhat} and the fare to each source`, `${total.toLocaleString("en-KE")} ${need.unit}; nearest round trip ≈ KES ${nurseries[0]?.transport.round_trip_kes ?? "?"}`);
   let text = null, source = "MOCK";
   if (llm) {
     try {
-      const prompt = JSON.stringify({ language: input.lang === "sw" ? "Kiswahili" : "English", need: need.en, ask_for: need.ask.en, acres: input.acres, per_acre: need.per_acre, unit: need.unit, farmer_at: from.gps ? "GPS position" : `${from.county} county centre`, nurseries: nurseries.map((n) => ({ name: n.name, town: n.town, county: n.county, kind: n.kind, carries: n.carries, distance_km: n.distance_km, round_trip_kes: n.transport.round_trip_kes, by: n.transport.mode })) });
+      const prompt = JSON.stringify({ language: input.lang === "sw" ? "Kiswahili" : "English", need: need.en, ask_for: need.ask.en, acres: input.acres, pond_m2: pond, total_needed: total, per_acre: need.per_acre, unit: need.unit, farmer_at: from.gps ? "GPS position" : `${from.county} county centre`, nurseries: nurseries.map((n) => ({ name: n.name, town: n.town, county: n.county, kind: n.kind, carries: n.carries, distance_km: n.distance_km, round_trip_kes: n.transport.round_trip_kes, by: n.transport.mode })) });
       const out = await llm({ system: ADVISOR_SYSTEM, prompt });
       if (typeof out === "string" && out.trim()) { text = clip(out.replace(/[*_#`]/g, "").replace(/\s+/g, " ").trim(), 900); source = "LIVE"; }
     } catch {}
   }
-  if (!text) text = fallbackAdvice({ need: input.need, acres: input.acres, lang: input.lang, nurseries, per_acre });
+  if (!text) text = fallbackAdvice({ need: input.need, acres: input.acres, lang: input.lang, nurseries, per_acre, quantity });
   step("Advisor", source === "LIVE" ? (sw ? "Imeandika mpango kwa msaada wa modeli" : "Wrote the plan with the model") : (sw ? "Imeandika mpango kutoka kwenye orodha" : "Wrote the plan from the directory"), clip(text, 120));
-  return { need: input.need, need_label: { en: need.en, sw: need.sw }, from, acres: input.acres, per_acre: { n: need.per_acre, unit: need.unit, spacing: need.spacing }, nurseries, advice: { text, source, lang: input.lang }, steps, generated_at: now().toISOString() };
+  return { need: input.need, need_label: { en: need.en, sw: need.sw }, from, acres: input.acres, per_acre: { n: need.per_acre, unit: need.unit, spacing: need.spacing }, quantity, nurseries, advice: { text, source, lang: input.lang }, steps, generated_at: now().toISOString() };
 }

@@ -408,8 +408,37 @@ await check("Nurseries: the agent writes a deterministic plan without a model, a
   return {
     ok: steps === "Scout>Planner>Advisor" && mock.advice.source === "MOCK" && /160 seedlings/.test(mock.advice.text) && /Confirm/.test(mock.advice.text)
       && live.advice.source === "LIVE" && live.advice.text === "Nenda KALRO kwanza." && mock.per_acre.n === 80 && mock.nurseries.length === 5 && mock.from.gps === false
-      && /^Searched 39 sources near Nakuru$/.test(mock.steps[0].action) && /^Imetafuta vyanzo 39 karibu na Nakuru$/.test(live.steps[0].action) && /modeli/.test(live.steps[2].action), // the step lines follow the farmer's language
+      && /^Searched 42 sources near Nakuru$/.test(mock.steps[0].action) && /^Imetafuta vyanzo 42 karibu na Nakuru$/.test(live.steps[0].action) && /modeli/.test(live.steps[2].action), // the step lines follow the farmer's language
     detail: `${steps} · ${mock.advice.text.slice(0, 60)}…`,
+  };
+});
+
+await check("SACCOs: nearest first with the focus preferred, the county office always last, and far counties still get the office", async () => {
+  const sc = await import("../agro/saccos.js");
+  const nyeri = sc.saccosNear({ lat: -0.42, lon: 36.95, county: "Nyeri", focus: "dairy" });
+  const mombasa = sc.saccosNear({ lat: -4.04, lon: 39.67, county: "Mombasa" });
+  const office = sc.findSacco("county-coop-murang-a");
+  const v = sc.validateJoin({ sacco_id: "muki", name: "  Jane   Wairimu ", phone: "+254712345678", county: "nyeri", interests: ["inputs_shop", "x", "inputs_shop"], acres: 1.3 });
+  const bad = sc.validateJoin({ sacco_id: "muki", name: "Jane", phone: "12345", email: "nope", county: "Nyeri" });
+  return {
+    ok: nyeri[0].id === "taifa" && nyeri[0].matches_focus && nyeri.at(-1).kind === "office" && mombasa.at(-1).name === "Mombasa County Co-operatives office" && mombasa.length >= 2
+      && office?.county === "Murang'a" && v.input.name === "Jane Wairimu" && v.input.county === "Nyeri" && v.input.interests.join() === "inputs_shop" && v.input.acres === 1.25
+      && bad.fields.join() === "phone,email",
+    detail: `${nyeri.map((x) => x.id).join(", ")} · Mombasa nearest ${mombasa[0].id} ${mombasa[0].distance_km} km`,
+  };
+});
+
+await check("SACCOs: the join store hands out a reference and a token, withdraws only with it, and a partner sees no tokens", async () => {
+  const sc = await import("../agro/saccos.js");
+  const store = sc.createApplications({ now: () => new Date("2026-10-08T07:00:00Z") });
+  const sent = [];
+  const a = await store.apply(sc.validateJoin({ sacco_id: "tower", name: "Kamau", email: "k@example.com", county: "Nyandarua" }).input, { mailer: async (m) => sent.push(m) });
+  const broken = await store.apply(sc.validateJoin({ sacco_id: "tower", name: "Kamau", email: "k@example.com", county: "Nyandarua" }).input, { mailer: async () => { throw new Error("smtp down"); } });
+  const partner = store.forSacco("tower");
+  return {
+    ok: a.email === "SENT" && /KO-/.test(sent[0].subject) && /never asks for money/.test(sent[0].text) && broken.email === "FAILED" && /Could not email/.test(broken.steps[2].action)
+      && partner.length === 2 && partner.every((p) => !("token" in p)) && store.withdraw(a.application_id, "x") === "forbidden" && store.withdraw(a.application_id, a.token) === "ok" && store.size === 1,
+    detail: `${a.reference} · ${a.email} · ${broken.email}`,
   };
 });
 

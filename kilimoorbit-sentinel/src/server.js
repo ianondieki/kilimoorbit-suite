@@ -30,6 +30,7 @@ import { boardFor, historyFor } from "./agro/prices.js";
 import { createPestWatch, validateReport } from "./agro/pests.js";
 import { createNews } from "./agro/news.js";
 import { createBookings, eventsNear, reminderMessage, validateBooking } from "./agro/events.js";
+import { FOCUS, createApplications, saccosNear, validateJoin } from "./agro/saccos.js";
 import { networkInterfaces } from "node:os";
 import { SUITE, runSuite, loadPayload } from "./suite.js";
 
@@ -110,6 +111,7 @@ export function createApp(opts = {}) {
   // Injected by the test suite (stubbed feeds, a temp bookings file, no timers).
   const news = opts.news ?? createNews();
   const bookings = opts.bookings ?? createBookings({ storePath: process.env.EVENTS_STORE_PATH || join(root, "data", "events_bookings.json") });
+  const applications = opts.applications ?? createApplications({ storePath: process.env.SACCO_STORE_PATH || join(root, "data", "sacco_applications.json") });
   app.disable("x-powered-by");
   app.set("trust proxy", process.env.TRUST_PROXY === "1"); // set when behind Render/Fly/nginx
 
@@ -120,7 +122,7 @@ export function createApp(opts = {}) {
   // CORS headers (otherwise the browser reports an opaque "Failed to fetch").
   app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+    res.header("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS");
     res.header("Access-Control-Allow-Headers", "Content-Type");
     res.header("X-Content-Type-Options", "nosniff");
     res.header("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -284,6 +286,38 @@ export function createApp(opts = {}) {
       console.error("[nurseries] plan failed:", err?.message ?? err);
       res.status(500).json({ error: "PLAN_FAILED" });
     }
+  });
+
+  // ── Farmers' SACCOs near the farmer, and a one-tap join request (src/agro/saccos.js) ──
+  app.get("/api/saccos", rateLimit({ windowMs: 60_000, max: 60, name: "saccos" }), (req, res) => {
+    const from = farmerPosition({ county: String(req.query.county ?? ""), lat: Number(req.query.lat), lon: Number(req.query.lon) });
+    if (!from) return res.status(400).json({ error: req.query.county ? "UNKNOWN_COUNTY" : "MISSING_COUNTY" });
+    const focus = String(req.query.focus ?? "").toLowerCase();
+    if (focus && !FOCUS.includes(focus)) return res.status(400).json({ error: "UNKNOWN_FOCUS", focus: FOCUS });
+    res.json({ from, focus: focus || null, saccos: saccosNear({ lat: from.lat, lon: from.lon, county: from.county, focus: focus || undefined }) });
+  });
+  app.post("/api/saccos/join", rateLimit({ windowMs: 60 * 60_000, max: 10, name: "sacco-join" }), async (req, res) => {
+    const v = validateJoin(req.body);
+    if (v.error) return res.status(400).json({ error: v.error, error_type: "VALIDATION_ERROR", fields: v.fields });
+    try {
+      res.status(201).json(await applications.apply(v.input, { mailer: bookingMailer(), lang: req.body?.lang === "sw" ? "sw" : "en" }));
+    } catch (err) {
+      console.error("[saccos] join failed:", err?.message ?? err);
+      res.status(500).json({ error: "Join request failed.", error_type: "SERVER_ERROR" });
+    }
+  });
+  app.delete("/api/saccos/join/:id", rateLimit({ windowMs: 60_000, max: 60, name: "sacco-join" }), (req, res) => {
+    const token = typeof req.query.token === "string" ? req.query.token : "";
+    const r = applications.withdraw(String(req.params.id).slice(0, 64), token);
+    if (r === "missing") return res.status(404).json({ error: "No such request.", error_type: "NOT_FOUND" });
+    if (r === "forbidden") return res.status(403).json({ error: "Wrong token.", error_type: "FORBIDDEN", fields: ["token"] });
+    res.json({ ok: true });
+  });
+  // A partner SACCO collects its requests with the key it was given (off unless SACCO_PARTNER_KEY is set).
+  app.get("/api/saccos/:id/applications", rateLimit({ windowMs: 60_000, max: 30, name: "sacco-partner" }), (req, res) => {
+    const key = process.env.SACCO_PARTNER_KEY;
+    if (!key || req.get("x-partner-key") !== key) return res.status(404).json({ error: "Not found.", error_type: "NOT_FOUND" });
+    res.json({ sacco_id: req.params.id, applications: applications.forSacco(String(req.params.id).slice(0, 80)) });
   });
 
   app.post("/api/events/book", rateLimit({ windowMs: 60 * 60_000, max: 10, name: "booking" }), async (req, res) => {

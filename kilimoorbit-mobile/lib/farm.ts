@@ -20,9 +20,9 @@ export const FARM_KEY = "ko-farm";
 export type Planting = { id: string; crop: CropKey; acres: number; plantedOn: string };
 
 export type ExpenseCat = "seed" | "fertilizer" | "chemicals" | "labour" | "transport" | "feed" | "vet" | "other";
-export type IncomeCat = "sale" | "milk" | "eggs" | "animals" | "other";
+export type IncomeCat = "sale" | "milk" | "eggs" | "animals" | "fish" | "other";
 export const EXPENSE_CATS: ExpenseCat[] = ["seed", "fertilizer", "chemicals", "labour", "transport", "feed", "vet", "other"];
-export const INCOME_CATS: IncomeCat[] = ["sale", "milk", "eggs", "animals", "other"];
+export const INCOME_CATS: IncomeCat[] = ["sale", "milk", "eggs", "animals", "fish", "other"];
 export type Entry = {
   id: string;
   kind: "income" | "expense";

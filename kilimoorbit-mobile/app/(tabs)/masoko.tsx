@@ -30,6 +30,7 @@ import { useSentinel } from "../../lib/sentinel";
 import { useFarm } from "../../lib/farm";
 import { fmtKES, getPriceHistory, type Commodity, type PriceHistory } from "../../lib/api";
 import type { Key } from "../../lib/i18n";
+import { HeroChip, PhotoHero } from "../../components/PhotoHero";
 
 export default function Masoko() {
   const t = useTheme();
@@ -76,6 +77,7 @@ export default function Masoko() {
     );
   });
   const demo = isDemoBoard({ engine: s.meta?.engine });
+  const heroBest = commodity?.quotes?.length ? [...commodity.quotes].sort((a, b) => b.price - a.price)[0] : null;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]} {...webLang(lang)}>
@@ -85,6 +87,14 @@ export default function Masoko() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await s.reload(); setRefreshing(false); }} tintColor={t.accent} />}
       >
         <Bounded style={{ padding: 16, gap: 14 }}>
+          <PhotoHero photo="markets" icon="storefront-outline" eyebrow={tt("ph.markets.eyebrow")} title={tt("ph.markets.title")} subtitle={tt("ph.markets.sub")} testID="markets-hero">
+            {heroBest ? (
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                <HeroChip icon="cash" value={`KES ${heroBest.price}/kg`} label={`${cropName(lang, crop ?? "")} · ${tt("ph.markets.best")}`} />
+                <HeroChip icon="map-marker-outline" value={heroBest.market} label={tt("ph.markets.where")} />
+              </View>
+            ) : null}
+          </PhotoHero>
           {s.status !== "ready" && !feed ? (
             <Card>
               <Skeleton height={44} color={t.raised} radius={999} />

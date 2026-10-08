@@ -17,6 +17,8 @@ import { Guard } from "../../components/ScreenError";
 import { AddAnimalSheet, EggSheet, HatchRows, HerdRows, MilkSheet, herdHasLayers, herdHasMilkers } from "../../components/Herd";
 import { dueHatchSteps } from "../../lib/livestock";
 import { StoreRows } from "../../components/Ghala";
+import { FishTodayLines } from "../../components/Fish";
+import { useFish } from "../../lib/fish";
 import { PestWatchCard } from "../../components/Scout";
 import { NewsCard } from "../../components/News";
 import { ShowsCard } from "../../components/Events";
@@ -249,7 +251,8 @@ function TasksCard({ onAddCrop, onAddAnimal, days }: { onAddCrop: () => void; on
   const herdDue = hasAnimals ? openReminders(herd.animals, herd.done, todayKey(), 7).length : 0;
   const storeDue = dueChecks(farm.store, todayKey(), 1).length;
   const hatchDue = dueHatchSteps(herd.hatches, herd.done, todayKey(), 1).length;
-  const hasStore = farm.store.length > 0 || herd.hatches.length > 0;
+  const { fish } = useFish();
+  const hasStore = farm.store.length > 0 || herd.hatches.length > 0 || fish.ponds.length > 0;
 
   return (
     <Card>
@@ -270,6 +273,7 @@ function TasksCard({ onAddCrop, onAddAnimal, days }: { onAddCrop: () => void; on
           <Guard name="herd-rows"><HerdRows max={3} /></Guard>
           <Guard name="store-rows"><StoreRows /></Guard>
           <Guard name="hatch-rows"><HatchRows /></Guard>
+          <Guard name="fish-rows"><FishTodayLines /></Guard>
           {shown.length === 0 && herdDue === 0 && storeDue === 0 && hatchDue === 0 && (
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4 }}>
               <CheckCoin size={24} bg={t.ok} fg={t.field} />

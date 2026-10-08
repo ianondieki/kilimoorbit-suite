@@ -18,7 +18,8 @@ import { NEEDS, fareText, kmText, mapsUrl, needLabel, type NeedKey } from "../li
 import { openLink } from "../lib/news";
 import { haptic } from "../lib/haptics";
 import type { Key } from "../lib/i18n";
-import { Btn, Card, Chip, ChipRow, Eyebrow, Sheet, T, Tag, tint } from "./Kit";
+import { Btn, Card, Chip, ChipRow, Sheet, T, Tag, tint } from "./Kit";
+import { PhotoHero } from "./PhotoHero";
 import { DemoTag } from "./ShambaPanel";
 import Icon from "./Icon";
 import { CheckCoin } from "./Glyphs";
@@ -64,9 +65,8 @@ export function NurseriesCard() {
 
   return (
     <Card>
-      <Eyebrow domain="farm" icon={(c) => <Icon name="sprout" size={17} color={c} />} text={tt("nz.eyebrow")} />
       <View style={{ gap: 12 }} testID="nurseries-card">
-        <Text style={{ color: t.ink, ...T.headline }}>{tt("nz.title")}</Text>
+        <PhotoHero photo="nursery" compact height={176} icon="sprout" eyebrow={tt("nz.eyebrow")} title={tt("nz.title")} />
         <Text style={{ color: t.dim, ...T.body }}>{tt("nz.body")}</Text>
         <Text style={{ color: t.ink, fontSize: 15, lineHeight: 20, fontWeight: "700" }}>{tt("nz.need")}</Text>
         <ChipRow role="radiogroup" label={tt("nz.need")}>
@@ -92,7 +92,7 @@ export function NurseriesCard() {
   );
 }
 
-function PlanSheet({ visible, onClose, need, county, acres, fix }: { visible: boolean; onClose: () => void; need: NeedKey; county: string; acres: number; fix: Fix | null }) {
+export function PlanSheet({ visible, onClose, need, county, acres, fix, pondM2 }: { visible: boolean; onClose: () => void; need: NeedKey; county: string; acres: number; fix: Fix | null; pondM2?: number }) {
   const t = useTheme();
   const { lang, t: tt } = useLang();
   const reduce = useReducedMotion();
@@ -108,7 +108,7 @@ function PlanSheet({ visible, onClose, need, county, acres, fix }: { visible: bo
     alive.current = true;
     const my = ++seq.current;
     setPhase("working"); setPlan(null); setShown(0);
-    planNurseries({ need, county, acres, lang, ...(fix ?? {}) })
+    planNurseries({ need, county, acres, lang, ...(pondM2 ? { pond_m2: pondM2 } : {}), ...(fix ?? {}) })
       .then((p) => { if (alive.current && my === seq.current) { setPlan(p); setShown(1); } })
       .catch(() => { if (alive.current && my === seq.current) { haptic.error(); setPhase("failed"); } });
     return () => { alive.current = false; };
@@ -146,7 +146,9 @@ function PlanSheet({ visible, onClose, need, county, acres, fix }: { visible: bo
       {phase === "done" && plan && (
         <Animated.View entering={reduce ? undefined : FadeInDown.duration(260)} style={{ gap: 14 }} testID="nz-results">
           <Text style={{ color: t.dim, ...T.meta }}>
-            {tt("nz.perAcre", { acres: plan.acres, n: Math.round(plan.per_acre.n * plan.acres).toLocaleString("en-KE"), unit: unit(plan.per_acre.unit), spacing: plan.per_acre.spacing })}
+            {plan.quantity?.basis === "pond_m2"
+              ? tt("nz.pond", { m2: plan.quantity.amount, n: plan.quantity.n.toLocaleString("en-KE"), spacing: plan.per_acre.spacing })
+              : tt("nz.perAcre", { acres: plan.acres, n: Math.round(plan.per_acre.n * plan.acres).toLocaleString("en-KE"), unit: unit(plan.per_acre.unit), spacing: plan.per_acre.spacing })}
           </Text>
           <View style={{ gap: 10 }}>
             {plan.nurseries.map((n, i) => <NurseryRow key={n.id} n={n} first={i === 0} need={need} />)}
@@ -169,7 +171,7 @@ function PlanSheet({ visible, onClose, need, county, acres, fix }: { visible: bo
 function NurseryRow({ n, first, need }: { n: Nursery; first: boolean; need: NeedKey }) {
   const t = useTheme();
   const { lang, t: tt } = useLang();
-  const kindIcon = n.kind === "research" ? "flask-outline" : n.kind === "forestry" ? "pine-tree" : n.kind === "training" ? "school-outline" : n.kind === "seed" ? "seed-outline" : "storefront-outline";
+  const kindIcon = n.kind === "research" ? "flask-outline" : n.kind === "forestry" ? "pine-tree" : n.kind === "training" ? "school-outline" : n.kind === "seed" ? "seed-outline" : n.kind === "hatchery" ? "fish" : "storefront-outline";
   return (
     <View style={{ borderRadius: 14, borderWidth: first ? 2 : 1, borderColor: first ? t.accent : t.line, backgroundColor: first ? tint(t.accent, 0.08) : t.raised, padding: 12, gap: 8 }} testID={`nz-row-${n.id}`}>
       <View style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>

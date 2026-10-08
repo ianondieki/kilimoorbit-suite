@@ -5,7 +5,7 @@
  */
 import type { Lang } from "./i18n";
 
-export type NeedKey = "avocado" | "mango" | "macadamia" | "citrus" | "pawpaw" | "passion" | "banana" | "coffee" | "tea" | "vegetables" | "trees" | "potato" | "maize" | "grass" | "coconut";
+export type NeedKey = "avocado" | "mango" | "macadamia" | "citrus" | "pawpaw" | "passion" | "banana" | "coffee" | "tea" | "vegetables" | "trees" | "potato" | "maize" | "grass" | "coconut" | "fingerlings";
 
 export const NEEDS: { key: NeedKey; en: string; sw: string; emoji: string }[] = [
   { key: "avocado", en: "Avocado", sw: "Parachichi", emoji: "🥑" },
@@ -23,6 +23,7 @@ export const NEEDS: { key: NeedKey; en: string; sw: string; emoji: string }[] = 
   { key: "maize", en: "Maize seed", sw: "Mbegu za mahindi", emoji: "🌽" },
   { key: "grass", en: "Napier / Brachiaria", sw: "Napier / Brachiaria", emoji: "🌾" },
   { key: "coconut", en: "Coconut & cashew", sw: "Nazi na korosho", emoji: "🥥" },
+  { key: "fingerlings", en: "Fish fingerlings", sw: "Vifaranga vya samaki", emoji: "🐟" },
 ];
 export const needLabel = (lang: Lang, key: string) => { const n = NEEDS.find((x) => x.key === key); return n ? (lang === "sw" ? n.sw : n.en) : key; };
 
@@ -30,7 +31,7 @@ export const needLabel = (lang: Lang, key: string) => { const n = NEEDS.find((x)
 export const mapsUrl = (lat: number, lon: number) => `https://www.google.com/maps/dir/?api=1&destination=${lat.toFixed(5)},${lon.toFixed(5)}`;
 
 /** "12 km" / "0.8 km" */
-export const kmText = (km: number) => (km < 10 ? `${Math.round(km * 10) / 10} km` : `${Math.round(km)} km`);
+export const kmText = (km: number) => (km < 0.5 ? "< 1 km" : km < 10 ? `${Math.round(km * 10) / 10} km` : `${Math.round(km)} km`);
 
 /** "KES 1,120" */
 export const kesText = (n: number) => `KES ${Math.round(n).toLocaleString("en-KE")}`;

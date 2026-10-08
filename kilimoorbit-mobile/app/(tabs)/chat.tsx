@@ -9,6 +9,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { refreshVoicePref, useVoicePref } from "../../lib/voice";
 import Header from "../../components/Header";
+import Icon from "../../components/Icon";
+import { PhotoHero } from "../../components/PhotoHero";
 import { useLang } from "../../lib/session";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Speech from "expo-speech";
@@ -169,20 +171,20 @@ export default function Chat() {
               onPress={clearChat}
               hitSlop={10}
               accessibilityRole="button"
-              accessibilityLabel="Clear conversation"
+              accessibilityLabel={tt("chat.clear")}
               style={({ pressed, hovered }: PressState) => [
                 { width: 40, height: 40, borderRadius: 10, alignItems: "center", justifyContent: "center" },
                 webCursor,
                 (hovered || pressed) && { backgroundColor: t.raised },
               ]}
             >
-              <Text style={{ color: t.dim, fontSize: 18 }}>↺</Text>
+              <Icon name="broom" size={20} color={t.dim} />
             </Pressable>
-            <Text style={{ color: t.dim, fontFamily: "monospace", fontSize: 10 }}>VOICE</Text>
+            <Icon name={voice ? "volume-high" : "volume-off"} size={18} color={voice ? t.accent : t.dim} />
             <Switch
               value={voice}
               onValueChange={toggleVoice}
-              accessibilityLabel="Read replies aloud"
+              accessibilityLabel={tt("chat.voice")}
               trackColor={{ true: t.accent, false: t.line }}
               thumbColor={t.panel}
             />
@@ -196,6 +198,7 @@ export default function Chat() {
           data={msgs}
           keyExtractor={(m) => m.id}
           contentContainerStyle={s.chatContent}
+          ListHeaderComponent={<View style={{ marginBottom: 14 }}><PhotoHero photo="chat" icon="chat-processing-outline" eyebrow={tt("ph.chat.eyebrow")} title={tt("ph.chat.title")} subtitle={tt("ph.chat.sub")} height={200} testID="chat-hero" /></View>}
           renderItem={({ item }) => (
             <Enter from={item.from === "user" ? "up" : "down"}>
             <View
@@ -214,13 +217,13 @@ export default function Chat() {
                     onPress={() => speak(item.text)}
                     hitSlop={10}
                     accessibilityRole="button"
-                    accessibilityLabel="Speak this reply aloud"
+                    accessibilityLabel={tt("chat.speak")}
                     style={({ pressed, hovered }: PressState) => [
                       webCursor,
                       (hovered || pressed) && { opacity: 0.7 },
                     ]}
                   >
-                    <Text style={{ color: t.dim, fontSize: 12 }}>🔊 speak</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 4, minHeight: 32 }}><Icon name="volume-high" size={15} color={t.accent} /><Text style={{ color: t.accent, fontSize: 13, fontWeight: "700" }}>{tt("chat.speak")}</Text></View>
                   </Pressable>
                 </View>
               )}
@@ -230,7 +233,7 @@ export default function Chat() {
           ListFooterComponent={
             busy ? (
               <View style={[s.bubble, { alignSelf: "flex-start", borderColor: t.line, backgroundColor: t.panel }]}>
-                <Text style={{ color: t.dim, fontSize: 15 }}>Apex inaandika…</Text>
+                <Text style={{ color: t.dim, fontSize: 15 }}>{tt("chat.typing")}</Text>
               </View>
             ) : null
           }

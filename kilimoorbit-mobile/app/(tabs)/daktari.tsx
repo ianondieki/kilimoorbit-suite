@@ -26,6 +26,7 @@ import { diagnose, problemsForSeason, symptomsFor, type Part, type Problem } fro
 import { seasonFor } from "../../lib/season";
 import { useFarm } from "../../lib/farm";
 import type { Key } from "../../lib/i18n";
+import { PhotoHero } from "../../components/PhotoHero";
 
 const PARTS: Part[] = ["leaf", "stem", "fruit"];
 
@@ -83,6 +84,7 @@ export default function Daktari() {
         onLayout={(e) => { geo.current.viewH = e.nativeEvent.layout.height; recalc(); }}
       >
         <Bounded style={{ padding: 16, gap: 14 }}>
+          <PhotoHero photo="doctor" icon="stethoscope" eyebrow={tt("ph.doctor.eyebrow")} title={tt("ph.doctor.title")} subtitle={tt("ph.doctor.sub")} testID="doctor-hero" />
           {/* Maize: fall armyworm scouting and the county pest watch first. */}
           {crop === "maize" && (
             <>

@@ -23,7 +23,9 @@ const C = {
   bold: (s) => `\x1b[1m${s}\x1b[0m`,
 };
 
+const { createApplications } = await import("../agro/saccos.js");
 const server = createApp({
+  applications: createApplications(),
   news: createNews({ fetchImpl: async () => ({ ok: true, status: 200, text: async () => FEED }) }),
   bookings: createBookings({ storePath: EVENTS_PATH }),
   scheduler: false,
@@ -352,6 +354,41 @@ await check("POST /api/nurseries/plan → the agent's three steps, a plan and th
   const bad = await post("/api/nurseries/plan", { need: "x", county: null, acres: "lots" });
   const junk = await post("/api/nurseries/plan", "not json at all");
   return { ok: r.status === 200 && r.body.steps.length === 3 && r.body.advice.source === "MOCK" && r.body.advice.lang === "sw" && r.body.from.gps === true && r.body.nurseries.length === 5 && /miche/.test(r.body.advice.text) && bad.status === 400 && bad.body.fields.need && junk.status === 400, detail: `${r.body?.steps?.map((s) => s.agent).join(">")} · ${bad.body?.error} · junk ${junk.status}` };
+});
+
+await check("GET /api/saccos → nearest SACCOs then the county Co-operatives office; bad county/focus → 400", async () => {
+  const r = await get("/api/saccos?county=Nyeri&focus=dairy");
+  const none = await get("/api/saccos");
+  const bad = await get("/api/saccos?county=Nyeri&focus=bananas");
+  const rows = r.body?.saccos ?? [];
+  const last = rows[rows.length - 1];
+  return { ok: r.status === 200 && rows.length >= 3 && rows[0].matches_focus && last.kind === "office" && last.name === "Nyeri County Co-operatives office" && rows.every((x) => x.transport?.round_trip_kes > 0) && none.status === 400 && bad.status === 400 && bad.body.focus.includes("dairy"), detail: rows.map((x) => `${x.id} ${x.distance_km}km`).join(", ") };
+});
+
+await check("POST /api/saccos/join → 201 with a reference, the agent's steps and a checklist; withdraw needs the token; CORS allows DELETE", async () => {
+  const r = await post("/api/saccos/join", { sacco_id: "taifa", name: "Wanjiru Kamau", phone: "0712 345 678", county: "Nyeri", interests: ["input_credit", "asset_finance", "nonsense"], lang: "sw" });
+  const bad = await post("/api/saccos/join", { sacco_id: "nope", name: "W", county: "Atlantis" });
+  const noContact = await post("/api/saccos/join", { sacco_id: "taifa", name: "Wanjiru", county: "Nyeri" });
+  const office = await post("/api/saccos/join", { sacco_id: "county-coop-nakuru", name: "Wanjiru", email: "w@example.com", county: "Nakuru" });
+  const wrong = await del(`/api/saccos/join/${r.body?.application_id}?token=nope`);
+  const ok = await del(`/api/saccos/join/${r.body?.application_id}?token=${r.body?.token}`);
+  const again = await del(`/api/saccos/join/${r.body?.application_id}?token=${r.body?.token}`);
+  const pre = await fetch(base + "/api/saccos/join/x", { method: "OPTIONS" });
+  const partner = await get("/api/saccos/taifa/applications");
+  return {
+    ok: r.status === 201 && /^KO-[0-9A-F]{6}$/.test(r.body.reference) && r.body.status === "PENDING" && r.body.steps.map((x) => x.agent).join(">") === "Matcher>Registrar>Messenger>Guide"
+      && /Imehifadhi/.test(r.body.steps[1].action) && r.body.checklist.length === 6 && r.body.email === "NONE"
+      && bad.status === 400 && bad.body.fields.includes("sacco_id") && bad.body.fields.includes("county") && bad.body.fields.includes("contact")
+      && noContact.status === 400 && noContact.body.fields.join() === "contact" && office.status === 201 && office.body.email === "SIMULATED"
+      && wrong.status === 403 && ok.status === 200 && again.status === 404 && /DELETE/.test(pre.headers.get("access-control-allow-methods") ?? "") && partner.status === 404,
+    detail: `${r.body?.reference} · ${r.body?.steps?.map((x) => x.agent).join(">")} · withdraw ${wrong.status}/${ok.status}/${again.status}`,
+  };
+});
+
+await check("POST /api/nurseries/plan for fingerlings sizes the order by pond area and lists hatcheries", async () => {
+  const r = await post("/api/nurseries/plan", { need: "fingerlings", county: "Kirinyaga", pond_m2: 300, lang: "en" });
+  const bad = await post("/api/nurseries/plan", { need: "fingerlings", county: "Kirinyaga", pond_m2: 3 });
+  return { ok: r.status === 200 && r.body.quantity.basis === "pond_m2" && r.body.quantity.n === 900 && r.body.nurseries[0].id === "sagana-aqua" && /900 fingerlings/.test(r.body.advice.text) && /fisheries officer/.test(r.body.advice.text) && bad.status === 400 && bad.body.fields.pond_m2, detail: `${r.body?.quantity?.n} ${r.body?.nurseries?.[0]?.id}` };
 });
 
 await check("Boot: lanAddresses puts the Wi-Fi adapter first and flags vEthernet/WSL/Docker ones", async () => {

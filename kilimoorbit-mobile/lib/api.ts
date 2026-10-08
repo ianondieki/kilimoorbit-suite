@@ -1,5 +1,5 @@
 import { getApiBase, hydrateApiBase } from "./config";
-import { cleanBooking, cleanForecast, cleanHistory, cleanListing, cleanMeta, cleanNews, cleanNurseryPlan, cleanPestWatch, cleanShows } from "./validate";
+import { cleanBooking, cleanForecast, cleanHistory, cleanListing, cleanMeta, cleanNews, cleanNurseryPlan, cleanPestWatch, cleanSaccoApplication, cleanSaccoList, cleanShows } from "./validate";
 
 /* ── Apex v2.0 result types (the fields the app renders) ── */
 export type ArbitrageResult = {
@@ -202,16 +202,19 @@ export type Shows = { county: string; today: string; theme: string; source: stri
 
 /* ── seedlings and seed near the farmer ── */
 export type Nursery = {
-  id: string; name: string; kind: "research" | "forestry" | "training" | "seed" | "supplier"; town: string; county: string;
+  id: string; name: string; kind: "research" | "forestry" | "training" | "seed" | "supplier" | "hatchery"; town: string; county: string;
   lat: number; lon: number; carries: string[]; url: string | null; distance_km: number; carries_need: boolean;
   transport: { mode: "boda" | "matatu"; one_way_kes: number; round_trip_kes: number; minutes: number };
 };
 export type NurseryPlan = {
   need: string; need_label: { en: string; sw: string }; from: { county: string; lat: number; lon: number; gps: boolean }; acres: number;
-  per_acre: { n: number; unit: string; spacing: string }; nurseries: Nursery[];
+  per_acre: { n: number; unit: string; spacing: string };
+  /** The total to buy: by the farm's acres, or by pond area for fingerlings. */
+  quantity: { n: number; unit: string; basis: "acres" | "pond_m2"; amount: number } | null;
+  nurseries: Nursery[];
   advice: { text: string; source: "LIVE" | "MOCK"; lang: "sw" | "en" }; steps: BookingStep[]; generated_at: string;
 };
-export const planNurseries = (body: { need: string; county: string; acres?: number; lang: "sw" | "en"; lat?: number; lon?: number }) =>
+export const planNurseries = (body: { need: string; county: string; acres?: number; pond_m2?: number; lang: "sw" | "en"; lat?: number; lon?: number }) =>
   post<NurseryPlan>("/api/nurseries/plan", body, 60000).then((r) => must(cleanNurseryPlan(r), "nursery plan"));
 export const getShows = async (county: string) =>
   must(cleanShows(await request<unknown>(`/api/events?county=${encodeURIComponent(county)}`, undefined, 10000)), "shows");
@@ -225,6 +228,28 @@ export const bookShow = (input: { event_id: string; name: string; email?: string
   post<unknown>("/api/events/book", input, 20000).then((r) => must(cleanBooking(r), "booking"));
 export const cancelBooking = (id: string, token: string) =>
   request<{ ok: boolean }>(`/api/events/book/${encodeURIComponent(id)}?token=${encodeURIComponent(token)}`, { method: "DELETE" }, 10000);
+
+/* ── farmers' SACCOs near the farmer (/api/saccos) ── */
+export type SaccoService = "input_credit" | "inputs_shop" | "asset_finance" | "feeds_vet" | "produce_marketing" | "savings_credit" | "insurance" | "register";
+export type SaccoFocus = "dairy" | "tea" | "coffee" | "horticulture" | "grain" | "general";
+export type Sacco = {
+  id: string; name: string; kind: "sacco" | "dairy_coop" | "union" | "office"; town: string; county: string; lat: number; lon: number;
+  focus: SaccoFocus[]; services: SaccoService[]; distance_km: number; matches_focus: boolean;
+  transport: { mode: "boda" | "matatu"; one_way_kes: number; round_trip_kes: number; minutes: number };
+};
+export type SaccoList = { from: { county: string; lat: number; lon: number; gps: boolean }; focus: SaccoFocus | null; saccos: Sacco[] };
+export type SaccoApplication = {
+  application_id: string; token: string; reference: string; status: "PENDING"; sacco: Omit<Sacco, "distance_km" | "matches_focus" | "transport">;
+  checklist: { en: string; sw: string }[]; email: "SENT" | "SIMULATED" | "NONE" | "FAILED"; steps: BookingStep[];
+};
+export const getSaccos = async (q: { county: string; focus?: SaccoFocus | null; lat?: number; lon?: number }) => {
+  const qs = new URLSearchParams({ county: q.county, ...(q.focus ? { focus: q.focus } : {}), ...(q.lat != null && q.lon != null ? { lat: String(q.lat), lon: String(q.lon) } : {}) });
+  return must(cleanSaccoList(await request<unknown>(`/api/saccos?${qs.toString()}`, undefined, 10000)), "SACCOs");
+};
+export const joinSacco = (body: { sacco_id: string; name: string; phone?: string | null; email?: string | null; county: string; interests: SaccoService[]; acres?: number | null; lang: "sw" | "en" }) =>
+  post<unknown>("/api/saccos/join", body, 20000).then((r) => must(cleanSaccoApplication(r), "SACCO request"));
+export const withdrawSacco = (id: string, token: string) =>
+  request<{ ok: boolean }>(`/api/saccos/join/${encodeURIComponent(id)}?token=${encodeURIComponent(token)}`, { method: "DELETE" }, 10000);
 
 /* ── Soko marketplace (/api/soko) ── */
 export type SokoStatus = "open" | "claimed" | "delivered" | "cancelled";

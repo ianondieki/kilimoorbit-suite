@@ -1,10 +1,12 @@
 # KilimoOrbit suite
 
+> *If we treat farming normally, it will not treat us abnormally.* — *Tukikitendea kilimo kawaida, hakitatutendea isivyo kawaida.*
+
 Three projects in one repository:
 
 | Folder | What it is | Runs on |
 |---|---|---|
-| `kilimoorbit-sentinel/` | The server: the Gemini-backed APEX engine, farm weather, market prices, the county pest watch, farm news, farm shows with the booking agent, the nursery agent (nearest seedlings and seed, with fares), and the Mission Control dashboard | Node.js 20+, port 4517 |
+| `kilimoorbit-sentinel/` | The server: the Gemini-backed APEX engine, farm weather, market prices, the county pest watch, farm news, farm shows with the booking agent, the nursery agent (nearest seedlings, seed and fish fingerlings, with fares), farmers' SACCOs near the farm with a join request, and the Mission Control dashboard | Node.js 20+, port 4517 |
 | `kilimoorbit-mobile/` | The farmer's app, KilimoOrbit (Expo SDK 57, Kiswahili and English) | Expo Go on Android, or the browser |
 | `soko-mobile/` | The Soko marketplace app (Expo) | Expo Go on Android, or the browser |
 

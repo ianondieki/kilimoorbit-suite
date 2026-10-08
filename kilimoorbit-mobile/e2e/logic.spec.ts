@@ -24,6 +24,9 @@ import { CROPS, CROP_KEYS, acresFromSteps, bagsFor, inputsFor } from "../lib/agr
 import { diagnose } from "../lib/pests";
 import { cleanArb, cleanBooking, cleanFeed, cleanForecast, cleanListing, cleanNews, cleanPestWatch, cleanShows, cleanNurseryPlan } from "../lib/validate";
 import { fareText, kmText, mapsUrl, minutesText, needLabel } from "../lib/nurseries";
+import { FISH_PROBLEMS, POND_PREP, feedRate, feedStage, feedToday, harvestPlan, pondTasks, sanitizeFish, stockingFor, weightAfter, type Pond } from "../lib/aquaculture";
+import { farmFocus, sanitizeSaccos, seasonInputs } from "../lib/saccoplan";
+import { cleanSaccoApplication, cleanSaccoList } from "../lib/validate";
 import type { WxDay } from "../lib/api";
 
 const TODAY = "2026-10-05";
@@ -562,4 +565,77 @@ test("Nurseries: the plan validator keeps well-formed rows, drops malformed ones
   expect(minutesText("sw", 45)).toBe("dakika 45");
   expect(mapsUrl(-0.33, 35.95)).toBe("https://www.google.com/maps/dir/?api=1&destination=-0.33000,35.95000");
   expect(needLabel("sw", "potato")).toBe("Mbegu za viazi");
+});
+
+test("Fish: stocking density, the growth curve, feed by size, the harvest plan re-anchored by a weighing, and the pond calendar", () => {
+  expect(stockingFor("tilapia", "earthen", 300)).toBe(900);
+  expect(stockingFor("catfish", "liner", 100)).toBe(800);
+  expect(weightAfter("tilapia", 5, 180)).toBeCloseTo(300, 0);
+  expect(weightAfter("catfish", 5, 180)).toBeCloseTo(600, 0);
+  expect(weightAfter("tilapia", 5, 0)).toBeCloseTo(5, 5);
+  expect([feedRate(8), feedRate(15), feedRate(150), feedRate(400)]).toEqual([7, 5, 2.5, 1.5]);
+  expect([feedStage(3), feedStage(10), feedStage(60), feedStage(150)]).toEqual(["fry", "starter", "grower", "finisher"]);
+
+  const pond: Pond = { id: "p", name: "P", species: "tilapia", kind: "earthen", areaM2: 300, stocked: addDays(TODAY, -60), fingerlings: 900, startG: 5 };
+  const f = feedToday(pond, [], [{ id: "l", pondId: "p", date: addDays(TODAY, -10), count: 50 }], TODAY);
+  expect(f.alive).toBe(850);
+  expect(f.kgPerDay).toBeCloseTo((850 * f.g * feedRate(f.g)) / 100 / 1000, 2);
+  const plain = harvestPlan(pond, [], [], TODAY);
+  const heavy = harvestPlan(pond, [{ id: "s", pondId: "p", date: addDays(TODAY, -2), avgG: 200 }], [], TODAY);
+  expect(plain.daysLeft).toBeGreaterThan(heavy.daysLeft); // a heavy weighing brings the harvest closer
+  expect(plain.kg).toBeGreaterThan(230);
+  expect(plain.kg).toBeLessThan(250); // 900 fish, 1 in 10 lost, about 300 g
+  expect(plain.value).toBe(plain.kg * 350);
+  expect(plain.fcr).toBeGreaterThan(1.2);
+  expect(plain.fcr).toBeLessThan(2.2);
+  const ready = harvestPlan(pond, [{ id: "s", pondId: "p", date: TODAY, avgG: 320 }], [], TODAY);
+  expect(ready).toMatchObject({ reached: true, daysLeft: 0, feedKg: 0 });
+
+  const tasks = pondTasks(pond, [], [], TODAY);
+  expect(tasks.map((t) => t.kind)).toEqual(expect.arrayContaining(["sample", "manure", "feedChange", "harvest"]));
+  expect(tasks[tasks.length - 1].kind).toBe("harvest");
+  const sample = tasks.find((t) => t.kind === "sample")!;
+  expect(sample.due >= TODAY && sample.due <= addDays(TODAY, 14)).toBe(true);
+  expect(pondTasks({ ...pond, kind: "tank" }, [], [], TODAY).some((t) => t.kind === "manure")).toBe(false);
+  for (const p of FISH_PROBLEMS) expect(p.sign.sw && p.act.sw && p.act.en).toBeTruthy();
+  expect(POND_PREP).toHaveLength(6);
+
+  const clean = sanitizeFish({ ponds: [pond, { ...pond, id: "bad", species: "shark" }], samples: [{ id: "s", pondId: "p", date: TODAY, avgG: 80 }, { id: "x", pondId: "ghost", date: TODAY, avgG: 80 }, { id: "y", pondId: "p", date: "nope", avgG: 80 }], losses: [{ id: "l", pondId: "p", date: TODAY, count: 2.5 }], prices: { tilapia: 380, catfish: -1 } });
+  expect(clean.ponds.map((p) => p.id)).toEqual(["p"]);
+  expect(clean.samples.map((s) => s.id)).toEqual(["s"]);
+  expect(clean.losses).toEqual([]);
+  expect(clean.prices).toEqual({ tilapia: 380, catfish: null });
+  expect(sanitizeFish("garbage").ponds).toEqual([]);
+});
+
+test("SACCOs: the farm's focus, the season's input bill, the stored requests, and the response validators", () => {
+  expect(farmFocus([], 2)).toBe("dairy");
+  expect(farmFocus([{ crop: "maize", acres: 2 }, { crop: "tomato", acres: 1 }], 0)).toBe("grain");
+  expect(farmFocus([{ crop: "tomato", acres: 2 }, { crop: "maize", acres: 1 }], 0)).toBe("horticulture");
+  expect(farmFocus([], 0)).toBeNull();
+  const b = budgetFor("maize", 1, { pricePerKg: 0 });
+  const want = b.lines.filter((l) => l.key === "seed" || l.key === "dap" || l.key === "can").reduce((s, l) => s + l.cost, 0);
+  expect(seasonInputs([{ crop: "maize", acres: 1 }]).total).toBe(want);
+  expect(seasonInputs([{ crop: "maize", acres: 1 }], { dap: 5000 }).total).toBeGreaterThan(want); // the farmer's own prices count
+  expect(seasonInputs([]).total).toBe(0);
+
+  const stored = sanitizeSaccos({ applications: [{ id: "a", token: "t", reference: "KO-1", sacco_id: "taifa", name: "Taifa Sacco", town: "Nyeri" }, { id: "b" }, null] });
+  expect(stored.applications.map((a) => a.id)).toEqual(["a"]);
+  expect(sanitizeSaccos(42).applications).toEqual([]);
+
+  const list = cleanSaccoList({ from: { county: "Nyeri", lat: -0.4, lon: 36.9 }, focus: "lizards", saccos: [
+    { id: "x", name: "X Sacco", kind: "bank", town: "T", county: "C", lat: 0, lon: 0, focus: ["dairy", "lizards"], services: ["input_credit", "free_money"], distance_km: 3, transport: { round_trip_kes: 100 } },
+    { id: "y", name: "No transport", town: "T", county: "C", lat: 0, lon: 0, distance_km: 3 },
+  ] })!;
+  expect(list.focus).toBeNull();
+  expect(list.saccos).toHaveLength(1);
+  expect(list.saccos[0]).toMatchObject({ kind: "sacco", focus: ["dairy"], services: ["input_credit"], transport: { mode: "matatu", minutes: 0 } });
+  expect(cleanSaccoList({ from: {} })).toBeNull();
+  expect(cleanSaccoApplication({ application_id: "a", reference: "KO-1", sacco: { id: "s", name: "S", town: "T", county: "C", lat: 0, lon: 0 } })).toBeNull(); // no token
+  const app = cleanSaccoApplication({ application_id: "a", token: "t", reference: "KO-1", email: "WHATEVER", sacco: { id: "s", name: "S", town: "T", county: "C", lat: 0, lon: 0 }, checklist: [{ en: "ID", sw: "Kitambulisho" }, { en: "half" }], steps: [] })!;
+  expect(app).toMatchObject({ email: "NONE", checklist: [{ en: "ID", sw: "Kitambulisho" }] });
+  expect(kmText(0.3)).toBe("< 1 km");
+  const plan = cleanNurseryPlan({ need: "fingerlings", from: { county: "K", lat: 0, lon: 0 }, advice: { text: "x" }, per_acre: {}, quantity: { n: 900, unit: "fingerlings", basis: "pond_m2", amount: 300 }, nurseries: [] })!;
+  expect(plan.quantity).toEqual({ n: 900, unit: "fingerlings", basis: "pond_m2", amount: 300 });
+  expect(cleanNurseryPlan({ need: "x", from: { county: "K", lat: 0, lon: 0 }, advice: { text: "x" }, per_acre: {}, quantity: { basis: "furlongs" } })!.quantity).toBeNull();
 });

@@ -6,7 +6,7 @@
  * read-aloud, and sign out (with an inline confirm; no Alert).
  */
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import {
+import { Image,
   Modal, View, Pressable, ScrollView, Switch, useWindowDimensions, type LayoutChangeEvent,
 } from "react-native";
 import Text from "./Text";
@@ -30,6 +30,9 @@ import { maskEmail, maskPhone, initials } from "../lib/phone";
 import { focusElement, focusRing, radioKeys, spaceActivates, webCursor, isWeb, type PressState } from "../lib/ui";
 import type { Key } from "../lib/i18n";
 import { useMenu, type CloseOpts } from "./MenuContext";
+import { Sheet, tint } from "./Kit";
+import { PHOTOS, PHOTO_KEYS } from "../lib/photos";
+import { openLink } from "../lib/news";
 import Segmented from "./Segmented";
 import { ArrowGlyph, BarsGlyph, ChatGlyph, CheckCoin, CheckGlyph, ChevronGlyph, CrossGlyph, ExitGlyph, LeafGlyph, LensGlyph, MoonGlyph, PersonGlyph, PhoneGlyph, PlusGlyph, SignalOffGlyph, SpeakerGlyph, SunGlyph } from "./Glyphs";
 
@@ -159,6 +162,7 @@ function SidebarBody({ variant, open }: { variant: Variant; open: boolean }) {
   const scrollRef = useRef<ScrollView>(null);
   const tileRefs = useRef<(View | null)[]>([]);
   const [conn, setConn] = useState(false);
+  const [credits, setCredits] = useState(false);
   const { base: apiBase } = useApiBase();
   const appVersion = Constants.expoConfig?.version ?? "?";
   const fontsOk = getFontStatus() === "ready";
@@ -327,7 +331,45 @@ function SidebarBody({ variant, open }: { variant: Variant; open: boolean }) {
             <Text numberOfLines={1} style={{ color: fontsOk ? t.dim : t.alert, fontSize: 12.5, lineHeight: 16, fontWeight: "700" }}>v{appVersion} · {tt(fontsOk ? "settings.fontsOk" : "settings.fontsFail")}</Text>
           </View>
         </View>
+        <Pressable
+          onPress={() => setCredits(true)}
+          accessibilityRole="button"
+          testID="settings-credits"
+          style={({ pressed, hovered, focused }: PressState) => [
+            { minHeight: 48, paddingHorizontal: 20, flexDirection: "row", alignItems: "center", gap: 14 },
+            hovered && { backgroundColor: drawer ? t.raised : t.bg }, pressed && { opacity: 0.7 }, webCursor, focusRing(focused, t.accent),
+          ]}
+        >
+          <Icon name="camera-outline" size={22} color={t.ink} />
+          <Text style={{ color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "600", flex: 1 }}>{tt("credits.title")}</Text>
+          <ChevronGlyph size={12} color={t.dim} dir="right" />
+        </Pressable>
         <ConnectionSheet visible={conn} onClose={() => setConn(false)} />
+        <Sheet visible={credits} onClose={() => setCredits(false)} title={tt("credits.title")} testID="sheet-credits">
+          <Text style={{ color: t.dim, fontSize: 15, lineHeight: 21 }}>{tt("credits.body")}</Text>
+          <View style={{ gap: 8, marginTop: 12 }}>
+            {PHOTO_KEYS.map((k) => {
+              const p = PHOTOS[k];
+              return (
+                <Pressable key={k} onPress={() => openLink(p.source)} accessibilityRole="link"
+                  style={({ focused, hovered }: PressState) => [{ flexDirection: "row", gap: 12, alignItems: "center", padding: 8, borderRadius: 12, borderWidth: 1, borderColor: t.line, backgroundColor: hovered ? t.raised : t.panel }, webCursor, focusRing(focused, t.accent)]}>
+                  <Image source={p.src} style={{ width: 64, height: 44, borderRadius: 8 }} accessible={false} />
+                  <View style={{ flex: 1 }}>
+                    <Text numberOfLines={2} style={{ color: t.ink, fontSize: 14, lineHeight: 19, fontWeight: "700" }}>{lang === "sw" ? p.alt.sw : p.alt.en}</Text>
+                    <Text style={{ color: t.dim, fontSize: 12.5, lineHeight: 17 }}>{p.credit} · {p.license}</Text>
+                  </View>
+                  <Icon name="open-in-new" size={16} color={t.accent} />
+                </Pressable>
+              );
+            })}
+          </View>
+        </Sheet>
+
+        {/* The KilimoOrbit motto. */}
+        <View style={{ marginHorizontal: 20, marginTop: 14, padding: 14, borderRadius: 14, backgroundColor: tint(t.ok, 0.08), borderLeftWidth: 3, borderLeftColor: t.ok, gap: 4 }} testID="sidebar-motto">
+          <Text style={{ color: t.ok, fontSize: 11, lineHeight: 14, fontWeight: "800", letterSpacing: 1.2, textTransform: "uppercase" }}>{tt("motto.label")}</Text>
+          <Text display style={{ color: t.ink, fontSize: 16, lineHeight: 22 }}>{tt("motto")}</Text>
+        </View>
 
         {/* 6. Footer: its own line at the end of the scrolling body, for
             everyone. It never shares the sign-out row, and the pinned block

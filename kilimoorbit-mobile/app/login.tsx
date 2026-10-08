@@ -5,6 +5,7 @@
  * No password and no OTP: a lightweight profile saved on this phone.
  */
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { PhotoHero } from "../components/PhotoHero";
 import {
   View, ScrollView, Pressable, KeyboardAvoidingView, Platform, TextInput,
   useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent,
@@ -539,6 +540,9 @@ function LoginScreen({ edit, leaving }: { edit: boolean; leaving: React.MutableR
           Listen script (which explains the form) is not offered. */}
       {!result && (
         <>
+          {!wide && !edit && (
+            <PhotoHero photo="login" compact height={168} icon="sprout" eyebrow={tt("motto.label")} title={tt("motto")} style={{ marginBottom: 16 }} testID="login-hero" />
+          )}
           {/* minHeight 48 on phone and medium: the Listen pill mounts only once
               voices load (late on web), and must not push the form down. */}
           <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: wide && edit ? 16 : 0, minHeight: wide ? undefined : 48 }}>
@@ -810,6 +814,7 @@ function LoginScreen({ edit, leaving }: { edit: boolean; leaving: React.MutableR
       <SafeAreaView edges={["top", "bottom"]} style={[{ flex: 1, flexDirection: "row", backgroundColor: t.bg }, Platform.OS === "web" && ({ minHeight: "100vh" } as any)]}>
         <View style={{ width: panelW, backgroundColor: t.panel, borderRightWidth: 1, borderRightColor: t.line }}>
           <ScrollView contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 40, paddingVertical: 40 }}>
+            <PhotoHero photo="login" icon="sprout" eyebrow={tt("motto.label")} title={tt("login.hero.title")} subtitle={tt("motto")} height={260} style={{ marginBottom: 24 }} testID="login-hero" />
             <ShambaPanel variant="side" board={board} season={season} width={width} height={height} />
           </ScrollView>
         </View>

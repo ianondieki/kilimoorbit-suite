@@ -842,3 +842,137 @@ test("Theme: with nothing chosen the app opens in the daylight Shamba theme; the
   await expect(page.getByTestId("hero-stats")).toContainText("Tasks this week");
   await expect(page.getByTestId("hero-stats")).toContainText("Next rain");
 });
+
+/* ── SACCOs near the farmer ── */
+const SACCO_LIST = {
+  from: { county: "Nyeri", lat: -0.42, lon: 36.95, gps: false }, focus: "grain",
+  saccos: [
+    { id: "taifa", name: "Taifa Sacco", kind: "sacco", town: "Nyeri", county: "Nyeri", lat: -0.42, lon: 36.95, focus: ["coffee", "tea", "dairy"], services: ["savings_credit", "input_credit", "asset_finance", "made_up"], distance_km: 0, matches_focus: false, transport: { mode: "boda", one_way_kes: 70, round_trip_kes: 140, minutes: 5 } },
+    { id: "unaitas", name: "Unaitas Sacco", kind: "sacco", town: "Murang'a", county: "Murang'a", lat: -0.72, lon: 37.15, focus: ["general"], services: ["input_credit", "insurance"], distance_km: 40.1, matches_focus: true, transport: { mode: "matatu", one_way_kes: 320, round_trip_kes: 640, minutes: 75 } },
+    { id: "broken", name: "No position" },
+    { id: "county-coop-nyeri", name: "Nyeri County Co-operatives office", kind: "office", town: "Nyeri", county: "Nyeri", lat: -0.42, lon: 36.95, focus: ["general"], services: ["register"], distance_km: 0, matches_focus: true, transport: { mode: "boda", one_way_kes: 70, round_trip_kes: 140, minutes: 5 } },
+  ],
+};
+const SACCO_JOIN = {
+  application_id: "app1", token: "tok1", reference: "KO-ABC123", status: "PENDING",
+  sacco: { id: "taifa", name: "Taifa Sacco", kind: "sacco", town: "Nyeri", county: "Nyeri", lat: -0.42, lon: 36.95, focus: ["coffee"], services: ["input_credit"] },
+  checklist: [{ en: "Your national ID (original and a copy)", sw: "Kitambulisho" }, { en: "KRA PIN certificate", sw: "KRA PIN" }],
+  email: "NONE",
+  steps: [{ agent: "Matcher", action: "Checked that Taifa Sacco serves farmers from Nyeri", latency_ms: 1 }, { agent: "Registrar", action: "Saved your membership request (reference KO-ABC123)", latency_ms: 2 }, { agent: "Messenger", action: "Your reference KO-ABC123 is the confirmation", latency_ms: 3 }, { agent: "Guide", action: "Prepared what to bring to finish joining", latency_ms: 4 }],
+};
+
+test("SACCOs: find the nearest, join with one tap, get the checklist, then withdraw", async ({ page, context }) => {
+  const posted: any[] = [];
+  let withdrawn = "";
+  await context.route("http://localhost:4517/api/saccos?**", (r) => r.fulfill(json(SACCO_LIST)));
+  await context.route("http://localhost:4517/api/saccos/join", (r) => { posted.push(r.request().postDataJSON()); return r.fulfill(json(SACCO_JOIN, 201)); });
+  await context.route("http://localhost:4517/api/saccos/join/**", (r) => { withdrawn = r.request().url(); return r.fulfill(json({ ok: true })); });
+  await start(page, "/shamba", "en", { county: "Nyeri", plantings: [planted("maize", 20, 1)] });
+  const card = page.getByTestId("saccos-card");
+  await card.scrollIntoViewIfNeeded();
+  await expect(card).toContainText("Join a farmers' SACCO");
+  await expect(card).toContainText("This season's seed and fertiliser: about KES"); // what an input loan must cover
+  await page.getByTestId("sc-find").click();
+  const taifa = page.getByTestId("sc-row-taifa");
+  await expect(taifa).toContainText("< 1 km");
+  await expect(taifa).toContainText("Inputs on credit");
+  await expect(taifa).not.toContainText("made_up"); // unknown services are dropped by the validator
+  await expect(page.getByTestId("sc-row-unaitas")).toContainText("Open to all farmers · ≈ KES 640 by matatu, 1 h 15 min");
+  await expect(page.getByTestId("sc-row-broken")).toHaveCount(0);
+  await expect(page.getByTestId("sc-row-county-coop-nyeri")).toContainText("County government office");
+
+  await page.getByTestId("sc-join-taifa").click();
+  await expect(page.getByTestId("sc-name").locator("input").or(page.getByTestId("sc-name"))).toHaveValue("Wanjiru Kamau");
+  await expect(page.getByTestId("sc-phone").locator("input").or(page.getByTestId("sc-phone"))).toHaveValue("0712345678");
+  await page.getByTestId("sc-phone").fill("");
+  await expect(page.getByTestId("sc-phone")).toHaveValue("");
+  await page.getByTestId("sc-send").click();
+  await expect(page.getByTestId("sheet-sacco")).toContainText("Add a phone number or an email so the SACCO can reach you.");
+  expect(posted).toHaveLength(0);
+  await page.getByTestId("sc-phone").fill("0712 345 678");
+  await page.getByTestId("sc-send").click();
+  const done = page.getByTestId("sc-done");
+  await expect(done).toContainText("Request saved · KO-ABC123");
+  await expect(done).toContainText("finish joining at their Nyeri office");
+  await expect(page.getByTestId("sc-checklist")).toContainText("KRA PIN certificate");
+  await expect(done).toContainText("KilimoOrbit never asks you for money");
+  await expect(page.getByTestId("sc-step-3")).toContainText("Guide");
+  expect(posted[0]).toMatchObject({ sacco_id: "taifa", name: "Wanjiru Kamau", phone: "0712345678", county: "Nyeri", lang: "en" });
+  expect(posted[0].interests).toEqual(expect.arrayContaining(["input_credit", "asset_finance"]));
+
+  await page.getByTestId("sc-close").click();
+  await expect(taifa).toContainText("Request sent · KO-ABC123");
+  await expect(page.getByTestId("sc-mine")).toContainText("KO-ABC123 · Nyeri");
+  await page.getByTestId("sc-withdraw-taifa").click();
+  await expect(page.getByTestId("sc-mine")).toHaveCount(0);
+  expect(withdrawn).toContain("/api/saccos/join/app1?token=tok1");
+});
+
+test("SACCOs: a server that can't be reached offers a retry, never a crash", async ({ page, context }) => {
+  await context.route("http://localhost:4517/api/saccos?**", (r) => r.abort());
+  await start(page, "/shamba", "en", { county: "Nyeri" });
+  await page.getByTestId("saccos-card").scrollIntoViewIfNeeded();
+  await page.getByTestId("sc-find").click();
+  await expect(page.getByTestId("saccos-card")).toContainText("Couldn't reach the KilimoOrbit server");
+  await expect(page.getByTestId("sc-find")).toContainText("Try again");
+});
+
+/* ── fish farming ── */
+test("Fish: add a pond, get today's feed and the harvest, weigh a sample, read the health guide, find fingerlings, record the sale", async ({ page }) => {
+  await start(page, "/shamba?tab=fish", "en", { county: "Kirinyaga" });
+  await expect(page.getByTestId("farm-hero")).toContainText("Fish farming");
+  await expect(page.getByTestId("fish-section")).toContainText("Farm fish: the blue economy at home");
+  await page.getByTestId("fish-add").click();
+  await page.getByTestId("pond-name").fill("Bwawa A");
+  await expect(page.getByTestId("sheet-pond")).toContainText("For this pond: about 900 fingerlings (3 per m²)");
+  await page.getByTestId("pond-save").click();
+
+  const pond = page.locator('[data-testid^="pond-p"]').first();
+  await expect(pond).toContainText("Bwawa A");
+  await expect(pond).toContainText("900 fish");
+  await expect(pond).toContainText("Day 0 · about 5 g each");
+  await expect(page.getByTestId("pond-feed")).toContainText("0.3 kg of 1–2 mm starter pellets (35% protein), in 3 meals");
+  await expect(page.getByTestId("pond-harvest")).toContainText(/Around .+ \(in 1\d\d days\): about 2\d\d kg, worth KES/);
+  await expect(page.getByTestId("pond-anchor")).toContainText("Projected from stocking");
+  await expect(page.getByTestId("pond-task-sample")).toContainText("weigh 20 fish");
+  await expect(page.getByTestId("pond-task-sample")).not.toContainText("Bwawa A:"); // the card already names the pond
+
+  await page.getByTestId("pond-weigh").click();
+  await page.getByTestId("pond-entry-value").fill("120");
+  await page.getByTestId("pond-entry-save").click();
+  await expect(page.getByTestId("pond-anchor")).toContainText("120 g");
+  await expect(page.getByTestId("pond-feed")).toContainText("finisher pellets");
+
+  await page.getByTestId("fish-problem-gasping").click();
+  await expect(page.getByTestId("fish-health")).toContainText("Stop feeding today");
+
+  await page.getByTestId("pond-find").click();
+  await expect(page.getByTestId("nz-results")).toContainText("For a 300 m² pond: about 900 fingerlings");
+  await expect(page.getByTestId("nz-row-sagana-aqua")).toContainText("Fish hatchery");
+  await page.keyboard.press("Escape");
+
+  await page.getByTestId("pond-sell").click();
+  await page.getByTestId("pond-entry-value").fill("200");
+  await page.getByTestId("pond-entry-amount").fill("70000");
+  await page.getByTestId("pond-entry-save").click();
+  const entries = await page.evaluate(() => JSON.parse(localStorage.getItem("ko-farm") || "{}").entries);
+  expect(entries).toEqual([expect.objectContaining({ kind: "income", category: "fish", amount: 70000, kg: 200, note: "Bwawa A" })]);
+});
+
+/* ── photographs, credits and the motto ── */
+test("Photos: each main screen opens on a credited photo; the credits open their sources; the motto is in the sidebar", async ({ page }) => {
+  await start(page, "/masoko");
+  for (const [path, id] of [["/masoko", "markets-hero"], ["/daktari", "doctor-hero"], ["/chat", "chat-hero"], ["/autopilot", "autopilot-hero"], ["/shamba", "farm-hero"]] as const) {
+    await page.goto(path);
+    const hero = page.getByTestId(id);
+    await expect(hero).toBeVisible();
+    await expect(hero.getByTestId("photo-credit")).toContainText(/CC BY|Public domain/);
+    await expect(hero.getByRole("img")).toHaveCount(0); // the photo is decorative: hidden from screen readers
+  }
+  const menu = page.locator('[data-ko-menu-button="1"]');
+  if (await menu.count()) await menu.first().click();
+  await expect(page.getByTestId("sidebar-motto")).toContainText("If we treat farming normally, it will not treat us abnormally.");
+  await page.getByTestId("settings-credits").click();
+  await expect(page.getByTestId("sheet-credits")).toContainText("USAID Mozambique · Public domain");
+  await expect(page.getByTestId("sheet-credits").getByRole("link")).toHaveCount(10);
+});

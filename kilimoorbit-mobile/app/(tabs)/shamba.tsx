@@ -27,6 +27,11 @@ import { CropCoin } from "../../components/ShambaPanel";
 import { ArrowGlyph, BarsGlyph, ChevronGlyph, CrossGlyph, PlusGlyph, CoinGlyph } from "../../components/Glyphs";
 import Icon from "../../components/Icon";
 import { NurseriesCard } from "../../components/Nurseries";
+import { SaccosCard } from "../../components/Saccos";
+import { FishSection } from "../../components/Fish";
+import { HeroChip, PhotoHero } from "../../components/PhotoHero";
+import { useFish } from "../../lib/fish";
+import type { PhotoKey } from "../../lib/photos";
 import { useTheme } from "../../lib/theme-context";
 import { useLang, useSession } from "../../lib/session";
 import { announce, focusRing, webCursor, webLang, type PressState } from "../../lib/ui";
@@ -42,7 +47,8 @@ import type { WxDay } from "../../lib/api";
 import { useForecast } from "../../lib/weather";
 import { DEMO_COUNTY } from "../../lib/counties";
 
-type Tab = "calendar" | "livestock" | "records";
+type Tab = "calendar" | "livestock" | "fish" | "records";
+const TAB_PHOTO: Record<Tab, PhotoKey> = { calendar: "farm", livestock: "livestock", fish: "fish", records: "farm" };
 
 export default function Shamba() {
   const t = useTheme();
@@ -50,7 +56,10 @@ export default function Shamba() {
   const { farm } = useFarm();
   // ?tab=livestock (or records) opens that section directly.
   const params = useLocalSearchParams<{ tab?: string }>();
-  const [tab, setTab] = useState<Tab>(params.tab === "livestock" || params.tab === "records" ? params.tab : "calendar");
+  const [tab, setTab] = useState<Tab>(params.tab === "livestock" || params.tab === "records" || params.tab === "fish" ? params.tab : "calendar");
+  const { herd } = useHerd();
+  const { fish } = useFish();
+  const animals = herd.animals.length;
   const [sheet, setSheet] = useState<null | "county" | "crop" | "record" | "store" | "budget" | "sale" | "scout">(null);
   const [preset, setPreset] = useState<CropKey | undefined>(undefined);
   const [storeFor, setStoreFor] = useState<{ crop?: StoreCrop; kg?: number; acres?: number }>({});
@@ -77,6 +86,18 @@ export default function Shamba() {
       <Header title={tt("farm.title")} />
       <ScrollView contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}>
         <Bounded style={{ padding: 16, gap: 14 }}>
+          <PhotoHero
+            photo={TAB_PHOTO[tab]} icon="barn"
+            eyebrow={tt("ph.farm.eyebrow", { county: farm.county ?? tt("farm.noCounty") })}
+            title={tt(`ph.farm.title.${tab}` as Key)} subtitle={tt(`ph.farm.sub.${tab}` as Key)}
+            testID="farm-hero"
+          >
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              <HeroChip icon="sprout" value={String(farm.plantings.length)} label={tt("ph.chip.crops")} />
+              <HeroChip icon="cow" value={String(animals)} label={tt("ph.chip.animals")} />
+              <HeroChip icon="fish" value={String(fish.ponds.length)} label={tt("ph.chip.ponds")} />
+            </View>
+          </PhotoHero>
           {/* Farm profile row */}
           <Pressable
             onPress={() => setSheet("county")}
@@ -104,6 +125,7 @@ export default function Shamba() {
             options={[
               { value: "calendar", label: tt("farm.tab.calendar") },
               { value: "livestock", label: tt("farm.tab.livestock") },
+              { value: "fish", label: tt("farm.tab.fish") },
               { value: "records", label: tt("farm.tab.records") },
             ]}
             value={tab}
@@ -114,7 +136,12 @@ export default function Shamba() {
             {tab === "calendar" ? (
               <Calendar actions={actions} />
             ) : tab === "livestock" ? (
-              <HerdSection />
+              <View style={{ gap: 14 }}>
+                <HerdSection />
+                <Guard name="saccos"><SaccosCard /></Guard>
+              </View>
+            ) : tab === "fish" ? (
+              <FishSection />
             ) : (
               <Records onAdd={() => setSheet("record")} />
             )}
@@ -178,6 +205,7 @@ function Calendar({ actions }: { actions: CropActions }) {
         <Guard name="store"><StoreCard onAdd={actions.onStore} onSell={actions.onSell} /></Guard>
       ) : null}
       <Guard name="nurseries"><NurseriesCard /></Guard>
+      <Guard name="saccos"><SaccosCard /></Guard>
       <SuggestCard onPick={onAdd} onBudget={() => actions.onBudget()} />
     </View>
   );
