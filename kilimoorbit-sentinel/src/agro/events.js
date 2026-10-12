@@ -25,6 +25,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from "
 import { dirname } from "node:path";
 import { randomUUID, randomBytes } from "node:crypto";
 import { COUNTIES, addDays, eatDateKey, findCounty } from "./weather.js";
+import { EMAIL_RE, stripUrls } from "./mail.js";
 
 export const ASK_URL = "https://ask.co.ke/calendar-of-events1/";
 export const SOON_DAYS = 60;
@@ -143,8 +144,13 @@ export function icsFor(ev, { uid = `${ev.id}-${ev.start}@kilimoorbit`, remindDay
 /* ── the booking agent and its store ── */
 export const REMIND_CHOICES = [1, 3, 7];
 export const MAX_BOOKINGS = 2000;
-const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/;
 const maskEmail = (e) => { const at = e.indexOf("@"); return at < 1 ? "•••" : `${e[0]}•••${e.slice(at)}`; };
+/** Reminder emails go out from this hour (East Africa Time); a sweep before it waits. */
+export const SEND_FROM_HOUR_EAT = 6;
+/** A reminder claimed by a sweep that never finished (the process died) is retried after this long. */
+export const CLAIM_STALE_MS = 10 * 60_000;
+/** Transient SMTP failures are retried on later sweeps, up to this many times, while the reminder's window lasts. */
+export const MAX_ATTEMPTS = 5;
 
 /** Validates a booking request. Returns { input } or { error, fields }. */
 export function validateBooking(body, now = new Date()) {
@@ -153,7 +159,7 @@ export function validateBooking(body, now = new Date()) {
   const base = findEvent(body.event_id);
   const ev = base ? upcoming(base, eatDateKey(now)) : null;
   if (!ev) fields.push("event_id");
-  const name = typeof body.name === "string" ? body.name.trim().replace(/\s+/g, " ").slice(0, 60) : "";
+  const name = typeof body.name === "string" ? stripUrls(body.name).slice(0, 60) : "";
   if (!name) fields.push("name");
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   if (email && !EMAIL_RE.test(email)) fields.push("email");
@@ -175,7 +181,21 @@ export function createBookings({ storePath, now = () => new Date() } = {}) {
       console.error(`[events] bookings unreadable (${err?.message}); moved to ${quarantine}`);
     }
   }
+  // A booking is kept only while it is useful: once the show is over and no
+  // reminder is still due, the farmer's name and email go with it.
+  function purge() {
+    const cutoff = addDays(eatDateKey(now()), -1);
+    const before = db.bookings.length;
+    db.bookings = db.bookings.filter((b) => b.end >= cutoff || remindersOf(b).some((r) => r.state === "SCHEDULED" && r.on >= cutoff));
+    return before - db.bookings.length;
+  }
+  if (purge() > 0) {
+    if (storePath) {
+      try { mkdirSync(dirname(storePath), { recursive: true }); writeFileSync(`${storePath}.${process.pid}.tmp`, JSON.stringify(db, null, 2)); renameSync(`${storePath}.${process.pid}.tmp`, storePath); } catch {}
+    }
+  }
   function write() {
+    purge();
     if (!storePath) return;
     if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
     const tmp = `${storePath}.${process.pid}.tmp`;
@@ -198,9 +218,10 @@ export function createBookings({ storePath, now = () => new Date() } = {}) {
       step("Planner", "Prepared the calendar entry (.ics and a Google Calendar link)", { calendar_url });
 
       const today = eatDateKey(t0);
-      // The reminder emails: N days before, and the morning the show starts; never in the past.
+      // The reminder emails: N days before, and the morning the show starts; never in the
+      // past and never today (the confirmation just sent covers today).
       const remind_on = addDays(event.start, -remind_days);
-      const reminders = [...new Set([remind_on, event.start])].filter((d) => d >= today).sort();
+      const reminders = [...new Set([remind_on, event.start])].filter((d) => d > today).sort();
       let emailStatus = "NONE";
       if (email) {
         const msg = confirmationMessage({ name, email, event, calendar_url, reminders, remind_days });
@@ -228,7 +249,7 @@ export function createBookings({ storePath, now = () => new Date() } = {}) {
       if (db.bookings.length > MAX_BOOKINGS) db.bookings.splice(0, db.bookings.length - MAX_BOOKINGS);
       write();
       const when = reminders.length === 2 ? `${reminders[0]} (${remind_days} day${remind_days > 1 ? "s" : ""} before) and ${reminders[1]} (the morning of the show)`
-        : reminders.length === 1 ? `${reminders[0]} (${reminders[0] === event.start ? "the morning of the show" : `${remind_days} day${remind_days > 1 ? "s" : ""} before`})` : "none: the show has started";
+        : reminders.length === 1 ? `${reminders[0]} (${reminders[0] === event.start ? "the morning of the show" : `${remind_days} day${remind_days > 1 ? "s" : ""} before`})` : "none: the show starts today or has started";
       step("Reminder", email ? `Reminder emails scheduled for ${when}` : `Calendar alarm set for ${remind_on}`, { reminders });
 
       return {
@@ -240,23 +261,53 @@ export function createBookings({ storePath, now = () => new Date() } = {}) {
     /**
      * Reminder emails due on or before today and not yet sent (at most two
      * days late): one row per reminder, the booking with its `due_on`.
+     * Today's reminders wait for the morning (SEND_FROM_HOUR_EAT); a
+     * reminder another sweep claimed is skipped unless that claim went stale.
      */
     due(at = now()) {
       const today = eatDateKey(at);
       const floor = addDays(today, -2);
+      const hourEat = (at.getUTCHours() + 3) % 24;
       const out = [];
       for (const b of db.bookings) {
         if (!b.email) continue;
-        for (const r of remindersOf(b)) if (r.state === "SCHEDULED" && r.on <= today && r.on >= floor) out.push({ ...b, due_on: r.on });
+        for (const r of remindersOf(b)) {
+          if (r.on > today || r.on < floor) continue;
+          if (r.on === today && hourEat < SEND_FROM_HOUR_EAT) continue;
+          const stale = r.state === "SENDING" && (!r.claimed_at || at.getTime() - Date.parse(r.claimed_at) > CLAIM_STALE_MS);
+          if (r.state === "SCHEDULED" || stale) out.push({ ...b, due_on: r.on });
+        }
       }
       return out;
     },
-    /** Records what happened to the reminder due on `on` (SENT, SIMULATED or FAILED). */
+    /** Claims the reminder due on `on` for the sweep that is about to send it. */
+    claimReminder(id, on) {
+      const b = db.bookings.find((x) => x.id === id);
+      if (!b) return false;
+      const r = remindersOf(b).find((x) => x.on === on);
+      if (!r || (r.state !== "SCHEDULED" && r.state !== "SENDING")) return false;
+      b.reminders = remindersOf(b).map((x) => (x.on === on ? { ...x, state: "SENDING", claimed_at: now().toISOString() } : x));
+      write();
+      return true;
+    },
+    /**
+     * Records what happened to the reminder due on `on`: SENT or SIMULATED,
+     * or FAILED, which stays SCHEDULED for another sweep until MAX_ATTEMPTS.
+     */
     markReminder(id, on, state) {
       const b = db.bookings.find((x) => x.id === id);
       if (!b) return;
-      b.reminders = remindersOf(b).map((r) => (r.on === on ? { ...r, state, at: now().toISOString() } : r));
-      b.reminder = b.reminders.some((r) => r.state === "SCHEDULED") ? "SCHEDULED" : state;
+      b.reminders = remindersOf(b).map((r) => {
+        if (r.on !== on) return r;
+        const attempts = (r.attempts ?? 0) + 1;
+        const { claimed_at: _c, ...rest } = r;
+        if (state === "FAILED" && attempts < MAX_ATTEMPTS) return { ...rest, state: "SCHEDULED", attempts, last_error_at: now().toISOString() };
+        return { ...rest, state, attempts, at: now().toISOString() };
+      });
+      const next = b.reminders.find((r) => r.state === "SCHEDULED");
+      b.reminder = next ? "SCHEDULED" : state;
+      // An older server reads only remind_on and reminder: point them at what is still to come.
+      if (next) b.remind_on = next.on;
       b.reminded_at = now().toISOString();
       write();
     },

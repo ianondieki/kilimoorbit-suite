@@ -5,13 +5,13 @@
  * the farmer's own address (SMTP) or logs it (SIMULATED). The server keeps
  * nothing: the records stay on the phone, the email is the farmer's copy.
  */
-const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/;
+import { EMAIL_RE, stripUrls } from "./mail.js";
 const MAX_TEXT = 6000;
 const MAX_CROPS = 20;
 const CROP_RE = /^[a-z][a-z-]{0,30}$/;
 
 const money = (n) => `KES ${Math.round(n).toLocaleString("en-KE")}`;
-const clean = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+const clean = (s, n) => stripUrls(s).slice(0, n);
 const num = (v) => typeof v === "number" && Number.isFinite(v) && Math.abs(v) < 1e12;
 
 /** Validates a digest request. Returns { input } or { error, fields }. */
@@ -29,7 +29,8 @@ export function validateDigest(body) {
   const t = body.totals;
   const totalsOk = t && typeof t === "object" && num(t.income) && num(t.expense) && t.income >= 0 && t.expense >= 0;
   if (!totalsOk) fields.push("totals");
-  const text = typeof body.text === "string" ? body.text.replace(/\r/g, "").trim() : "";
+  // The report text keeps its lines but loses any link.
+  const text = typeof body.text === "string" ? body.text.replace(/\r/g, "").split("\n").map((l) => stripUrls(l)).join("\n").trim() : "";
   if (!text || text.length > MAX_TEXT) fields.push("text");
   const crops = Array.isArray(body.crops) ? body.crops : [];
   if (crops.length > MAX_CROPS || crops.some((c) => !c || typeof c !== "object" || !CROP_RE.test(String(c.crop)) || !num(c.profit))) fields.push("crops");
@@ -95,4 +96,4 @@ export function digestMessage(p) {
   return { to: p.email, subject: c.subject(p), text: lines.join("\n"), html };
 }
 
-export const maskEmail = (e) => { const at = e.indexOf("@"); return at < 1 ? "•••" : `${e[0]}•••${e.slice(at)}`; };
+export { maskEmail } from "./mail.js";

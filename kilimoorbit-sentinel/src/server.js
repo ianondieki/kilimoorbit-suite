@@ -10,6 +10,8 @@
  *   POST /api/autopilot  → agentic chain SENSE → A → gate → C → brief
  *   POST /api/signin     → { name, email } | { name, phone } → welcome email (SMTP or SIMULATED) | phone profile (SIMULATED, no SMS)
  *   POST /api/records/digest → the farmer's records summary, emailed to them (SMTP or SIMULATED; see src/agro/records.js)
+ *   POST /api/brief      → the farmer's morning brief, emailed to them once a day (see src/agro/brief.js)
+ *   POST /api/alerts/email → a price alert the board has reached, emailed to the farmer (see src/agro/brief.js)
  *   /api/events/*        → farm shows and the booking agent with its email reminders (see src/agro/events.js)
  *   GET  /api/weather    → ?county= → 7-day farm forecast + spray / plant / dry windows (see src/agro/weather.js)
  *   GET  /api/prices/history → ?crop= → 14 daily prices per market + 7-day change (see src/agro/prices.js)
@@ -31,7 +33,9 @@ import { boardFor, historyFor } from "./agro/prices.js";
 import { createPestWatch, validateReport } from "./agro/pests.js";
 import { createNews } from "./agro/news.js";
 import { createBookings, eventsNear, reminderMessage, validateBooking } from "./agro/events.js";
-import { digestMessage, maskEmail as maskDigestEmail, validateDigest } from "./agro/records.js";
+import { digestMessage, validateDigest } from "./agro/records.js";
+import { alertMessage, briefMessage, validateAlertMail, validateBrief } from "./agro/brief.js";
+import { EMAIL_RE as MAIL_EMAIL_RE, confirmMessage, confirmPage, createMailGate, maskEmail as maskDigestEmail, safeError } from "./agro/mail.js";
 import { networkInterfaces } from "node:os";
 import { SUITE, runSuite, loadPayload } from "./suite.js";
 
@@ -79,12 +83,15 @@ function rateLimit({ windowMs, max, name }) {
 export async function runReminders(bookings, mailer, now = new Date()) {
   let sent = 0;
   for (const b of bookings.due(now)) {
+    // Claim it first: a sweep that overlaps this one (a slow relay) must not send it again.
+    if (!bookings.claimReminder(b.id, b.due_on)) continue;
     try {
       if (mailer) { await mailer(reminderMessage(b, b.due_on)); bookings.markReminder(b.id, b.due_on, "SENT"); }
       else { console.log(`[events] SIMULATED reminder (${b.due_on}) for ${b.event_name} to ${b.email[0]}•••${b.email.slice(b.email.indexOf("@"))}`); bookings.markReminder(b.id, b.due_on, "SIMULATED"); }
       sent++;
     } catch (err) {
-      console.error(`[events] reminder failed for ${b.id} (${b.due_on}): ${err?.message ?? err}`);
+      // Stays scheduled for a later sweep (up to MAX_ATTEMPTS); the log never carries an address.
+      console.error(`[events] reminder failed for ${b.id} (${b.due_on}): ${safeError(err)}`);
       bookings.markReminder(b.id, b.due_on, "FAILED");
     }
   }
@@ -110,9 +117,12 @@ export function lanAddresses(ifaces = networkInterfaces()) {
 
 export function createApp(opts = {}) {
   const app = express();
-  // Injected by the test suite (stubbed feeds, a temp bookings file, no timers).
+  // Injected by the test suite (stubbed feeds, a temp bookings file, no timers, a fake mailer).
   const news = opts.news ?? createNews();
   const bookings = opts.bookings ?? createBookings({ storePath: process.env.EVENTS_STORE_PATH || join(root, "data", "events_bookings.json") });
+  const mail = opts.mail ?? createMailGate({ storePath: process.env.MAIL_STORE_PATH || join(root, "data", "mail_confirmed.json"), secretPath: join(root, "data", "mail_secret") });
+  // Where the confirmation link points: PUBLIC_URL when deployed, else the address this request came in on.
+  const publicUrl = (req) => (process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
   app.disable("x-powered-by");
   app.set("trust proxy", process.env.TRUST_PROXY === "1"); // set when behind Render/Fly/nginx
 
@@ -263,6 +273,7 @@ export function createApp(opts = {}) {
     res.json(near);
   });
   const bookingMailer = () => {
+    if (opts.mailer) return opts.mailer;
     const transport = mailTransport();
     return transport
       ? (msg) => transport.sendMail({ from: process.env.SMTP_FROM || `KilimoOrbit Sentinel <${process.env.SMTP_USER}>`, ...msg })
@@ -285,28 +296,77 @@ export function createApp(opts = {}) {
     if (r === "forbidden") return res.status(403).json({ error: "Wrong token.", error_type: "FORBIDDEN", fields: ["token"] });
     res.json({ ok: true });
   });
-  // The farmer's records, emailed to them: the app sends the season's totals
-  // and the report it builds on the phone; nothing is stored here. It sends
-  // email, so it is capped (a farmer records a handful of entries a day).
-  app.post("/api/records/digest", rateLimit({ windowMs: 60 * 60_000, max: 20, name: "records digest" }), async (req, res) => {
-    const v = validateDigest(req.body);
+  /* ── mail to the farmer: the records digest, the morning brief, a price alert ──
+   * The app composes these in the farmer's language; the server lays them out,
+   * sends (or logs) them and keeps nothing. Their text comes from the phone, so
+   * when email really goes out (SMTP) the address must have been confirmed
+   * first (the link in the welcome email), each address has a daily cap, and
+   * links are stripped (src/agro/mail.js). Without SMTP everything is SIMULATED.
+   */
+  const farmerMail = (name, build) => async (req, res) => {
+    const v = build.validate(req.body);
     if (v.error) return res.status(400).json({ error: v.error, error_type: "VALIDATION_ERROR", fields: v.fields });
+    const mailer = bookingMailer();
+    const { email } = v.input;
+    if (mailer && !mail.isConfirmed(email))
+      return res.status(403).json({ error: "Confirm your email first: open the KilimoOrbit welcome email and tap its button.", error_type: "EMAIL_UNCONFIRMED", fields: ["email"] });
+    if (!mail.allow(email))
+      return res.status(429).json({ error: "Enough emails to this address for today.", error_type: "RECIPIENT_CAP" });
     try {
-      const msg = digestMessage(v.input);
-      const mailer = bookingMailer();
+      const msg = build.message(v.input);
       if (!mailer) {
-        console.log(`[records] SIMULATED digest to ${maskDigestEmail(v.input.email)}: ${msg.subject}`);
-        return res.json({ status: "SIMULATED", email: v.input.email, subject: msg.subject });
+        console.log(`[${name}] SIMULATED to ${maskDigestEmail(email)}`);
+        return res.json({ status: "SIMULATED", email, subject: msg.subject });
       }
       await mailer(msg);
-      res.json({ status: "SENT", email: v.input.email, subject: msg.subject });
+      res.json({ status: "SENT", email, subject: msg.subject });
     } catch (err) {
-      res.status(500).json({ error: "The digest could not be sent.", error_type: "SERVER_ERROR" });
+      console.error(`[${name}] could not send to ${maskDigestEmail(email)}: ${safeError(err)}`);
+      res.status(500).json({ error: `The ${name} could not be sent.`, error_type: "SERVER_ERROR" });
+    }
+  };
+  app.post("/api/records/digest", rateLimit({ windowMs: 60 * 60_000, max: 20, name: "records digest" }), farmerMail("records digest", { validate: validateDigest, message: digestMessage }));
+  app.post("/api/brief", rateLimit({ windowMs: 60 * 60_000, max: 10, name: "brief" }), farmerMail("brief", { validate: validateBrief, message: briefMessage }));
+  app.post("/api/alerts/email", rateLimit({ windowMs: 60 * 60_000, max: 30, name: "price alert" }), farmerMail("price alert", { validate: validateAlertMail, message: alertMessage }));
+
+  // The confirmation link (from the welcome email) and a way to ask for it again.
+  app.get("/api/mail/confirm", rateLimit({ windowMs: 60_000, max: 30, name: "confirmation" }), (req, res) => {
+    const email = typeof req.query.e === "string" ? req.query.e.slice(0, 254) : "";
+    const token = typeof req.query.t === "string" ? req.query.t.slice(0, 128) : "";
+    const lang = req.query.l === "en" ? "en" : "sw";
+    const ok = mail.confirm(email, token);
+    if (ok) console.log(`[mail] confirmed ${maskDigestEmail(email)}`);
+    res.status(ok ? 200 : 400).type("html").send(confirmPage(ok, lang));
+  });
+  const confirmLink = (req, email, lang) => `${publicUrl(req)}/api/mail/confirm?e=${encodeURIComponent(email)}&t=${mail.token(email)}&l=${lang}`;
+  app.post("/api/mail/confirm/send", rateLimit({ windowMs: 60 * 60_000, max: 5, name: "confirmation" }), async (req, res) => {
+    const name = String(req.body?.name ?? "").replace(/\s+/g, " ").trim().slice(0, 60) || "Mkulima";
+    const email = String(req.body?.email ?? "").trim().toLowerCase().slice(0, 254);
+    const lang = req.body?.lang === "en" ? "en" : "sw";
+    if (!MAIL_EMAIL_RE.test(email)) return res.status(400).json({ error: "A valid email address is required.", error_type: "VALIDATION_ERROR", fields: ["email"] });
+    if (mail.isConfirmed(email)) return res.json({ status: "CONFIRMED", email });
+    if (!mail.allowConfirm(email)) return res.status(429).json({ error: "Enough confirmation emails to this address for today.", error_type: "RECIPIENT_CAP" });
+    const mailer = bookingMailer();
+    try {
+      if (!mailer) { console.log(`[mail] SIMULATED confirmation to ${maskDigestEmail(email)}`); return res.json({ status: "SIMULATED", email }); }
+      await mailer(confirmMessage({ name, email, lang, url: confirmLink(req, email, lang) }));
+      res.json({ status: "SENT", email });
+    } catch (err) {
+      console.error(`[mail] confirmation to ${maskDigestEmail(email)} failed: ${safeError(err)}`);
+      res.status(500).json({ error: "The confirmation email could not be sent.", error_type: "SERVER_ERROR" });
     }
   });
 
   if (opts.scheduler !== false) {
-    const sweep = () => runReminders(bookings, bookingMailer()).catch((err) => console.error("[events] sweep failed", err));
+    // One sweep at a time: a slow relay must not let the next minute's sweep send the same reminders again.
+    let sweeping = false;
+    const sweep = async () => {
+      if (sweeping) return;
+      sweeping = true;
+      try { await runReminders(bookings, bookingMailer()); }
+      catch (err) { console.error("[events] sweep failed", safeError(err)); }
+      finally { sweeping = false; }
+    };
     const timer = setInterval(sweep, 60_000);
     timer.unref?.();
     setTimeout(sweep, 5_000).unref?.();
@@ -420,6 +480,8 @@ export function createApp(opts = {}) {
         phone = p.e164;
       }
 
+      const lang = req.body?.lang === "en" ? "en" : "sw";
+      const confirmUrl = confirmLink(req, email.toLowerCase(), lang);
       const text = [
         `Habari ${name},`,
         "",
@@ -427,14 +489,18 @@ export function createApp(opts = {}) {
         "From the app you can check market (masoko) prices, climate risk for your shamba,",
         "e-boda routing, and chat with Apex in English or Kiswahili.",
         "",
+        "Tap this link once so KilimoOrbit can email you show reminders, the morning brief",
+        `and your records report at this address: ${confirmUrl}`,
+        "",
         `Engine mode at sign-in: ${engineMode()}`,
         "",
         "Asante,",
         "The KilimoOrbit team",
       ].join("\n");
+      const confirm = confirmMessage({ name, email, lang, url: confirmUrl });
 
-      const transport = mailTransport();
-      if (!transport) {
+      const transport = opts.mailer ? null : mailTransport();
+      if (!transport && !opts.mailer) {
         console.log(`[signin] SMTP not configured — welcome email for ${maskEmail(email)} simulated.`);
         return res.json({
           status: "SIMULATED",
@@ -444,12 +510,9 @@ export function createApp(opts = {}) {
           ...(phone ? { phone } : {}),
         });
       }
-      await transport.sendMail({
-        from: process.env.SMTP_FROM || `KilimoOrbit Sentinel <${process.env.SMTP_USER}>`,
-        to: email,
-        subject: "Karibu KilimoOrbit Sentinel 🌿",
-        text,
-      });
+      const welcome = { to: email, subject: "Karibu KilimoOrbit Sentinel 🌿", text, html: confirm.html };
+      if (opts.mailer) await opts.mailer(welcome);
+      else await transport.sendMail({ from: process.env.SMTP_FROM || `KilimoOrbit Sentinel <${process.env.SMTP_USER}>`, ...welcome });
       res.json({ status: "SENT", email, message: `Welcome email sent to ${email}.`, channel: "email", ...(phone ? { phone } : {}) });
     } catch (err) {
       res.status(500).json({ error: err?.message ?? String(err) });

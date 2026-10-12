@@ -14,6 +14,8 @@ import {
   EVENTS, confirmationMessage, createBookings, distanceKm, eventsNear, findEvent, googleCalendarUrl, icsFor, reminderMessage, remindersOf, upcoming, validateBooking,
 } from "../agro/events.js";
 import { digestMessage, validateDigest } from "../agro/records.js";
+import { alertMessage, briefMessage, validateAlertMail, validateBrief } from "../agro/brief.js";
+import { EMAIL_RE, confirmMessage, confirmPage, createMailGate, safeError, stripUrls } from "../agro/mail.js";
 import { readFileSync, unlinkSync } from "node:fs";
 
 const FEED_PATH = new URL("../../payloads/commodity_feed.json", import.meta.url);
@@ -371,14 +373,14 @@ await check("shows: the booking agent runs scout → planner → messenger → r
   };
 });
 
-await check("shows: a show that starts today gets only the morning reminder; an older one-reminder record still reads", async () => {
-  const store = createBookings({ now: () => new Date("2026-10-07T05:00:00Z") });
-  const { input } = validateBooking({ event_id: "ask-kitale-2026", name: "Wanjiru", email: "w@example.com", remind_days: 3 }, new Date("2026-10-07T05:00:00Z"));
+await check("shows: booked the day before, a show gets only the morning reminder; an older one-reminder record still reads", async () => {
+  const store = createBookings({ now: () => new Date("2026-10-06T05:00:00Z") });
+  const { input } = validateBooking({ event_id: "ask-kitale-2026", name: "Wanjiru", email: "w@example.com", remind_days: 3 }, new Date("2026-10-06T05:00:00Z"));
   const r = await store.book(input, { mailer: async () => {} });
   const legacy = remindersOf({ remind_on: "2026-10-04", reminder: "SCHEDULED" });
   const conf = confirmationMessage({ name: "W", email: "w@example.com", event: input.event, calendar_url: "https://calendar.google.com/x", reminders: [], remind_days: 3 });
   return {
-    ok: r.reminders.join(",") === "2026-10-07" && r.remind_on === "2026-10-07" && store.due().length === 1 && r.steps[3].action.includes("the morning of the show")
+    ok: r.reminders.join(",") === "2026-10-07" && r.remind_on === "2026-10-07" && store.due(new Date("2026-10-07T04:00:00Z")).length === 1 && r.steps[3].action.includes("the morning of the show")
       && legacy.length === 1 && legacy[0].on === "2026-10-04" && legacy[0].state === "SCHEDULED" && conf.text.includes("already started"),
     detail: `reminders ${r.reminders.join(",")}`,
   };
@@ -409,7 +411,118 @@ await check("records: the digest is validated field by field and becomes a text 
   };
 });
 
+await check("brief: sections are validated and laid out as text + HTML in the farmer's language; junk is refused", () => {
+  const good = validateBrief({
+    name: " Wanjiru ", email: "W@Example.com", lang: "sw", date: "Jumatatu 12 Okt", county: "Nakuru",
+    sections: [{ title: "Hali ya hewa", lines: ["Leo Nakuru: jua, nyuzi 25", "Kunyunyizia: leo ni sawa", ""] }, { title: "Kazi za wiki hii", lines: ["Palilia mahindi"] }, { title: "", lines: ["x"] }],
+  });
+  const bad = [
+    validateBrief(null), validateBrief({ name: "W", email: "w@x.co", lang: "sw", date: "x" }),
+    validateBrief({ name: "W", email: "w@x.co", lang: "sw", date: "x", sections: [{ title: "T", lines: [] }] }),
+    validateBrief({ name: "W", email: "nope", lang: "en", date: "x", sections: [{ title: "T", lines: ["l"] }] }),
+    validateBrief({ name: "W", email: "w@x.co", lang: "sw", date: "x", sections: Array.from({ length: 9 }, () => ({ title: "T", lines: ["l"] })) }),
+  ];
+  const msg = briefMessage(good.input);
+  const en = briefMessage({ ...good.input, lang: "en", county: null, sections: [{ title: "Weather", lines: ["Sunny <b>25°</b>"] }] });
+  return {
+    ok: !good.error && good.input.name === "Wanjiru" && good.input.email === "w@example.com" && good.input.sections.length === 2 && good.input.sections[0].lines.length === 2
+      && bad.every((b) => b.error) && bad[1].fields.includes("sections") && bad[2].fields.includes("sections") && bad[3].fields.includes("email") && bad[4].fields.includes("sections")
+      && msg.to === "w@example.com" && msg.subject === "Habari za asubuhi · Jumatatu 12 Okt" && msg.text.includes("HALI YA HEWA") && msg.text.includes("- Palilia mahindi")
+      && msg.html.includes("KILIMOORBIT · NAKURU") && en.subject === "Your morning brief · Jumatatu 12 Okt" && en.html.includes("&lt;b&gt;25°&lt;/b&gt;") && !en.html.includes("<b>"),
+    detail: `"${msg.subject}" · ${good.input.sections.length} sections`,
+  };
+});
+
+await check("price alert mail: hits are validated, one or many make a subject, nothing from the farmer reaches the HTML unescaped", () => {
+  const one = validateAlertMail({ name: "Wanjiru", email: "w@example.com", lang: "en", hits: [{ key: "maize", crop: "Maize", market: "Wakulima Nairobi", price: 61.4, target: 60 }] });
+  const two = validateAlertMail({ name: "W", email: "w@example.com", lang: "sw", hits: [{ key: "maize", crop: "Mahindi", market: "Nairobi", price: 61, target: 60 }, { key: "beans", crop: "Maharagwe <i>", market: "Kisumu", price: 150, target: 140 }] });
+  const bad = [
+    validateAlertMail(null), validateAlertMail({ name: "W", email: "w@example.com", lang: "en", hits: [] }),
+    validateAlertMail({ name: "W", email: "w@example.com", lang: "en", hits: [{ key: "Maize!", crop: "Maize", market: "x", price: 1, target: 1 }] }),
+    validateAlertMail({ name: "W", email: "w@example.com", lang: "en", hits: [{ key: "maize", crop: "Maize", market: "x", price: -1, target: 1 }] }),
+  ];
+  const m1 = alertMessage(one.input);
+  const m2 = alertMessage(two.input);
+  return {
+    ok: !one.error && one.input.hits[0].price === 61 && !two.error && bad.every((b) => b.error) && bad[1].fields.includes("hits") && bad[2].fields.includes("hits") && bad[3].fields.includes("hits")
+      && m1.subject === "Maize has reached KES 61/kg at Wakulima Nairobi" && m1.text.includes("(your target: KES 60/kg)")
+      && m2.subject === "Bei 2 ulizolenga zimefikiwa leo" && m2.html.includes("Maharagwe &lt;i&gt;") && !m2.html.includes("<i>"),
+    detail: `"${m1.subject}" · "${m2.subject}"`,
+  };
+});
+
+await check("mail gate: a confirmation token only works for its address, confirmations persist, caps hold per address, links are stripped", () => {
+  const path = `${process.env.TMPDIR || "/tmp"}/mail_test_${process.pid}.json`;
+  try { unlinkSync(path); } catch {}
+  const gate = createMailGate({ storePath: path, secret: "test-secret", now: () => OCT });
+  const tok = gate.token("W@Example.com");
+  const results = [
+    gate.isConfirmed("w@example.com"), gate.confirm("w@example.com", "nope"), gate.confirm("other@example.com", tok), gate.confirm("W@Example.com", tok), gate.isConfirmed("w@example.com"),
+  ];
+  const again = createMailGate({ storePath: path, secret: "test-secret", now: () => OCT });
+  let allowed = 0;
+  for (let i = 0; i < 45; i++) if (gate.allow("w@example.com")) allowed++;
+  const other = gate.allow("x@example.com");
+  let confirms = 0;
+  for (let i = 0; i < 7; i++) if (gate.allowConfirm("w@example.com")) confirms++;
+  const nextDay = createMailGate({ secret: "s", now: () => new Date("2026-10-06T06:00:00Z") });
+  const msg = confirmMessage({ name: "Wanjiru", email: "w@example.com", lang: "en", url: "https://x.test/api/mail/confirm?e=w%40example.com&t=abc" });
+  try { unlinkSync(path); } catch {}
+  return {
+    ok: results.join(",") === "false,false,false,true,true" && again.isConfirmed("w@example.com") && createMailGate({ secret: "another" }).token("w@example.com") !== tok
+      && allowed === 40 && other && confirms === 5 && nextDay.allow("w@example.com")
+      && stripUrls("Buy now http://evil.test/x and www.evil.test ok") === "Buy now [link removed] and [link removed] ok"
+      && EMAIL_RE.test("wanjiru.k@example.co.ke") && !EMAIL_RE.test("a@b.co,postmaster") && !EMAIL_RE.test("a@b.co;c@d.co") && !EMAIL_RE.test("\"a b\"@x.co")
+      && msg.html.includes("Confirm my email") && msg.text.includes("https://x.test/api/mail/confirm") && confirmPage(true, "en").includes("Email confirmed") && confirmPage(false, "sw").includes("hakikufanya")
+      && safeError(new Error("550 5.1.1 <victim@example.com>: user unknown")) === "550 5.1.1 <•••@•••>: user unknown",
+    detail: `token ${tok.slice(0, 8)}… · cap ${allowed}/45 · confirmations ${confirms}/7`,
+  };
+});
+
+await check("shows: a sweep claims a reminder before sending (no double send), a failure is retried, today's wait for the morning, and finished bookings are purged", async () => {
+  const path = `${process.env.TMPDIR || "/tmp"}/events_claim_${process.pid}.json`;
+  try { unlinkSync(path); } catch {}
+  const store = createBookings({ storePath: path, now: () => OCT });
+  const { input } = validateBooking({ event_id: "ask-kitale-2026", name: "Wanjiru", email: "w@example.com", remind_days: 1 }, OCT);
+  const r = await store.book(input, { mailer: async () => {} });
+  // 00:30 EAT on the eve: the day's reminder waits for the morning; 06:30 EAT: it is due.
+  const night = createBookings({ storePath: path, now: () => new Date("2026-10-05T21:30:00Z") });
+  const waiting = night.due().length;
+  const morning = createBookings({ storePath: path, now: () => new Date("2026-10-06T03:30:00Z") });
+  const due = morning.due();
+  const claimed = [morning.claimReminder(r.booking_id, "2026-10-06"), morning.claimReminder(r.booking_id, "2026-10-06")];
+  const whileSending = morning.due().length;
+  morning.markReminder(r.booking_id, "2026-10-06", "FAILED");
+  const retry = morning.due();
+  const state = morning.due()[0] && JSON.parse(readFileSync(path, "utf8")).bookings[0];
+  morning.claimReminder(r.booking_id, "2026-10-06");
+  morning.markReminder(r.booking_id, "2026-10-06", "SENT");
+  const after = JSON.parse(readFileSync(path, "utf8")).bookings[0];
+  // A stale claim (the process died mid-send) is retried after ten minutes.
+  const stale = createBookings({ storePath: path, now: () => new Date("2026-10-07T03:30:00Z") });
+  stale.claimReminder(r.booking_id, "2026-10-07");
+  const later = createBookings({ storePath: path, now: () => new Date("2026-10-07T03:45:00Z") });
+  const retried = later.due().length;
+  // Once the show is over the booking, with the farmer's email, is gone.
+  const over = createBookings({ storePath: path, now: () => new Date("2026-10-12T06:00:00Z") });
+  try { unlinkSync(path); } catch {}
+  return {
+    ok: waiting === 0 && due.length === 1 && claimed.join(",") === "true,true" && whileSending === 0
+      && retry.length === 1 && state.reminders[0].state === "SCHEDULED" && state.reminders[0].attempts === 1
+      && after.reminders[0].state === "SENT" && after.remind_on === "2026-10-07" && after.reminder === "SCHEDULED"
+      && retried === 1 && over.size === 0 && store.size === 1,
+    detail: `waited at night · claimed once · retried after failure · remind_on → ${after.remind_on} · purged ${over.size === 0}`,
+  };
+});
+
+await check("shows: booked on the day it starts, a show gets no reminder email (the confirmation covers it)", async () => {
+  const store = createBookings({ now: () => new Date("2026-10-07T05:00:00Z") });
+  const { input } = validateBooking({ event_id: "ask-kitale-2026", name: "Wanjiru", email: "w@example.com", remind_days: 3 }, new Date("2026-10-07T05:00:00Z"));
+  const r = await store.book(input, { mailer: async () => {} });
+  return { ok: r.reminders.length === 0 && r.steps[3].action.includes("none") && store.due().length === 0, detail: r.steps[3].action };
+});
+
 console.log("─".repeat(57));
 const ok = passed === total;
-console.log((ok ? C.green : C.red)(C.bold(`  ${ok ? "✓" : "✗"} ${passed}/${total} farm weather, prices, pest watch, news, shows + records tests passed`)));
+console.log((ok ? C.green : C.red)(C.bold(`  ${ok ? "✓" : "✗"} ${passed}/${total} farm weather, prices, pest watch, news, shows, records + mail tests passed`)));
 process.exit(ok ? 0 : 1);

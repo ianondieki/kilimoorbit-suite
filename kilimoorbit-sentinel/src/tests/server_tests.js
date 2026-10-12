@@ -23,9 +23,13 @@ const C = {
   bold: (s) => `\x1b[1m${s}\x1b[0m`,
 };
 
+const { createMailGate } = await import("../agro/mail.js");
+const MAIL_PATH = `${process.env.TEMP || process.env.TMPDIR || "/tmp"}/mail_test_${process.pid}.json`;
+const mailGate = createMailGate({ storePath: MAIL_PATH, secret: "test-secret" });
 const server = createApp({
   news: createNews({ fetchImpl: async () => ({ ok: true, status: 200, text: async () => FEED }) }),
   bookings: createBookings({ storePath: EVENTS_PATH }),
+  mail: mailGate,
   scheduler: false,
 }).listen(0);
 await new Promise((r) => server.once("listening", r));
@@ -276,6 +280,57 @@ await check("POST /api/records/digest → SIMULATED (no SMTP) with the subject; 
   };
 });
 
+await check("POST /api/brief and /api/alerts/email → SIMULATED (no SMTP) with a subject; junk → 400 with fields", async () => {
+  const brief = await post("/api/brief", { name: "Wanjiru", email: "w@example.com", lang: "en", date: "Monday 12 Oct", county: "Nakuru", sections: [{ title: "Weather", lines: ["Sunny, 25°"] }] });
+  const badBrief = await post("/api/brief", { name: "Wanjiru", email: "w@example.com", lang: "en", date: "Monday", sections: [] });
+  const alert = await post("/api/alerts/email", { name: "Wanjiru", email: "w@example.com", lang: "sw", hits: [{ key: "maize", crop: "Mahindi", market: "Nairobi", price: 61, target: 60 }] });
+  const badAlert = await post("/api/alerts/email", { name: "Wanjiru", email: "w@example.com", lang: "sw", hits: [{ key: "maize" }] });
+  const junk = await post("/api/brief", "[1]", true);
+  return {
+    ok: brief.status === 200 && brief.body.status === "SIMULATED" && brief.body.subject === "Your morning brief · Monday 12 Oct"
+      && badBrief.status === 400 && badBrief.body.fields.includes("sections")
+      && alert.status === 200 && alert.body.status === "SIMULATED" && alert.body.subject === "Bei ya Mahindi imefika KES 61/kg Nairobi"
+      && badAlert.status === 400 && badAlert.body.fields.includes("hits") && junk.status === 400,
+    detail: `"${brief.body?.subject}" · "${alert.body?.subject}"`,
+  };
+});
+
+await check("With real mail, the free-text emails need a confirmed address: 403 until the welcome link is opened, then SENT; the per-address cap holds", async () => {
+  // A second app with a fake mailer stands in for SMTP; its gate shares nothing with the SIMULATED one above.
+  const sent = [];
+  const gate = createMailGate({ secret: "live-secret" });
+  const live = createApp({ news: createNews({ fetchImpl: async () => ({ ok: true, status: 200, text: async () => FEED }) }), bookings: createBookings({}), mail: gate, mailer: async (m) => { sent.push(m); }, scheduler: false }).listen(0);
+  await new Promise((r) => live.once("listening", r));
+  const b = `http://127.0.0.1:${live.address().port}`;
+  const p = async (path, body) => { const r = await fetch(b + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); return { status: r.status, body: await r.json().catch(() => null) }; };
+  const digest = { name: "Wanjiru", email: "w@example.com", lang: "en", period: "This season", totals: { income: 1, expense: 0 }, text: "Income: KES 1 see http://evil.test" };
+  const before = await p("/api/records/digest", digest);
+  const signin = await p("/api/signin", { name: "Wanjiru", email: "w@example.com", lang: "en" });
+  const link = sent[0]?.text.match(/https?:\/\/\S+\/api\/mail\/confirm\?\S+/)?.[0];
+  const bad = await fetch(`${b}/api/mail/confirm?e=w%40example.com&t=nope`);
+  const page = await fetch(link);
+  const html = await page.text();
+  const after = await p("/api/records/digest", digest);
+  const afterCount = sent.length;
+  const resend = await p("/api/mail/confirm/send", { name: "W", email: "w@example.com", lang: "en" });
+  const unconfirmedResend = await p("/api/mail/confirm/send", { name: "W", email: "other@example.com", lang: "sw" });
+  live.close();
+  return {
+    ok: before.status === 403 && before.body.error_type === "EMAIL_UNCONFIRMED" && signin.status === 200 && signin.body.status === "SENT" && !!link
+      && bad.status === 400 && page.status === 200 && html.includes("Email confirmed") && after.status === 200 && after.body.status === "SENT"
+      && afterCount === 2 && sent[1].text.includes("[link removed]") && !sent[1].text.includes("evil.test")
+      && resend.status === 200 && resend.body.status === "CONFIRMED" && unconfirmedResend.status === 200 && unconfirmedResend.body.status === "SENT" && sent.length === 3 && sent[2].subject.startsWith("Thibitisha"),
+    detail: `403 → sign-in → link → ${after.body?.status} · ${sent.length} emails`,
+  };
+});
+
+await check("GET /api/mail/confirm with a bad token → 400 page; POST /api/mail/confirm/send validates the address", async () => {
+  const bad = await fetch(`${base}/api/mail/confirm?e=nope&t=x`);
+  const send = await post("/api/mail/confirm/send", { name: "W", email: "nope" });
+  const sim = await post("/api/mail/confirm/send", { name: "W", email: "w@example.com" });
+  return { ok: bad.status === 400 && (await bad.text()).includes("<html") && send.status === 400 && sim.status === 200 && sim.body.status === "SIMULATED", detail: `${bad.status} · ${sim.body?.status}` };
+});
+
 await check("GET /api/prices/history unknown/missing crop → 400", async () => {
   const a = await get("/api/prices/history?crop=unobtainium");
   const b = await get("/api/prices/history");
@@ -371,6 +426,7 @@ await check("Boot: lanAddresses puts the Wi-Fi adapter first and flags vEthernet
 server.close();
 try { unlinkSync(process.env.SOKO_STORE_PATH); } catch {}
 try { unlinkSync(EVENTS_PATH); } catch {}
+try { unlinkSync(MAIL_PATH); } catch {}
 
 console.log("─".repeat(57));
 console.log(passed === total ? C.green(C.bold(`  ✓ ${passed}/${total} HTTP tests passed`)) : C.red(C.bold(`  ✗ ${passed}/${total} HTTP tests passed`)));
