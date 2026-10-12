@@ -1,10 +1,12 @@
 /**
  * The app's type, bundled so every phone shows the same letters whatever its
  * system font: Fraunces (a soft serif) for titles, greetings, headlines and
- * the trivia questions; Nunito Sans for everything else, from the 11px
- * eyebrows to the 40° temperature. Android cannot pick a weight out of a
- * custom family by itself, so each weight is its own file and
- * components/Text.tsx maps fontWeight to the right one.
+ * the trivia questions; Space Grotesk (a geometric grotesk with tabular
+ * figures) for the numbers, eyebrows and tags, so a price, a temperature or a
+ * section label reads differently from a sentence; Nunito Sans for
+ * everything else. Android cannot pick a weight out of a custom family by
+ * itself, so each weight is its own file and components/Text.tsx maps
+ * fontWeight to the right one ("monospace" is the figures face).
  */
 export const FONTS = {
   NunitoSans_400Regular: require("@expo-google-fonts/nunito-sans/400Regular/NunitoSans_400Regular.ttf"),
@@ -14,6 +16,8 @@ export const FONTS = {
   NunitoSans_800ExtraBold: require("@expo-google-fonts/nunito-sans/800ExtraBold/NunitoSans_800ExtraBold.ttf"),
   Fraunces_600SemiBold: require("@expo-google-fonts/fraunces/600SemiBold/Fraunces_600SemiBold.ttf"),
   Fraunces_700Bold: require("@expo-google-fonts/fraunces/700Bold/Fraunces_700Bold.ttf"),
+  SpaceGrotesk_500Medium: require("@expo-google-fonts/space-grotesk/500Medium/SpaceGrotesk_500Medium.ttf"),
+  SpaceGrotesk_700Bold: require("@expo-google-fonts/space-grotesk/700Bold/SpaceGrotesk_700Bold.ttf"),
 };
 
 export type SansWeight = "400" | "500" | "600" | "700" | "800";
@@ -27,6 +31,11 @@ export const SANS: Record<SansWeight, keyof typeof FONTS> = {
 export const SERIF: Record<"600" | "700", keyof typeof FONTS> = {
   "600": "Fraunces_600SemiBold",
   "700": "Fraunces_700Bold",
+};
+/** The figures face (numbers, eyebrows, tags): what `fontFamily: "monospace"` means in this app. */
+export const FIGURES: Record<"500" | "700", keyof typeof FONTS> = {
+  "500": "SpaceGrotesk_500Medium",
+  "700": "SpaceGrotesk_700Bold",
 };
 
 /** Any React Native fontWeight → the nearest bundled sans weight. */

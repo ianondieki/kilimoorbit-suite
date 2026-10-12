@@ -23,13 +23,19 @@ import { focusElement, focusRing, isWeb, spaceActivates, webCursor, type PressSt
 import { haptic } from "../lib/haptics";
 import { SERIF } from "../lib/typography";
 import { CheckGlyph, CrossGlyph, MinusGlyph, PlusGlyph } from "./Glyphs";
+import Pic, { type PicName } from "./Pic";
 
-/* ── type scale (Nunito Sans; the three serif presets are Fraunces) ── */
+/* ── type scale (Nunito Sans; the serif presets are Fraunces; `big` and `figure` are Space Grotesk, the figures face) ── */
 export const T = {
   title: { fontSize: 17, lineHeight: 22, fontWeight: "700" as const },
   body: { fontSize: 15.5, lineHeight: 22 },
   meta: { fontSize: 13, lineHeight: 18 },
-  big: { fontSize: 32, lineHeight: 38, fontWeight: "800" as const },
+  /** The one big number on a card (KES, a temperature): Space Grotesk, tight. */
+  big: { fontSize: 34, lineHeight: 40, fontWeight: "800" as const, fontFamily: "monospace", letterSpacing: -0.8 },
+  /** A mid-size figure (a price, a count) in the figures face. */
+  figure: { fontSize: 20, lineHeight: 26, fontWeight: "700" as const, fontFamily: "monospace" },
+  /** A section label: small caps in the figures face, tracked. */
+  eyebrow: { fontSize: 12, lineHeight: 15, fontWeight: "700" as const, fontFamily: "monospace", letterSpacing: 1.4, textTransform: "uppercase" as const },
   /** A headline inside a card: a news title, a show's name, a trivia question. */
   headline: { fontFamily: SERIF["600"], fontSize: 19, lineHeight: 26 },
   /** A screen's greeting or a sheet's title. */
@@ -42,8 +48,8 @@ export const T = {
 export const tint = (hex: string, a: number) =>
   /^#[0-9a-f]{6}$/i.test(hex) ? hex + Math.round(a * 255).toString(16).padStart(2, "0") : hex;
 
-/* ── section hues: each kind of card has a colour, worn by its label and icon badge ── */
-export type Domain = "weather" | "farm" | "market" | "money" | "doctor" | "alerts" | "news" | "season" | "shows" | "store" | "soil" | "quiz" | "herd";
+/* ── section hues: each kind of card has a colour, worn by its label and icon badge, and a picture (assets/icons) ── */
+export type Domain = "weather" | "farm" | "market" | "money" | "doctor" | "alerts" | "news" | "season" | "shows" | "store" | "soil" | "quiz" | "herd" | "belief";
 export function domainColor(t: Theme, d?: Domain): string {
   switch (d) {
     case "weather": return t.water;
@@ -52,11 +58,15 @@ export function domainColor(t: Theme, d?: Domain): string {
     case "doctor": case "alerts": return t.alert;
     case "news": case "season": return t.violet;
     case "shows": case "store": case "soil": return t.amber;
-    case "quiz": return t.teal;
+    case "quiz": case "belief": return t.teal;
     case "herd": return t.rose;
     default: return t.dim;
   }
 }
+const DOMAIN_PIC: Record<Domain, PicName> = {
+  weather: "weather", farm: "farm", market: "market", money: "money", doctor: "doctor", alerts: "alerts", news: "news",
+  season: "season", shows: "shows", store: "store", soil: "farm", quiz: "quiz", herd: "herd", belief: "wisdom",
+};
 
 /** A small tinted square holding a glyph: the mark of a section. */
 export function IconBadge({ color, size = 28, children }: { color: string; size?: number; children: React.ReactNode }) {
@@ -85,21 +95,28 @@ export function Card({
   );
 }
 
-/* ── Eyebrow: the section label, in its section's colour with an icon badge, and an optional right slot ── */
+/* ── Eyebrow: the section label, in its section's colour with its picture on a tinted badge, and an optional right slot ── */
 export function Eyebrow({
-  text, right, style, domain, icon,
-}: { text: string; right?: React.ReactNode; style?: StyleProp<ViewStyle>; domain?: Domain; icon?: (color: string) => React.ReactNode }) {
+  text, right, style, domain, icon, pic,
+}: {
+  text: string; right?: React.ReactNode; style?: StyleProp<ViewStyle>; domain?: Domain;
+  /** A view-drawn glyph: the fallback when the section has no picture (or `pic` is null). */
+  icon?: (color: string) => React.ReactNode;
+  /** The picture on the badge; defaults to the section's own, `null` keeps the glyph. */
+  pic?: PicName | null;
+}) {
   const t = useTheme();
   const c = domainColor(t, domain);
+  const p = pic === undefined ? (domain ? DOMAIN_PIC[domain] : undefined) : pic ?? undefined;
   return (
-    <View style={[{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: icon ? 28 : 22, marginBottom: 12 }, style]} testID={domain ? `eyebrow-${domain}` : undefined}>
+    <View style={[{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: p ? 32 : icon ? 28 : 22, marginBottom: 12 }, style]} testID={domain ? `eyebrow-${domain}` : undefined}>
       <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10 }}>
-        {icon ? <IconBadge color={c}>{icon(c)}</IconBadge> : null}
+        {p ? <IconBadge color={c} size={32}><Pic name={p} size={23} /></IconBadge> : icon ? <IconBadge color={c}>{icon(c)}</IconBadge> : null}
         <Text
           accessibilityRole="header"
           aria-level={2}
           numberOfLines={2}
-          style={{ flexShrink: 1, color: domain ? c : t.dim, fontSize: 11.5, lineHeight: 14, fontWeight: "800", letterSpacing: 1.3, textTransform: "uppercase" }}
+          style={{ flexShrink: 1, color: domain ? c : t.dim, ...T.eyebrow }}
         >
           {text}
         </Text>
@@ -223,7 +240,7 @@ export function Tag({ label, tone = "dim", block = false }: { label: string; ton
       ]}
     >
       {!block && <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: c }} />}
-      <Text maxFontSizeMultiplier={1.3} style={{ flexShrink: 1, color: t.ink, fontSize: block ? 13.5 : 12.5, lineHeight: block ? 18 : 16, fontWeight: block ? "600" : "700" }}>{label}</Text>
+      <Text maxFontSizeMultiplier={1.3} style={{ flexShrink: 1, color: t.ink, fontSize: block ? 13.5 : 12.5, lineHeight: block ? 18 : 16, fontWeight: block ? "600" : "700", ...(block ? null : { fontFamily: "monospace", letterSpacing: 0.2 }) }}>{label}</Text>
     </View>
   );
 }
