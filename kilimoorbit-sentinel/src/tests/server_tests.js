@@ -244,7 +244,7 @@ await check("GET /api/events?county=Nakuru → nearest shows first with km and d
   };
 });
 
-await check("POST /api/events/book → 201 with the agent's steps, .ics, Google link and a SIMULATED email; DELETE needs the token", async () => {
+await check("POST /api/events/book → 201 with the agent's steps, .ics, Google link, two reminder days and a SIMULATED email; DELETE needs the token", async () => {
   const r = await post("/api/events/book", { event_id: "ask-kitale-2026", name: "Wanjiru", email: "w@example.com", county: "Nakuru", remind_days: 7 });
   const bad = await post("/api/events/book", { event_id: "ask-kitale-2026", name: "Wanjiru", email: "nope" });
   const junk = await post("/api/events/book", "[1]", true);
@@ -253,10 +253,26 @@ await check("POST /api/events/book → 201 with the agent's steps, .ics, Google 
   const gone = await del(`/api/events/book/${r.body?.booking_id}?token=${r.body?.token}`);
   return {
     ok: r.status === 201 && r.body.status === "BOOKED" && r.body.steps.length === 4 && r.body.email === "SIMULATED"
+      && Array.isArray(r.body.reminders) && r.body.reminders.length >= 1 && r.body.reminders.every((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)) && r.body.reminders[0] === r.body.remind_on
       && r.body.calendar_url.includes("calendar.google.com") && r.body.ics.includes("BEGIN:VEVENT") && r.body.event.id === "ask-kitale-2026"
       && bad.status === 400 && bad.body.fields.includes("email") && junk.status === 400
       && wrong.status === 403 && okDel.status === 200 && gone.status === 404,
-    detail: `${r.status} · ${r.body?.steps?.map((s) => s.agent).join(" → ")} · email ${r.body?.email}`,
+    detail: `${r.status} · ${r.body?.steps?.map((s) => s.agent).join(" → ")} · email ${r.body?.email} · reminders ${r.body?.reminders?.join(" + ")}`,
+  };
+});
+
+await check("POST /api/records/digest → SIMULATED (no SMTP) with the subject; junk → 400 with fields", async () => {
+  const digest = {
+    name: "Wanjiru", email: "w@example.com", lang: "sw", period: "Msimu huu", totals: { income: 12000, expense: 7000 },
+    crops: [{ crop: "maize", profit: 5000 }], entries: 3, last: "Mapato · Mauzo ya mazao · mahindi · KES 12,000 · 12 Okt", text: "KilimoOrbit · Ripoti ya shamba\nMapato: KES 12,000",
+  };
+  const r = await post("/api/records/digest", digest);
+  const bad = await post("/api/records/digest", { ...digest, email: "nope", totals: { income: "x" } });
+  const junk = await post("/api/records/digest", "[1]", true);
+  return {
+    ok: r.status === 200 && r.body.status === "SIMULATED" && r.body.email === "w@example.com" && r.body.subject === "Daftari la shamba · Msimu huu: faida KES 5,000"
+      && bad.status === 400 && bad.body.error_type === "VALIDATION_ERROR" && bad.body.fields.includes("email") && bad.body.fields.includes("totals") && junk.status === 400,
+    detail: `${r.status} ${r.body?.status} · "${r.body?.subject}"`,
   };
 });
 

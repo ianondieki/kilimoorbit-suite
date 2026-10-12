@@ -9,6 +9,8 @@
  *   POST /api/suite      → runs the catalogue, returns results
  *   POST /api/autopilot  → agentic chain SENSE → A → gate → C → brief
  *   POST /api/signin     → { name, email } | { name, phone } → welcome email (SMTP or SIMULATED) | phone profile (SIMULATED, no SMS)
+ *   POST /api/records/digest → the farmer's records summary, emailed to them (SMTP or SIMULATED; see src/agro/records.js)
+ *   /api/events/*        → farm shows and the booking agent with its email reminders (see src/agro/events.js)
  *   GET  /api/weather    → ?county= → 7-day farm forecast + spray / plant / dry windows (see src/agro/weather.js)
  *   GET  /api/prices/history → ?crop= → 14 daily prices per market + 7-day change (see src/agro/prices.js)
  *   /api/soko/*          → produce marketplace (see src/soko/routes.js)
@@ -29,6 +31,7 @@ import { boardFor, historyFor } from "./agro/prices.js";
 import { createPestWatch, validateReport } from "./agro/pests.js";
 import { createNews } from "./agro/news.js";
 import { createBookings, eventsNear, reminderMessage, validateBooking } from "./agro/events.js";
+import { digestMessage, maskEmail as maskDigestEmail, validateDigest } from "./agro/records.js";
 import { networkInterfaces } from "node:os";
 import { SUITE, runSuite, loadPayload } from "./suite.js";
 
@@ -68,20 +71,21 @@ function rateLimit({ windowMs, max, name }) {
 }
 
 /**
- * Sends every reminder email that is due (bookings from /api/events/book).
- * Without SMTP the reminder is SIMULATED (logged); the calendar entry the
- * farmer saved still rings on its own. Exported for the test suite.
+ * Sends every reminder email that is due (bookings from /api/events/book:
+ * N days before the show and the morning it starts). Without SMTP the
+ * reminder is SIMULATED (logged); the calendar entry the farmer saved still
+ * rings on its own. Exported for the test suite.
  */
 export async function runReminders(bookings, mailer, now = new Date()) {
   let sent = 0;
   for (const b of bookings.due(now)) {
     try {
-      if (mailer) { await mailer(reminderMessage(b)); bookings.markReminder(b.id, "SENT"); }
-      else { console.log(`[events] SIMULATED reminder for ${b.event_name} to ${b.email[0]}•••${b.email.slice(b.email.indexOf("@"))}`); bookings.markReminder(b.id, "SIMULATED"); }
+      if (mailer) { await mailer(reminderMessage(b, b.due_on)); bookings.markReminder(b.id, b.due_on, "SENT"); }
+      else { console.log(`[events] SIMULATED reminder (${b.due_on}) for ${b.event_name} to ${b.email[0]}•••${b.email.slice(b.email.indexOf("@"))}`); bookings.markReminder(b.id, b.due_on, "SIMULATED"); }
       sent++;
     } catch (err) {
-      console.error(`[events] reminder failed for ${b.id}: ${err?.message ?? err}`);
-      bookings.markReminder(b.id, "FAILED");
+      console.error(`[events] reminder failed for ${b.id} (${b.due_on}): ${err?.message ?? err}`);
+      bookings.markReminder(b.id, b.due_on, "FAILED");
     }
   }
   return sent;
@@ -281,6 +285,26 @@ export function createApp(opts = {}) {
     if (r === "forbidden") return res.status(403).json({ error: "Wrong token.", error_type: "FORBIDDEN", fields: ["token"] });
     res.json({ ok: true });
   });
+  // The farmer's records, emailed to them: the app sends the season's totals
+  // and the report it builds on the phone; nothing is stored here. It sends
+  // email, so it is capped (a farmer records a handful of entries a day).
+  app.post("/api/records/digest", rateLimit({ windowMs: 60 * 60_000, max: 20, name: "records digest" }), async (req, res) => {
+    const v = validateDigest(req.body);
+    if (v.error) return res.status(400).json({ error: v.error, error_type: "VALIDATION_ERROR", fields: v.fields });
+    try {
+      const msg = digestMessage(v.input);
+      const mailer = bookingMailer();
+      if (!mailer) {
+        console.log(`[records] SIMULATED digest to ${maskDigestEmail(v.input.email)}: ${msg.subject}`);
+        return res.json({ status: "SIMULATED", email: v.input.email, subject: msg.subject });
+      }
+      await mailer(msg);
+      res.json({ status: "SENT", email: v.input.email, subject: msg.subject });
+    } catch (err) {
+      res.status(500).json({ error: "The digest could not be sent.", error_type: "SERVER_ERROR" });
+    }
+  });
+
   if (opts.scheduler !== false) {
     const sweep = () => runReminders(bookings, bookingMailer()).catch((err) => console.error("[events] sweep failed", err));
     const timer = setInterval(sweep, 60_000);

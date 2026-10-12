@@ -13,11 +13,13 @@
  * the rest nearest first: a show next week matters more than next year's.
  *
  * Booking is a small deterministic agent chain (scout → planner → messenger
- * → reminder): it builds the calendar entry (.ics and a Google Calendar
- * link), emails a confirmation when SMTP is configured (SIMULATED otherwise,
- * like sign-in), and stores the reminder so the scheduler in server.js can
- * send it on the day. Bookings are kept in a JSON file (like the Soko store)
- * so reminders survive a restart.
+ * → reminder). The reminders are emails to the address the farmer gave: a
+ * confirmation at once (with the .ics attached and a Google Calendar link,
+ * so the show can also go in the phone's calendar), a reminder N days before
+ * the show and one on the morning it starts. Emails go out through SMTP when
+ * it is configured (SIMULATED and logged otherwise, like sign-in); the
+ * scheduler in server.js sends the reminders on their day. Bookings are kept
+ * in a JSON file (like the Soko store) so reminders survive a restart.
  */
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import { dirname } from "node:path";
@@ -195,15 +197,14 @@ export function createBookings({ storePath, now = () => new Date() } = {}) {
       const calendar_url = googleCalendarUrl(event);
       step("Planner", "Prepared the calendar entry (.ics and a Google Calendar link)", { calendar_url });
 
+      const today = eatDateKey(t0);
+      // The reminder emails: N days before, and the morning the show starts; never in the past.
       const remind_on = addDays(event.start, -remind_days);
+      const reminders = [...new Set([remind_on, event.start])].filter((d) => d >= today).sort();
       let emailStatus = "NONE";
       if (email) {
-        const msg = {
-          to: email,
-          subject: `${event.name}: ${event.start} to ${event.end}, ${event.town}`,
-          text: `Habari ${name},\n\nYou asked KilimoOrbit to put ${event.name} in your calendar.\n\nWhen: ${event.start} to ${event.end}${event.estimated ? " (dates estimated from last year's calendar; confirm with the organiser)" : ""}\nWhere: ${where(event)}\nOrganiser: ${event.organiser}${event.url ? `\nMore: ${event.url}` : ""}\n\nThe attached file adds it to any calendar app, or open: ${calendar_url}\n\nWe will email you a reminder on ${remind_on}.\n\nKilimoOrbit`,
-          attachments: [{ filename: "farm-show.ics", content: ics, contentType: "text/calendar; method=PUBLISH" }],
-        };
+        const msg = confirmationMessage({ name, email, event, calendar_url, reminders, remind_days });
+        msg.attachments = [{ filename: "farm-show.ics", content: ics, contentType: "text/calendar; method=PUBLISH" }];
         if (mailer) {
           try { await mailer(msg); emailStatus = "SENT"; }
           catch (err) { emailStatus = "FAILED"; step("Messenger", `Could not send the confirmation to ${maskEmail(email)}`, { error: String(err?.message ?? err).slice(0, 120) }); }
@@ -219,29 +220,43 @@ export function createBookings({ storePath, now = () => new Date() } = {}) {
       const booking = {
         id, token: randomBytes(12).toString("hex"), created_at: t0.toISOString(),
         event_id: event.id, event_name: event.name, start: event.start, end: event.end, town: event.town, estimated: !!event.estimated,
-        name, email, county, remind_days, remind_on, reminder: email ? "SCHEDULED" : "CALENDAR",
+        name, email, county, remind_days, remind_on: reminders[0] ?? remind_on,
+        reminders: reminders.map((on) => ({ on, state: "SCHEDULED" })),
+        reminder: email && reminders.length ? "SCHEDULED" : "CALENDAR",
       };
       db.bookings.push(booking);
       if (db.bookings.length > MAX_BOOKINGS) db.bookings.splice(0, db.bookings.length - MAX_BOOKINGS);
       write();
-      step("Reminder", email ? `Reminder email scheduled for ${remind_on} (${remind_days} day${remind_days > 1 ? "s" : ""} before)` : `Calendar alarm set for ${remind_on}`, { remind_on });
+      const when = reminders.length === 2 ? `${reminders[0]} (${remind_days} day${remind_days > 1 ? "s" : ""} before) and ${reminders[1]} (the morning of the show)`
+        : reminders.length === 1 ? `${reminders[0]} (${reminders[0] === event.start ? "the morning of the show" : `${remind_days} day${remind_days > 1 ? "s" : ""} before`})` : "none: the show has started";
+      step("Reminder", email ? `Reminder emails scheduled for ${when}` : `Calendar alarm set for ${remind_on}`, { reminders });
 
       return {
         booking_id: id, token: booking.token, status: "BOOKED", event: { ...event }, calendar_url, ics,
-        email: emailStatus, remind_on, steps,
+        email: emailStatus, remind_on: booking.remind_on, reminders, steps,
       };
     },
 
-    /** Email reminders due on or before today and not yet sent (at most two days late). */
+    /**
+     * Reminder emails due on or before today and not yet sent (at most two
+     * days late): one row per reminder, the booking with its `due_on`.
+     */
     due(at = now()) {
       const today = eatDateKey(at);
       const floor = addDays(today, -2);
-      return db.bookings.filter((b) => b.reminder === "SCHEDULED" && b.email && b.remind_on <= today && b.remind_on >= floor);
+      const out = [];
+      for (const b of db.bookings) {
+        if (!b.email) continue;
+        for (const r of remindersOf(b)) if (r.state === "SCHEDULED" && r.on <= today && r.on >= floor) out.push({ ...b, due_on: r.on });
+      }
+      return out;
     },
-    markReminder(id, state) {
+    /** Records what happened to the reminder due on `on` (SENT, SIMULATED or FAILED). */
+    markReminder(id, on, state) {
       const b = db.bookings.find((x) => x.id === id);
       if (!b) return;
-      b.reminder = state;
+      b.reminders = remindersOf(b).map((r) => (r.on === on ? { ...r, state, at: now().toISOString() } : r));
+      b.reminder = b.reminders.some((r) => r.state === "SCHEDULED") ? "SCHEDULED" : state;
       b.reminded_at = now().toISOString();
       write();
     },
@@ -258,13 +273,58 @@ export function createBookings({ storePath, now = () => new Date() } = {}) {
   };
 }
 
-/** The reminder email for a stored booking. */
-export function reminderMessage(b) {
+/** A booking's reminders; an older record (one `remind_on` and a `reminder` state) reads as one reminder. */
+export function remindersOf(b) {
+  if (Array.isArray(b.reminders)) return b.reminders;
+  return b.remind_on ? [{ on: b.remind_on, state: b.reminder === "SCHEDULED" ? "SCHEDULED" : b.reminder ?? "SCHEDULED" }] : [];
+}
+
+/* ── the emails ── */
+const esc = (v) => String(v).replace(/[&<>"]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[m]);
+const longDate = (key) => new Date(`${key}T00:00:00Z`).toLocaleDateString("en-KE", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
+const list = (xs) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
+const shell = (title, inner) =>
+  `<div style="font-family:Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;color:#1f2a1f"><div style="background:#18271b;color:#efeadb;border-radius:14px;padding:18px 20px"><div style="font-size:11px;letter-spacing:2px;color:#e9b44c">KILIMOORBIT</div><div style="font-size:22px;font-weight:700;margin-top:6px">${esc(title)}</div></div><div style="padding:8px 4px">${inner}</div></div>`;
+const row = (k, v) => `<tr><td style="padding:6px 10px 6px 0;color:#6b6450;white-space:nowrap">${esc(k)}</td><td style="padding:6px 0">${v}</td></tr>`;
+
+/** The confirmation email sent the moment a show is booked. */
+export function confirmationMessage({ name, email, event, calendar_url, reminders, remind_days }) {
+  const whenReminders = reminders.map((d) => `${longDate(d)}${d === event.start ? " (the morning of the show)" : ` (${remind_days} day${remind_days > 1 ? "s" : ""} before)`}`);
+  const text = [
+    `Habari ${name},`, "",
+    `You asked KilimoOrbit to remind you about ${event.name}.`, "",
+    `When: ${event.start} to ${event.end}${event.estimated ? " (dates estimated from last year's calendar; confirm with the organiser)" : ""}`,
+    `Where: ${where(event)}`, `Organiser: ${event.organiser}${event.url ? `\nMore: ${event.url}` : ""}`, "",
+    reminders.length ? `We will email you a reminder on ${list(reminders)}.` : "The show has already started, so there is no reminder to send.", "",
+    `To put it in your phone's calendar too, open the attached file in any calendar app, or: ${calendar_url}`, "",
+    "You can cancel the booking from the app at any time.", "", "KilimoOrbit",
+  ].join("\n");
+  const html = shell(event.name, [
+    `<p style="font-size:16px">Habari ${esc(name)},</p><p>You asked KilimoOrbit to remind you about <strong>${esc(event.name)}</strong>.</p>`,
+    `<table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse">`,
+    row("When", `<strong>${esc(longDate(event.start))}</strong> to ${esc(longDate(event.end))}${event.estimated ? ' <span style="color:#b86a12">(estimated; confirm with the organiser)</span>' : ""}`),
+    row("Where", esc(where(event))), row("Organiser", `${esc(event.organiser)}${event.url ? ` · <a href="${esc(event.url)}">more</a>` : ""}`),
+    row("Reminders", reminders.length ? whenReminders.map(esc).join("<br>") : "the show has already started"),
+    `</table>`,
+    `<p style="margin-top:18px"><a href="${esc(calendar_url)}" style="display:inline-block;background:#e9b44c;color:#0c150e;text-decoration:none;font-weight:700;padding:12px 18px;border-radius:12px">Add to Google Calendar</a></p>`,
+    `<p style="color:#6b6450;font-size:13px">The attached file adds it to any other calendar app. You can cancel the booking from the app at any time.</p>`,
+  ].join(""));
+  return { to: email, subject: `${event.name}: ${event.start} to ${event.end}, ${event.town}`, text, html };
+}
+
+/** The reminder email for a stored booking, for the reminder due on `on`. */
+export function reminderMessage(b, on = b.remind_on) {
   const ev = findEvent(b.event_id);
-  const days = daysBetween(b.remind_on, b.start);
-  return {
-    to: b.email,
-    subject: `${b.event_name} starts ${days <= 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`}`,
-    text: `Habari ${b.name},\n\nA reminder from KilimoOrbit: ${b.event_name} runs ${b.start} to ${b.end} in ${b.town}${b.estimated ? " (estimated dates; confirm with the organiser)" : ""}.${ev?.url ? `\n\nMore: ${ev.url}` : ""}\n\nKaribu!\nKilimoOrbit`,
-  };
+  const days = daysBetween(on, b.start);
+  const starts = days <= 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`;
+  const text = `Habari ${b.name},\n\nA reminder from KilimoOrbit: ${b.event_name} starts ${starts}. It runs ${b.start} to ${b.end} in ${b.town}${b.estimated ? " (estimated dates; confirm with the organiser)" : ""}.${ev?.url ? `\n\nMore: ${ev.url}` : ""}\n\nKaribu!\nKilimoOrbit`;
+  const html = shell(`${b.event_name} starts ${starts}`, [
+    `<p style="font-size:16px">Habari ${esc(b.name)},</p>`,
+    `<p>A reminder from KilimoOrbit: <strong>${esc(b.event_name)}</strong> starts <strong>${esc(starts)}</strong>.</p>`,
+    `<table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse">`,
+    row("When", `${esc(longDate(b.start))} to ${esc(longDate(b.end))}${b.estimated ? ' <span style="color:#b86a12">(estimated; confirm with the organiser)</span>' : ""}`),
+    row("Where", esc(b.town)), ev?.url ? row("More", `<a href="${esc(ev.url)}">${esc(ev.url)}</a>`) : "",
+    `</table><p>Karibu!</p>`,
+  ].join(""));
+  return { to: b.email, subject: `${b.event_name} starts ${starts}`, text, html };
 }

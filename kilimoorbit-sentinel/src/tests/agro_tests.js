@@ -11,8 +11,9 @@ import { levelFor, priceOn, boardFor, historyFor } from "../agro/prices.js";
 import { createPestWatch, sampleWatch, thresholdFor, validateReport, WINDOW_DAYS } from "../agro/pests.js";
 import { createNews, decodeEntities, parseRss, SAMPLE_TIPS } from "../agro/news.js";
 import {
-  EVENTS, createBookings, distanceKm, eventsNear, findEvent, googleCalendarUrl, icsFor, reminderMessage, upcoming, validateBooking,
+  EVENTS, confirmationMessage, createBookings, distanceKm, eventsNear, findEvent, googleCalendarUrl, icsFor, reminderMessage, remindersOf, upcoming, validateBooking,
 } from "../agro/events.js";
+import { digestMessage, validateDigest } from "../agro/records.js";
 import { readFileSync, unlinkSync } from "node:fs";
 
 const FEED_PATH = new URL("../../payloads/commodity_feed.json", import.meta.url);
@@ -334,7 +335,7 @@ await check("shows: booking validation refuses junk field by field", () => {
   };
 });
 
-await check("shows: the booking agent runs scout → planner → messenger → reminder, persists, reminds on the day, cancels", async () => {
+await check("shows: the booking agent runs scout → planner → messenger → reminder, emails a confirmation, reminds N days before and on the morning, cancels", async () => {
   const path = `${process.env.TMPDIR || "/tmp"}/events_test_${process.pid}.json`;
   try { unlinkSync(path); } catch {}
   const sent = [];
@@ -343,25 +344,72 @@ await check("shows: the booking agent runs scout → planner → messenger → r
   const { input } = validateBooking({ event_id: "ask-kitale-2026", name: "Wanjiru", email: "w@example.com", remind_days: 1 }, OCT);
   const r = await store.book(input, { mailer });
   const silent = await store.book({ ...input, email: null }, { mailer });
-  const reopened = createBookings({ storePath: path, now: () => new Date("2026-10-06T06:00:00Z") });
-  const due = reopened.due();
-  const msg = reminderMessage(due[0]);
-  reopened.markReminder(due[0].id, "SENT");
-  const after = reopened.due();
-  const sizeBefore = reopened.size;
-  const cancel = [reopened.cancel(r.booking_id, "wrong"), reopened.cancel(r.booking_id, r.token), reopened.cancel(r.booking_id, r.token)];
+  // The day before: the first reminder is due; the morning of the show: the second.
+  const eve = createBookings({ storePath: path, now: () => new Date("2026-10-06T06:00:00Z") });
+  const due = eve.due();
+  const msg = reminderMessage(due[0], due[0].due_on);
+  eve.markReminder(due[0].id, due[0].due_on, "SENT");
+  const after = eve.due();
+  const morning = createBookings({ storePath: path, now: () => new Date("2026-10-07T04:00:00Z") });
+  const dayOf = morning.due();
+  const dayOfMsg = reminderMessage(dayOf[0], dayOf[0].due_on);
+  morning.markReminder(dayOf[0].id, dayOf[0].due_on, "SIMULATED");
+  const done = morning.due();
+  const sizeBefore = morning.size;
+  const cancel = [morning.cancel(r.booking_id, "wrong"), morning.cancel(r.booking_id, r.token), morning.cancel(r.booking_id, r.token)];
   try { unlinkSync(path); } catch {}
   return {
     ok: r.status === "BOOKED" && r.steps.map((s) => s.agent).join(">") === "Scout>Planner>Messenger>Reminder" && r.email === "SENT" && r.remind_on === "2026-10-06"
+      && r.reminders.join(",") === "2026-10-06,2026-10-07" && r.steps[3].action.includes("2026-10-06 (1 day before) and 2026-10-07 (the morning of the show)")
       && sent.length === 1 && sent[0].to === "w@example.com" && sent[0].attachments[0].content.includes("BEGIN:VEVENT") && r.ics.includes("TRIGGER:-P1DT17H")
-      && silent.email === "NONE" && silent.steps.length === 4 && sizeBefore === 2
-      && due.length === 1 && msg.subject === "Kitale National Show starts tomorrow" && after.length === 0
-      && cancel.join(",") === "forbidden,ok,missing" && reopened.size === 1,
-    detail: `${r.steps.length} steps · reminder ${r.remind_on} · "${msg.subject}"`,
+      && sent[0].text.includes("We will email you a reminder on 2026-10-06 and 2026-10-07") && sent[0].html.includes("Add to Google Calendar")
+      && silent.email === "NONE" && silent.steps.length === 4 && silent.reminders.length === 2
+      && due.length === 1 && due[0].due_on === "2026-10-06" && msg.subject === "Kitale National Show starts tomorrow" && msg.html.includes("starts <strong>tomorrow</strong>") && after.length === 0
+      && dayOf.length === 1 && dayOf[0].due_on === "2026-10-07" && dayOfMsg.subject === "Kitale National Show starts today" && done.length === 0
+      && sizeBefore === 2 && cancel.join(",") === "forbidden,ok,missing" && morning.size === 1,
+    detail: `${r.steps.length} steps · reminders ${r.reminders.join(" + ")} · "${msg.subject}" · "${dayOfMsg.subject}"`,
+  };
+});
+
+await check("shows: a show that starts today gets only the morning reminder; an older one-reminder record still reads", async () => {
+  const store = createBookings({ now: () => new Date("2026-10-07T05:00:00Z") });
+  const { input } = validateBooking({ event_id: "ask-kitale-2026", name: "Wanjiru", email: "w@example.com", remind_days: 3 }, new Date("2026-10-07T05:00:00Z"));
+  const r = await store.book(input, { mailer: async () => {} });
+  const legacy = remindersOf({ remind_on: "2026-10-04", reminder: "SCHEDULED" });
+  const conf = confirmationMessage({ name: "W", email: "w@example.com", event: input.event, calendar_url: "https://calendar.google.com/x", reminders: [], remind_days: 3 });
+  return {
+    ok: r.reminders.join(",") === "2026-10-07" && r.remind_on === "2026-10-07" && store.due().length === 1 && r.steps[3].action.includes("the morning of the show")
+      && legacy.length === 1 && legacy[0].on === "2026-10-04" && legacy[0].state === "SCHEDULED" && conf.text.includes("already started"),
+    detail: `reminders ${r.reminders.join(",")}`,
+  };
+});
+
+await check("records: the digest is validated field by field and becomes a text + HTML email in the farmer's language", () => {
+  const good = validateDigest({
+    name: "  Wanjiru  Kamau ", email: "W@Example.com", lang: "en", period: "This season",
+    totals: { income: 42000, expense: 15500.4 }, crops: [{ crop: "maize", profit: 20000 }, { crop: "beans", profit: -1500 }],
+    entries: 7, last: "Cost · Fertilizer · maize · KES 3,500 · 12 Oct", text: "KilimoOrbit · Farm report\nIncome: KES 42,000",
+  });
+  const bad = [
+    validateDigest(null), validateDigest({}), validateDigest({ name: "W", email: "nope", lang: "en", period: "x", totals: { income: 1, expense: 1 }, text: "t" }),
+    validateDigest({ name: "W", email: "w@x.co", lang: "fr", period: "x", totals: { income: 1, expense: 1 }, text: "t" }),
+    validateDigest({ name: "W", email: "w@x.co", lang: "sw", period: "x", totals: { income: -1, expense: 1 }, text: "t" }),
+    validateDigest({ name: "W", email: "w@x.co", lang: "sw", period: "x", totals: { income: 1, expense: 1 }, text: "x".repeat(7000) }),
+    validateDigest({ name: "W", email: "w@x.co", lang: "sw", period: "x", totals: { income: 1, expense: 1 }, text: "t", crops: [{ crop: "<b>", profit: 1 }] }),
+  ];
+  const msg = digestMessage(good.input);
+  const sw = digestMessage({ ...good.input, lang: "sw", totals: { income: 100, expense: 400, profit: -300 } });
+  return {
+    ok: !good.error && good.input.name === "Wanjiru Kamau" && good.input.email === "w@example.com" && good.input.totals.profit === 26500 && good.input.totals.expense === 15500
+      && bad.every((b) => b.error) && bad[2].fields.includes("email") && bad[3].fields.includes("lang") && bad[4].fields.includes("totals") && bad[5].fields.includes("text") && bad[6].fields.includes("crops")
+      && msg.to === "w@example.com" && msg.subject === "Farm records · This season: profit KES 26,500" && msg.text.includes("Income: KES 42,000") && msg.text.includes("- beans: −KES 1,500")
+      && msg.html.includes("KES 26,500") && msg.html.includes("Latest entry") && !msg.html.includes("<b>")
+      && sw.subject === "Daftari la shamba · This season: hasara KES 300" && sw.text.includes("Hasara: KES 300"),
+    detail: `"${msg.subject}" · "${sw.subject}"`,
   };
 });
 
 console.log("─".repeat(57));
 const ok = passed === total;
-console.log((ok ? C.green : C.red)(C.bold(`  ${ok ? "✓" : "✗"} ${passed}/${total} farm weather, prices, pest watch, news + shows tests passed`)));
+console.log((ok ? C.green : C.red)(C.bold(`  ${ok ? "✓" : "✗"} ${passed}/${total} farm weather, prices, pest watch, news, shows + records tests passed`)));
 process.exit(ok ? 0 : 1);
