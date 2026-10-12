@@ -16,6 +16,8 @@ import Animated, {
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { useVoicePref } from "../lib/voice";
+import { useBriefPref } from "../lib/brief";
+import Pic from "./Pic";
 import Constants from "expo-constants";
 import { router, usePathname } from "expo-router";
 import { useTheme, useThemeControls } from "../lib/theme-context";
@@ -173,6 +175,8 @@ function SidebarBody({ variant, open }: { variant: Variant; open: boolean }) {
 
   // Read-aloud preference: one shared store with Apex Chat (lib/voice.ts).
   const [voice, toggleVoice] = useVoicePref();
+  // The morning brief and price alerts by email (lib/brief.ts), for a farmer with an email.
+  const [brief, toggleBrief] = useBriefPref();
 
   type Route = "/" | "/shamba" | "/masoko" | "/daktari" | "/chat" | "/autopilot";
   const isActive = (route: Route) =>
@@ -299,6 +303,31 @@ function SidebarBody({ variant, open }: { variant: Variant; open: boolean }) {
           <SwitchVisual value={voice} />
         </Pressable>
 
+        {signedIn && session.profile?.email ? (
+          <Pressable
+            onPress={() => toggleBrief(!brief)}
+            {...spaceActivates(() => toggleBrief(!brief))}
+            accessibilityRole="switch"
+            accessibilityLabel={tt("settings.brief")}
+            accessibilityState={{ checked: brief }}
+            aria-checked={brief}
+            testID="settings-brief"
+            style={({ pressed, hovered, focused }: PressState) => [
+              { minHeight: 56, paddingHorizontal: 20, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 14 },
+              hovered && { backgroundColor: drawer ? t.raised : t.bg },
+              pressed && { opacity: 0.7 },
+              webCursor, focusRing(focused, t.accent),
+            ]}
+          >
+            <Pic name="mail" size={24} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "600" }}>{tt("settings.brief")}</Text>
+              <Text numberOfLines={2} style={{ color: t.dim, fontSize: 12, lineHeight: 16 }}>{tt("settings.briefSub", { email: maskEmail(session.profile.email) })}</Text>
+            </View>
+            <SwitchVisual value={brief} />
+          </Pressable>
+        ) : null}
+
         <Pressable
           onPress={() => setConn(true)}
           accessibilityRole="button"
@@ -422,6 +451,7 @@ function ProfileBlock({ onEdit, docked }: { onEdit: () => void; docked?: boolean
           <Chip glyph={<SignalOffGlyph size={14} color={t.ink} />} text={tt("chip.localOnly")} />
         )}
         {legacy && <Chip glyph={<PlusGlyph size={14} color={t.ink} />} text={tt("chip.addPhone")} onPress={onEdit} />}
+        {!p.email && <Chip glyph={<PlusGlyph size={14} color={t.ink} />} text={tt("chip.addEmail")} onPress={onEdit} />}
       </View>
       <Pressable
         onPress={onEdit}

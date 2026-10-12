@@ -3,7 +3,7 @@
  * their county, this week's farm tasks, where their crop sells best, and the
  * season's climate watch. Detail lives one tap away (Shamba, Masoko).
  */
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, ScrollView, RefreshControl, useWindowDimensions } from "react-native";
 import Text from "../../components/Text";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -28,6 +28,11 @@ import { alertHits } from "../../lib/pricewatch";
 import { useHerd } from "../../lib/herd";
 import { fill, openReminders } from "../../lib/livestock";
 import { ListenPill } from "../../components/auth/Controls";
+import Pic from "../../components/Pic";
+import { proverbFor } from "../../lib/proverbs";
+import { sendBriefIfDue, sendBriefNow, useBriefPref } from "../../lib/brief";
+import { buildDigest, flushPendingDigest, useDigestPref } from "../../lib/digest-store";
+import { mailFailure, resendConfirmation, type BriefInput, type BriefSection } from "../../lib/api";
 import TaskRows from "../../components/TaskRows";
 import { useMenu } from "../../components/MenuContext";
 import { AddCropSheet, FarmProfileSheet, RecordSheet } from "../../components/FarmSheets";
@@ -37,7 +42,7 @@ import { DemoTag } from "../../components/ShambaPanel";
 import { ArrowGlyph, CheckCoin, PlusGlyph, SignalOffGlyph } from "../../components/Glyphs";
 import { useTheme } from "../../lib/theme-context";
 import { useLang, useSession } from "../../lib/session";
-import { webLang } from "../../lib/ui";
+import { announce, webLang } from "../../lib/ui";
 import { cropName, isDemoBoard } from "../../lib/prices";
 import { seasonFor } from "../../lib/season";
 import { longDay, todayKey } from "../../lib/dates";
@@ -55,14 +60,14 @@ export default function Today() {
   const t = useTheme();
   const { lang, t: tt } = useLang();
   const { profile } = useSession();
-  const { farm } = useFarm();
+  const { farm, ready: farmReady } = useFarm();
   const sentinel = useSentinel();
   const county = farm.county ?? DEMO_COUNTY;
   const wx = useForecast(county);
   const { width } = useWindowDimensions();
   const { isDocked } = useMenu();
   const [sheet, setSheet] = useState<null | "county" | "crop" | "record" | "animal" | "milk" | "eggs" | "connection">(null);
-  const { herd } = useHerd();
+  const { herd, ready: herdReady } = useHerd();
   const alerts = useAlerts();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -75,14 +80,16 @@ export default function Today() {
   const first = profile?.name.trim().split(/\s+/)[0];
   const season = seasonFor();
 
-  // "Listen": the morning glance read aloud (low-literacy friendly), in the farmer's language.
-  const script = useMemo(() => {
-    const parts = [`${first ? `${hello}, ${first}` : hello}.`];
+  // The day in sections: what "Listen" reads aloud and what the morning brief emails.
+  const sections = useMemo<BriefSection[]>(() => {
+    const out: BriefSection[] = [];
     const days = wx.data?.days;
     if (days?.length) {
       const d = days[0];
-      parts.push(tt("listen.today.weather", { county, sky: tt(`wx.sky.${d.sky}` as Key), tmax: d.tmax, p: d.rain_chance }));
-      for (const k of ["spray", "plant", "dry"] as Win[]) parts.push(`${tt(`win.${k}` as Key)}: ${windowText(k, days, lang, tt)}.`);
+      out.push({ title: tt("brief.weather"), lines: [
+        tt("listen.today.weather", { county, sky: tt(`wx.sky.${d.sky}` as Key), tmax: d.tmax, p: d.rain_chance }),
+        ...(["spray", "plant", "dry"] as Win[]).map((k) => `${tt(`win.${k}` as Key)}: ${windowText(k, days, lang, tt)}.`),
+      ] });
     }
     const due = upcomingTasks(farm).slice(0, 3).map((x) => `${pick(lang, x.title)} (${cropName(lang, x.planting.crop)})`);
     const herdDue = openReminders(herd.animals, herd.done, todayKey(), 7).slice(0, 2)
@@ -90,14 +97,46 @@ export default function Today() {
     const storeDue = dueChecks(farm.store, todayKey(), 1).slice(0, 2)
       .map((c) => tt(`store.check.${checkKind(c.lot)}` as Key, { crop: cropName(lang, c.lot.crop).toLowerCase() }));
     const all = [...due, ...herdDue, ...storeDue];
-    if (all.length) parts.push(tt("listen.today.tasks", { list: all.join("; ") }));
-    for (const h of alertHits(alerts, sentinel.meta?.commodity_feed))
-      parts.push(tt("listen.today.alert", { crop: cropName(lang, h.alert.crop), p: h.price, market: h.market }));
+    if (all.length) out.push({ title: tt("brief.tasks"), lines: all });
+    const hits = alertHits(alerts, sentinel.meta?.commodity_feed)
+      .map((h) => tt("listen.today.alert", { crop: cropName(lang, h.alert.crop), p: h.price, market: h.market }));
+    if (hits.length) out.push({ title: tt("brief.alerts"), lines: hits });
     const c = sentinel.arb?.cargo_optimized_route;
     if (c?.live_market_wholesale_price_per_kg != null)
-      parts.push(tt("listen.today.market", { crop: cropName(lang, c.crop_type), market: c.optimal_market_destination, p: c.live_market_wholesale_price_per_kg }));
+      out.push({ title: tt("brief.market"), lines: [tt("listen.today.market", { crop: cropName(lang, c.crop_type), market: c.optimal_market_destination, p: c.live_market_wholesale_price_per_kg })] });
+    const p = proverbFor(todayKey());
+    out.push({ title: tt("brief.belief"), lines: [`“${p.sw}” ${p.meaning[lang]}`, p.farm[lang]] });
+    return out;
+  }, [wx.data, farm, herd, alerts, sentinel.arb, sentinel.meta, lang, county]);
+
+  // "Listen": the same, read aloud (low-literacy friendly), in the farmer's language.
+  const script = useMemo(() => {
+    const parts = [`${first ? `${hello}, ${first}` : hello}.`];
+    for (const s of sections) {
+      if (s.title === tt("brief.tasks")) parts.push(tt("listen.today.tasks", { list: s.lines.join("; ") }));
+      else parts.push(...s.lines);
+    }
     return parts.join(" ").replace(/°/g, "");
-  }, [wx.data, farm, herd, alerts, sentinel.arb, sentinel.meta, lang, county, first, hello]);
+  }, [sections, first, hello, tt]);
+
+  // The morning brief by email: once a day, when the farmer has an email and left it on; and the button to send it now.
+  const [briefOn] = useBriefPref();
+  const briefInput = useCallback((): BriefInput | null =>
+    profile?.email ? { name: profile.name, email: profile.email, lang, date: longDay(lang, todayKey()), county: farm.county, sections } : null,
+  [profile?.email, profile?.name, lang, farm.county, sections]);
+  const briefReady = !!wx.data && sentinel.status === "ready" && farmReady && herdReady;
+  useEffect(() => {
+    if (!briefOn || !briefReady) return;
+    const input = briefInput();
+    if (input) sendBriefIfDue(input).catch(() => {});
+  }, [briefOn, briefReady, profile?.email]);
+
+  // A records digest the last session never sent (the app was closed first) goes now.
+  const [digestOn] = useDigestPref();
+  useEffect(() => {
+    if (!farmReady || !profile?.email || !digestOn) return;
+    flushPendingDigest(() => buildDigest({ lang, tt, profile, farm, period: "season" })).catch(() => {});
+  }, [farmReady, profile?.email, digestOn]);
 
   const refresh = async () => {
     setRefreshing(true);
@@ -134,8 +173,9 @@ export default function Today() {
                 {longDay(lang, todayKey())} · <Text style={{ color: domainColor(t, "season"), fontFamily: "monospace", fontWeight: "700" }}>{tt(`season.${season.key}.name` as Key)}</Text>
               </Text>
               {/* Hidden by ListenPill itself when the phone has no voice for the language. */}
-              <View style={{ flexDirection: "row", marginTop: 10 }}>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 10, marginTop: 10 }}>
                 <ListenPill script={script} />
+                {profile?.email && briefOn ? <BriefButton build={briefInput} email={profile.email} name={profile.name} /> : null}
               </View>
             </View>
           </Enter>
@@ -198,6 +238,53 @@ export default function Today() {
       <EggSheet visible={sheet === "eggs"} onClose={() => setSheet(null)} />
       <ConnectionSheet visible={sheet === "connection"} onClose={() => setSheet(null)} />
     </SafeAreaView>
+  );
+}
+
+/* ── "Email me this brief": the day's sections to the farmer's address, now ── */
+function BriefButton({ build, email, name }: { build: () => BriefInput | null; email: string; name: string }) {
+  const t = useTheme();
+  const { lang, t: tt } = useLang();
+  const [state, setState] = useState<null | "sending" | "SENT" | "SIMULATED" | "unconfirmed" | "cap" | "failed" | "resent" | "resendFail">(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const later = (ms: number) => { if (timer.current) clearTimeout(timer.current); timer.current = setTimeout(() => setState(null), ms); };
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const press = async () => {
+    const input = build();
+    if (!input) return;
+    setState("sending");
+    try {
+      const r = await sendBriefNow(input);
+      setState(r.status);
+      announce(r.status === "SENT" ? tt("brief.sent", { email }) : tt("brief.logged"));
+      later(5000);
+    } catch (e) {
+      const why = mailFailure(e);
+      setState(why);
+      announce(tt(why === "unconfirmed" ? "mail.unconfirmed" : why === "cap" ? "mail.cap" : "brief.fail"));
+      if (why !== "unconfirmed") later(5000);
+    }
+  };
+  // The pill keeps a short label; what happened is said on its own wrapping line beneath.
+  const label = state === "sending" ? tt("brief.sending") : state === "SENT" || state === "SIMULATED" ? tt("brief.done") : tt("brief.send");
+  const status = state === "SENT" ? tt("brief.sent", { email }) : state === "SIMULATED" ? tt("brief.logged") : state === "cap" ? tt("mail.cap") : state === "failed" ? tt("brief.fail") : null;
+  return (
+    <View style={{ gap: 4, flexShrink: 1, flexBasis: "100%" }}>
+      <Btn kind="ghost" small label={label} onPress={press} disabled={state === "sending" || state === "unconfirmed"} icon={() => <Pic name="mail" size={20} />} style={{ alignSelf: "flex-start" }} testID="today-brief" />
+      {status ? <Text style={{ color: t.dim, ...T.meta }} testID="today-brief-status">{status}</Text> : null}
+      {state === "unconfirmed" || state === "resent" || state === "resendFail" ? (
+        <View style={{ gap: 4 }} testID="today-brief-unconfirmed">
+          <Tag block tone="warn" label={tt("mail.unconfirmed")} />
+          <Btn
+            kind="ghost" small
+            label={state === "resent" ? tt("mail.resent") : state === "resendFail" ? tt("mail.resendFail") : tt("mail.resend")}
+            onPress={async () => { try { await resendConfirmation({ name, email, lang }); setState("resent"); } catch { setState("resendFail"); } later(6000); }}
+            style={{ alignSelf: "flex-start" }}
+            testID="today-brief-resend"
+          />
+        </View>
+      ) : null}
+    </View>
   );
 }
 

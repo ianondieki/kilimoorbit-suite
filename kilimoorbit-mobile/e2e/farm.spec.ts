@@ -701,33 +701,97 @@ test("Farm shows: when the server can't be reached, booking fails politely and t
   expect((await popup).url()).toContain("calendar.google.com/calendar/render?action=TEMPLATE");
 });
 
-test("Records by email: saving a cost emails the season's totals to the farmer; the Records tab can email the report; the tick box turns updates off", async ({ page, context }) => {
+test("Records by email: an evening of entries goes out as one digest with the final totals; the Records tab can email the report; the tick box turns updates off", async ({ page, context }) => {
   const digests: any[] = [];
   await context.route("http://localhost:4517/api/records/digest", (r) => { digests.push(r.request().postDataJSON()); return r.fulfill(json({ status: "SIMULATED", email: "wanjiru@example.com", subject: "x" })); });
+  await page.clock.install(); // the digest waits two minutes after the last entry: the clock is ours to advance
   await start(page, "/shamba?tab=records", "en", { county: "Nakuru", plantings: [planted("maize", 30)] }, undefined, "wanjiru@example.com");
   await page.getByTestId("records-add").click();
   await expect(page.getByTestId("record-digest")).toHaveAttribute("aria-checked", "true"); // on by default for a farmer with an email
   await expect(page.getByTestId("record-digest")).toContainText("To wanjiru@example.com");
   await page.getByTestId("record-amount").fill("3500");
   await page.getByTestId("record-save").click();
-  await expect.poll(() => digests.length).toBe(1);
-  expect(digests[0]).toMatchObject({ email: "wanjiru@example.com", lang: "en", totals: { income: 0, expense: 3500 }, entries: 1 });
-  expect(digests[0].last).toContain("Costs · Seed · Maize · KES 3,500");
-  expect(digests[0].text).toContain("Costs: KES 3,500");
+  await page.clock.runFor(60_000);
+  expect(digests.length).toBe(0); // not yet: more entries may follow
+  await page.getByTestId("records-add").click();
+  await page.getByTestId("record-amount").fill("500");
+  await page.getByTestId("record-save").click();
+  await expect(page.getByLabel("Costs: KES 4,000")).toBeVisible();
+  await page.clock.runFor(125_000);
+  await expect.poll(() => digests.length).toBe(1); // one email, with both entries in it
+  expect(digests[0]).toMatchObject({ email: "wanjiru@example.com", lang: "en", totals: { income: 0, expense: 4000 }, entries: 2 });
+  expect(digests[0].last).toContain("Costs · Seed · Maize · KES 500");
+  expect(digests[0].text).toContain("Costs: KES 4,000");
 
   await page.getByTestId("records-email").click();
   await expect(page.getByTestId("records-email")).toContainText("No email (SMTP) on the server");
   await expect.poll(() => digests.length).toBe(2);
-  expect(digests[1]).toMatchObject({ totals: { income: 0, expense: 3500 } });
+  expect(digests[1]).toMatchObject({ totals: { income: 0, expense: 4000 } });
 
   await page.getByTestId("records-add").click();
   await page.getByTestId("record-digest").click(); // off: no update for this one
   await expect(page.getByTestId("record-digest")).toHaveAttribute("aria-checked", "false");
-  await page.getByTestId("record-amount").fill("500");
+  await page.getByTestId("record-amount").fill("250");
   await page.getByTestId("record-save").click();
-  await expect(page.getByLabel("Costs: KES 4,000")).toBeVisible();
-  await page.waitForTimeout(2500);
+  await expect(page.getByLabel("Costs: KES 4,250")).toBeVisible();
+  await page.clock.runFor(125_000);
   expect(digests.length).toBe(2);
+});
+
+test("Morning brief by email: sent once a day for a farmer with an email, again on request, and the settings switch turns it off", async ({ page, context }) => {
+  const briefs: any[] = [];
+  await context.route("http://localhost:4517/api/brief", (r) => { briefs.push(r.request().postDataJSON()); return r.fulfill(json({ status: "SIMULATED", email: "wanjiru@example.com", subject: "x" })); });
+  await start(page, "/", "en", { county: "Nakuru", plantings: [planted("maize", 30)] }, undefined, "wanjiru@example.com");
+  await expect.poll(() => briefs.length).toBe(1); // the day's brief goes by itself
+  expect(briefs[0]).toMatchObject({ name: "Wanjiru Kamau", email: "wanjiru@example.com", lang: "en", county: "Nakuru" });
+  expect(briefs[0].sections.map((s: any) => s.title)).toEqual(expect.arrayContaining(["Weather", "This week's tasks", "Today's belief"]));
+  expect(briefs[0].sections[0].lines[0]).toMatch(/^Today in Nakuru: /);
+  await page.reload();
+  await expect(page.getByTestId("today-brief")).toBeVisible();
+  await page.waitForTimeout(1500);
+  expect(briefs.length).toBe(1); // not twice in a day
+  await page.getByTestId("today-brief").click();
+  await expect(page.getByTestId("today-brief-status")).toContainText("No email (SMTP) on the server");
+  await expect.poll(() => briefs.length).toBe(2);
+
+  const menu = page.locator('[data-ko-menu-button="1"]');
+  if (await menu.count()) await menu.first().click();
+  await expect(page.getByTestId("settings-brief")).toHaveAttribute("aria-checked", "true");
+  await page.getByTestId("settings-brief").click();
+  await expect(page.getByTestId("settings-brief")).toHaveAttribute("aria-checked", "false");
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("today-brief")).toHaveCount(0);
+});
+
+test("Price alert by email: a hit is emailed once, not again on the next visit", async ({ page, context }) => {
+  const mails: any[] = [];
+  await context.route("http://localhost:4517/api/alerts/email", (r) => { mails.push(r.request().postDataJSON()); return r.fulfill(json({ status: "SIMULATED", email: "wanjiru@example.com", subject: "x" })); });
+  await context.route("http://localhost:4517/api/brief", (r) => r.fulfill(json({ status: "SIMULATED", email: "wanjiru@example.com", subject: "x" })));
+  await start(page, "/masoko", "en", { county: "Nakuru" }, undefined, "wanjiru@example.com");
+  await page.getByTestId("mk-crop-maize").click();
+  await page.getByTestId("alert-open").click();
+  for (let i = 0; i < 12; i++) await page.getByRole("button", { name: /^Target price \(KES a kilo\) −/ }).click();
+  await page.getByTestId("alert-save").click();
+  await page.goto("/");
+  await expect(page.getByTestId("alert-hit-maize")).toBeVisible();
+  await expect.poll(() => mails.length).toBe(1);
+  expect(mails[0]).toMatchObject({ email: "wanjiru@example.com", lang: "en" });
+  expect(mails[0].hits[0]).toMatchObject({ key: "maize", crop: "Maize" });
+  expect(mails[0].hits[0].price).toBeGreaterThanOrEqual(mails[0].hits[0].target);
+  await page.reload();
+  await expect(page.getByTestId("alert-hit-maize")).toBeVisible();
+  await page.waitForTimeout(1500);
+  expect(mails.length).toBe(1);
+});
+
+test("Farm news: a story can be shared; on the web its link is copied", async ({ page, context }) => {
+  await context.route("http://localhost:4517/api/news**", (r) => r.fulfill(json(NEWS)));
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await start(page, "/", "en", { county: "Nakuru" });
+  await page.getByTestId("news-card").scrollIntoViewIfNeeded();
+  await page.getByTestId("news-share-n1").click();
+  await expect(page.getByTestId("news-share-n1")).toContainText("Link copied");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("https://example.com/n1");
 });
 
 test("Today: the day's belief is the same proverb for everyone; the listen pill, the belief and the sliders are there", async ({ page }) => {
@@ -740,6 +804,11 @@ test("Today: the day's belief is the same proverb for everyone; the listen pill,
   await expect(page.getByTestId("belief-proverb")).toHaveText(first!);
   await expect(page.getByTestId("fab")).toBeVisible();
   await expect(page.getByTestId("eyebrow-weather").first().getByTestId("icon-badge")).toBeVisible(); // the section picture on its badge
+  await expect(page.getByTestId("today-brief")).toHaveCount(0); // no email on this profile: no brief
+  // A farmer without an email is nudged to add one, so reminders and reports can reach them.
+  const menu = page.locator('[data-ko-menu-button="1"]');
+  if (await menu.count()) await menu.first().click();
+  await expect(page.getByText("Add email for reminders and reports")).toBeVisible();
 });
 
 test("Connection: the offline banner opens the server screen; a typed address is tested, saved and shown in settings", async ({ page, context }) => {

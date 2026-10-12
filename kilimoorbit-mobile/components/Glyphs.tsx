@@ -540,3 +540,17 @@ export function EggGlyph({ size = 24, color, style }: GlyphProps) {
     </Root>
   );
 }
+
+/** A tray with an arrow rising out of it: share. */
+export function ShareGlyph({ size = 24, color, style }: GlyphProps) {
+  const s = strokeFor(size);
+  const w = r(size * 0.62), h = r(size * 0.42);
+  const head = r(size * 0.26);
+  return (
+    <Root size={size} style={style}>
+      <View style={{ position: "absolute", left: r((size - w) / 2), top: r(size * 0.5), width: w, height: h, borderWidth: s, borderTopWidth: 0, borderColor: color, borderBottomLeftRadius: 3, borderBottomRightRadius: 3 }} />
+      <View style={{ position: "absolute", left: r((size - s) / 2), top: r(size * 0.1), width: s, height: r(size * 0.55), borderRadius: s / 2, backgroundColor: color }} />
+      <View style={{ position: "absolute", left: r((size - head) / 2), top: r(size * 0.12), width: head, height: head, borderLeftWidth: s, borderTopWidth: s, borderColor: color, transform: [{ rotate: "45deg" }] }} />
+    </Root>
+  );
+}

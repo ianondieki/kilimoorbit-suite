@@ -342,7 +342,7 @@ function LoginScreen({ edit, leaving }: { edit: boolean; leaving: React.MutableR
     let res: Awaited<ReturnType<typeof signIn>> | null = null;
     let err: unknown = null;
     if (!localOnly) {
-      try { res = await signIn(req); } catch (e) { err = e; }
+      try { res = await signIn({ ...req, lang }); } catch (e) { err = e; }
     }
     const wait = 350 - (Date.now() - started);
     if (wait > 0) await sleep(wait);

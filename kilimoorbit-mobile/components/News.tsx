@@ -14,11 +14,12 @@ import { useLang } from "../lib/session";
 import { announce, webLang } from "../lib/ui";
 import { ageText } from "../lib/prices";
 import { minutesSince, openLink, useNews } from "../lib/news";
+import { shareText } from "../lib/report";
 import type { NewsItem } from "../lib/api";
 import { Btn, Card, Eyebrow, T, Tag } from "./Kit";
 import { DemoTag } from "./ShambaPanel";
 import { Skeleton } from "./Motion";
-import { ArrowGlyph, SignalOffGlyph } from "./Glyphs";
+import { ArrowGlyph, SignalOffGlyph, ShareGlyph } from "./Glyphs";
 import Pager from "./Pager";
 
 /** Stories turn every 8 s (the shows every 9, so the two sliders never move in step). */
@@ -62,6 +63,8 @@ function Story({ item }: { item: NewsItem }) {
   const { lang, t: tt } = useLang();
   // A photo that fails to load (an expired link, a feed on a slow day) simply leaves.
   const [photoOk, setPhotoOk] = useState(true);
+  // "Share": the phone's share sheet (WhatsApp, SMS…); on the web the link is copied instead.
+  const [shared, setShared] = useState<null | "copied" | "failed">(null);
   const mins = minutesSince(item.published);
   const when = mins == null ? "" : mins >= 2880 ? tt("news.daysAgo", { n: Math.round(mins / 1440) }) : ageText(lang, mins);
   const title = lang === "sw" && item.title_sw ? item.title_sw : item.title;
@@ -90,15 +93,31 @@ function Story({ item }: { item: NewsItem }) {
       </View>
       <Text {...(item.title_sw && lang === "sw" ? {} : webLang("en"))} style={{ color: t.ink, ...T.headline }} numberOfLines={3}>{title}</Text>
       {item.summary ? <Text {...webLang("en")} style={{ color: t.ink, ...T.meta }} numberOfLines={3}>{item.summary}</Text> : null}
-      <Btn
-        kind="ghost"
-        small
-        label={tt(item.link ? "news.read" : "news.openTip")}
-        onPress={open}
-        icon={(c) => <ArrowGlyph size={14} color={c} />}
-        style={{ flexDirection: "row-reverse", alignSelf: "flex-start", marginTop: 2 }}
-        testID={`news-open-${item.id}`}
-      />
+      <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 14, marginTop: 2 }}>
+        <Btn
+          kind="ghost"
+          small
+          label={tt(item.link ? "news.read" : "news.openTip")}
+          onPress={open}
+          icon={(c) => <ArrowGlyph size={14} color={c} />}
+          style={{ flexDirection: "row-reverse", alignSelf: "flex-start" }}
+          testID={`news-open-${item.id}`}
+        />
+        {item.link ? (
+          <Btn
+            kind="ghost"
+            small
+            label={shared === "copied" ? tt("news.copied") : shared === "failed" ? tt("rec.shareFail") : tt("news.share")}
+            onPress={async () => {
+              const r = await shareText(`${title}\n${item.link}`);
+              if (r !== "shared") { setShared(r); announce(tt(r === "copied" ? "news.copied" : "rec.shareFail")); setTimeout(() => setShared(null), 2500); }
+            }}
+            icon={(c) => <ShareGlyph size={14} color={c} />}
+            style={{ alignSelf: "flex-start" }}
+            testID={`news-share-${item.id}`}
+          />
+        ) : null}
+      </View>
     </View>
   );
 }

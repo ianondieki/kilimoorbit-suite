@@ -3,6 +3,8 @@
  * the board has reached. In-app only (said plainly in the sheet).
  */
 import React, { useEffect, useState } from "react";
+import { useSession } from "../lib/session";
+import { mailNewAlertHits, useBriefPref } from "../lib/brief";
 import { View, Pressable } from "react-native";
 import Text from "./Text";
 import { router } from "expo-router";
@@ -79,7 +81,18 @@ export function AlertsCard() {
   const { lang, t: tt } = useLang();
   const alerts = useAlerts();
   const { meta } = useSentinel();
+  const { profile } = useSession();
+  const [briefOn] = useBriefPref();
   const hits = alertHits(alerts, meta?.commodity_feed);
+  // A hit also goes to the farmer's email, once per alert per day (lib/brief.ts remembers which).
+  const hitKey = hits.map((h) => `${h.alert.id}:${h.price}`).join("|");
+  useEffect(() => {
+    if (!hits.length || !profile?.email || !briefOn) return;
+    mailNewAlertHits({
+      name: profile.name, email: profile.email, lang,
+      hits: hits.map((h) => ({ key: h.alert.crop, crop: cropName(lang, h.alert.crop), market: h.market, price: h.price, target: h.alert.target })),
+    }).catch(() => {});
+  }, [hitKey, profile?.email, briefOn]);
   if (!hits.length) return null;
   return (
     <Card tone="accent">
