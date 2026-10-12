@@ -6,7 +6,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { View, ScrollView, RefreshControl, useWindowDimensions } from "react-native";
 import Text from "../../components/Text";
-import Icon from "../../components/Icon";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect } from "expo-router";
 import Header from "../../components/Header";
@@ -20,6 +19,7 @@ import { PestWatchCard } from "../../components/Scout";
 import { NewsCard } from "../../components/News";
 import { ShowsCard } from "../../components/Events";
 import { TriviaCard } from "../../components/Trivia";
+import { BeliefCard } from "../../components/Belief";
 import { ConnectionSheet } from "../../components/Connection";
 import { checkKind, dueChecks } from "../../lib/postharvest";
 import { AlertsCard } from "../../components/PriceAlerts";
@@ -31,10 +31,10 @@ import { ListenPill } from "../../components/auth/Controls";
 import TaskRows from "../../components/TaskRows";
 import { useMenu } from "../../components/MenuContext";
 import { AddCropSheet, FarmProfileSheet, RecordSheet } from "../../components/FarmSheets";
-import { Btn, Card, Eyebrow, T, Tag } from "../../components/Kit";
+import { Btn, Card, Eyebrow, T, Tag, domainColor } from "../../components/Kit";
 import { Enter, CountUp, Skeleton } from "../../components/Motion";
 import { DemoTag } from "../../components/ShambaPanel";
-import { ArrowGlyph, BarsGlyph, ChatGlyph, CheckCoin, LensGlyph, PlusGlyph, SignalOffGlyph, LeafGlyph } from "../../components/Glyphs";
+import { ArrowGlyph, CheckCoin, PlusGlyph, SignalOffGlyph } from "../../components/Glyphs";
 import { useTheme } from "../../lib/theme-context";
 import { useLang, useSession } from "../../lib/session";
 import { webLang } from "../../lib/ui";
@@ -130,8 +130,8 @@ export default function Today() {
               <Text accessibilityRole="header" style={{ color: t.ink, ...T.display }}>
                 {first ? `${hello}, ${first}` : hello}
               </Text>
-              <Text style={{ color: t.dim, ...T.body, marginTop: 2 }}>
-                {longDay(lang, todayKey())} · {tt(`season.${season.key}.name` as Key)}
+              <Text style={{ color: t.dim, ...T.meta, fontFamily: "monospace", fontWeight: "700", letterSpacing: 0.3, marginTop: 4 }}>
+                {longDay(lang, todayKey())} · <Text style={{ color: domainColor(t, "season"), fontFamily: "monospace", fontWeight: "700" }}>{tt(`season.${season.key}.name` as Key)}</Text>
               </Text>
               {/* Hidden by ListenPill itself when the phone has no voice for the language. */}
               <View style={{ flexDirection: "row", marginTop: 10 }}>
@@ -141,6 +141,8 @@ export default function Today() {
           </Enter>
 
           <ProblemBanner onFix={() => setSheet("connection")} />
+          {/* Imani ya leo: one proverb a day, the same for everyone. */}
+          <Enter index={1}><Guard name="belief"><BeliefCard /></Guard></Enter>
           <Guard name="alerts"><AlertsCard /></Guard>
           {/* Only when neighbours are finding fall armyworm above the threshold, and only for maize growers. */}
           {farm.plantings.some((p) => p.crop === "maize") && <Guard name="pest-watch"><PestWatchCard county={county} compact /></Guard>}
@@ -175,16 +177,16 @@ export default function Today() {
 
       <FAB
         actions={[
-          { label: tt("fab.record"), glyph: (c) => <BarsGlyph size={20} color={c} />, onPress: () => setSheet("record"), testID: "fab-record" },
-          { label: tt("fab.addCrop"), glyph: (c) => <Icon name="sprout" size={22} color={c} />, onPress: () => setSheet("crop"), testID: "fab-add-crop" },
+          { label: tt("fab.record"), pic: "record", onPress: () => setSheet("record"), testID: "fab-record" },
+          { label: tt("fab.addCrop"), pic: "farm", onPress: () => setSheet("crop"), testID: "fab-add-crop" },
           // Dairy farmers record milk daily, poultry farmers eggs; everyone else gets "add an animal".
           herdHasMilkers(herd.animals)
-            ? { label: tt("fab.milk"), glyph: (c) => <PlusGlyph size={18} color={c} />, onPress: () => setSheet("milk"), testID: "fab-milk" }
+            ? { label: tt("fab.milk"), pic: "milk", onPress: () => setSheet("milk"), testID: "fab-milk" }
             : herdHasLayers(herd.animals)
-              ? { label: tt("fab.eggs"), glyph: (c) => <PlusGlyph size={18} color={c} />, onPress: () => setSheet("eggs"), testID: "fab-eggs" }
-              : { label: tt("fab.addAnimal"), glyph: (c) => <PlusGlyph size={18} color={c} />, onPress: () => setSheet("animal"), testID: "fab-add-animal" },
-          { label: tt("fab.diagnose"), glyph: (c) => <LensGlyph size={20} color={c} />, onPress: () => router.navigate("/daktari") },
-          { label: tt("fab.ask"), glyph: (c) => <ChatGlyph size={20} color={c} />, onPress: () => router.navigate("/chat") },
+              ? { label: tt("fab.eggs"), pic: "egg", onPress: () => setSheet("eggs"), testID: "fab-eggs" }
+              : { label: tt("fab.addAnimal"), pic: "herd", onPress: () => setSheet("animal"), testID: "fab-add-animal" },
+          { label: tt("fab.diagnose"), pic: "doctor", onPress: () => router.navigate("/daktari") },
+          { label: tt("fab.ask"), pic: "chat", onPress: () => router.navigate("/chat") },
         ]}
       />
 
@@ -240,7 +242,7 @@ function TasksCard({ onAddCrop, onAddAnimal, days }: { onAddCrop: () => void; on
 
   return (
     <Card>
-      <Eyebrow domain="farm" icon={(c) => <Icon name="sprout" size={17} color={c} />} text={tt("tasks.eyebrow")} />
+      <Eyebrow domain="farm" text={tt("tasks.eyebrow")} />
       {!ready || !herdReady ? (
         <Skeleton height={48} color={t.raised} radius={12} />
       ) : !hasCrops && !hasAnimals && !hasStore ? (
@@ -289,7 +291,7 @@ function MarketCard() {
   if (status !== "ready" && !arb)
     return (
       <Card>
-        <Eyebrow domain="market" icon={(c) => <BarsGlyph size={15} color={c} />} text={tt("nav.markets").toUpperCase()} />
+        <Eyebrow domain="market" text={tt("nav.markets").toUpperCase()} />
         <Skeleton height={14} width={180} color={t.raised} />
         <Skeleton height={36} width={220} color={t.raised} style={{ marginTop: 12 }} />
         <Skeleton height={26} width={160} color={t.raised} radius={999} style={{ marginTop: 12 }} />
@@ -303,7 +305,7 @@ function MarketCard() {
 
   return (
     <Card>
-      <Eyebrow domain="market" icon={(c) => <BarsGlyph size={15} color={c} />} text={tt("market.eyebrow", { crop: cropName(lang, c.crop_type).toUpperCase() })} right={demo ? <DemoTag /> : null} />
+      <Eyebrow domain="market" text={tt("market.eyebrow", { crop: cropName(lang, c.crop_type).toUpperCase() })} right={demo ? <DemoTag /> : null} />
       <Text style={{ color: t.ink, ...T.title }} {...webLang("en")}>{c.optimal_market_destination}</Text>
       {c.live_market_wholesale_price_per_kg != null && (
         <Text style={{ color: t.dim, ...T.meta, fontFamily: "monospace" }}>KES {c.live_market_wholesale_price_per_kg}/kg</Text>
@@ -344,7 +346,7 @@ function ClimateCard() {
   const tone = lvl === "Low" ? "ok" : lvl === "Medium" ? "warn" : "bad";
   return (
     <Card tone={lvl === "High" || lvl === "Critical" ? "alert" : "plain"}>
-      <Eyebrow domain="season" icon={(c) => <LeafGlyph size={15} color={c} />} text={tt("climate.eyebrow")} right={<Tag label={tt(`climate.level.${lvl}` as Key)} tone={tone} />} />
+      <Eyebrow domain="season" text={tt("climate.eyebrow")} right={<Tag label={tt(`climate.level.${lvl}` as Key)} tone={tone} />} />
       <Text style={{ color: t.ink, ...T.title }}>
         {risks.length ? tt("climate.watch", { list: risks.join(", ") }) : tt("climate.calm")}
       </Text>

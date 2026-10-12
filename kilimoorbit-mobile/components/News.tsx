@@ -1,10 +1,12 @@
 /**
  * Farm news on Today: the county's headlines first, then national, one story
- * per page. A story opens in the browser; a SAMPLE tip (server with no
- * internet) opens the app screen it is about. Data: lib/news.ts.
+ * per page with its photo when the feed carries one; the slider turns by
+ * itself every few seconds until the farmer touches it. A story opens in the
+ * browser; a SAMPLE tip (server with no internet) opens the app screen it is
+ * about. Data: lib/news.ts.
  */
-import React from "react";
-import { View } from "react-native";
+import React, { useState } from "react";
+import { Image, View } from "react-native";
 import Text from "./Text";
 import { router } from "expo-router";
 import { useTheme } from "../lib/theme-context";
@@ -16,8 +18,11 @@ import type { NewsItem } from "../lib/api";
 import { Btn, Card, Eyebrow, T, Tag } from "./Kit";
 import { DemoTag } from "./ShambaPanel";
 import { Skeleton } from "./Motion";
-import { ArrowGlyph, SignalOffGlyph, NewsGlyph } from "./Glyphs";
+import { ArrowGlyph, SignalOffGlyph } from "./Glyphs";
 import Pager from "./Pager";
+
+/** Stories turn every 8 s (the shows every 9, so the two sliders never move in step). */
+export const NEWS_AUTOPLAY_MS = 8000;
 
 export function NewsCard({ county }: { county: string | null }) {
   const t = useTheme();
@@ -27,7 +32,7 @@ export function NewsCard({ county }: { county: string | null }) {
   const name = (d?.county ?? county ?? "").toUpperCase();
   return (
     <Card>
-      <Eyebrow domain="news" icon={(c) => <NewsGlyph size={15} color={c} />} text={name ? tt("news.eyebrow", { county: name }) : tt("news.eyebrowAll")} right={d?.source === "SAMPLE" ? <DemoTag /> : null} />
+      <Eyebrow domain="news" text={name ? tt("news.eyebrow", { county: name }) : tt("news.eyebrowAll")} right={d?.source === "SAMPLE" ? <DemoTag /> : null} />
       {news.status === "loading" && !d ? (
         <View style={{ gap: 10 }}>
           <Skeleton height={14} width={"40%"} color={t.raised} />
@@ -44,7 +49,7 @@ export function NewsCard({ county }: { county: string | null }) {
           {news.status === "cached" && news.cachedAgeMin != null && (
             <Text style={{ color: t.dim, ...T.meta, marginTop: -6, marginBottom: 8 }}>{tt("news.cached", { age: ageText(lang, news.cachedAgeMin) })}</Text>
           )}
-          <Pager items={d.items} keyOf={(i) => i.id} label={tt("news.eyebrowAll")} testID="news" render={(item) => <Story item={item} />} />
+          <Pager items={d.items} keyOf={(i) => i.id} label={tt("news.eyebrowAll")} testID="news" autoplay={NEWS_AUTOPLAY_MS} render={(item) => <Story item={item} />} />
           {d.source === "SAMPLE" && <Text style={{ color: t.dim, fontSize: 12.5, lineHeight: 17, marginTop: 8 }}>{tt("news.sampleNote")}</Text>}
         </View>
       )}
@@ -55,6 +60,8 @@ export function NewsCard({ county }: { county: string | null }) {
 function Story({ item }: { item: NewsItem }) {
   const t = useTheme();
   const { lang, t: tt } = useLang();
+  // A photo that fails to load (an expired link, a feed on a slow day) simply leaves.
+  const [photoOk, setPhotoOk] = useState(true);
   const mins = minutesSince(item.published);
   const when = mins == null ? "" : mins >= 2880 ? tt("news.daysAgo", { n: Math.round(mins / 1440) }) : ageText(lang, mins);
   const title = lang === "sw" && item.title_sw ? item.title_sw : item.title;
@@ -67,8 +74,18 @@ function Story({ item }: { item: NewsItem }) {
   };
   return (
     <View style={{ gap: 6, paddingRight: 2 }}>
+      {item.image && photoOk ? (
+        <Image
+          source={{ uri: item.image }}
+          resizeMode="cover"
+          onError={() => setPhotoOk(false)}
+          accessible={false}
+          style={{ width: "100%", height: 150, borderRadius: 14, marginBottom: 4, backgroundColor: t.raised }}
+          testID={`news-photo-${item.id}`}
+        />
+      ) : null}
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <Text style={{ color: t.dim, ...T.meta, fontWeight: "700" }} {...webLang("en")}>{[item.source, when].filter(Boolean).join(" · ")}</Text>
+        <Text style={{ color: t.dim, ...T.meta, fontWeight: "700", fontFamily: "monospace" }} {...webLang("en")}>{[item.source, when].filter(Boolean).join(" · ")}</Text>
         {item.scope === "county" && item.county ? <Tag tone="water" label={item.county} /> : null}
       </View>
       <Text {...(item.title_sw && lang === "sw" ? {} : webLang("en"))} style={{ color: t.ink, ...T.headline }} numberOfLines={3}>{title}</Text>

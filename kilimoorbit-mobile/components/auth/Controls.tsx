@@ -8,7 +8,7 @@ import { View, Pressable, type StyleProp, type ViewStyle } from "react-native";
 import Text from "../Text";
 import Animated, {
   FadeIn, ReduceMotion, cancelAnimation, useAnimatedStyle, useReducedMotion, useSharedValue,
-  withRepeat, withSpring, withTiming, Easing,
+  withRepeat, withSequence, withSpring, withTiming, Easing,
 } from "react-native-reanimated";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Speech from "expo-speech";
@@ -18,7 +18,9 @@ import { focusRing, isWeb, spaceActivates, webCursor, type PressState } from "..
 import type { Lang } from "../../lib/i18n";
 import { PressScale } from "../Motion";
 import { OrbitSpinner } from "../SeasonOrbit";
-import { ArrowGlyph, CheckGlyph, ChevronGlyph, CrossGlyph, SignalOffGlyph, SpeakerGlyph, SunGlyph } from "../Glyphs";
+import { ArrowGlyph, CheckGlyph, ChevronGlyph, CrossGlyph, SignalOffGlyph, SunGlyph } from "../Glyphs";
+import Pic from "../Pic";
+import { tint } from "../Kit";
 
 /* ── Wordmark (logotype; exempt from the text-contrast rule) ── */
 export function Wordmark({ size = "bar" }: { size?: "bar" | "panel" }) {
@@ -170,13 +172,24 @@ export function ListenPill({ script }: { script: string }) {
   useEffect(() => () => { Speech.stop(); }, []);
   useEffect(() => { Speech.stop(); setSpeaking(false); }, [lang]);
 
-  const arc = useSharedValue(1);
+  // At rest the pill breathes (a halo rising off it, like the heartbeat in the
+  // header), an invitation to press it; while reading, the picture pulses with
+  // the voice. The pill itself keeps its box, so a tap always lands.
+  const halo = useSharedValue(0);
+  const beat = useSharedValue(1);
   useEffect(() => {
-    if (speaking && !reduce) arc.value = withRepeat(withTiming(0.3, { duration: 600, easing: Easing.inOut(Easing.quad) }), -1, true);
-    else { cancelAnimation(arc); arc.value = 1; }
-    return () => cancelAnimation(arc);
+    if (reduce) return;
+    if (speaking) {
+      cancelAnimation(halo); halo.value = withTiming(0, { duration: 200 });
+      beat.value = withRepeat(withTiming(1.18, { duration: 380, easing: Easing.inOut(Easing.quad) }), -1, true);
+    } else {
+      cancelAnimation(beat); beat.value = withTiming(1, { duration: 200 });
+      halo.value = withRepeat(withSequence(withTiming(0, { duration: 0 }), withTiming(1, { duration: 2400, easing: Easing.out(Easing.quad) }), withTiming(1, { duration: 600 })), -1, false);
+    }
+    return () => { cancelAnimation(halo); cancelAnimation(beat); };
   }, [speaking, reduce]);
-  const arcStyle = useAnimatedStyle(() => ({ opacity: arc.value }));
+  const haloStyle = useAnimatedStyle(() => ({ opacity: 0.55 * (1 - halo.value), transform: [{ scaleX: 1 + halo.value * 0.22 }, { scaleY: 1 + halo.value * 0.7 }] }));
+  const beatStyle = useAnimatedStyle(() => ({ transform: [{ scale: beat.value }] }));
 
   if (!voice) return null;
   const press = () => {
@@ -187,25 +200,32 @@ export function ListenPill({ script }: { script: string }) {
     Speech.speak(script, { language: voice.language, voice: voice.identifier, onDone: end, onStopped: end, onError: end });
   };
   return (
-    <Pressable
-      onPress={press}
-      accessibilityRole="button"
-      accessibilityLabel={speaking ? tt("listen.stopA11y") : tt("listen.label")}
-      accessibilityState={{ busy: speaking }}
-      style={({ pressed, hovered, focused }: PressState) => [
-        {
-          height: 48, paddingHorizontal: 14, borderRadius: 24, borderWidth: 2, borderColor: t.dim,
-          flexDirection: "row", alignItems: "center", gap: 8,
-          backgroundColor: hovered ? t.raised : "transparent", opacity: pressed ? 0.8 : 1,
-        },
-        webCursor, focusRing(focused, t.accent),
-      ]}
-    >
-      <SpeakerGlyph size={20} color={t.accent} arcStyle={arcStyle} />
-      <Text maxFontSizeMultiplier={1.4} style={{ color: t.ink, fontSize: 15, fontWeight: "700" }}>
-        {speaking ? tt("listen.busy") : tt("listen.label")}
-      </Text>
-    </Pressable>
+    <View style={{ alignSelf: "flex-start" }}>
+      <Animated.View style={[{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: 24, backgroundColor: t.accent, pointerEvents: "none" }, haloStyle]} />
+      <View>
+        <Pressable
+          onPress={press}
+          accessibilityRole="button"
+          accessibilityLabel={speaking ? tt("listen.stopA11y") : tt("listen.label")}
+          accessibilityHint={speaking ? undefined : tt("listen.hint")}
+          accessibilityState={{ busy: speaking }}
+          testID="listen"
+          style={({ pressed, hovered, focused }: PressState) => [
+            {
+              height: 48, paddingLeft: 10, paddingRight: 16, borderRadius: 24, borderWidth: 2, borderColor: speaking ? t.accent : tint(t.accent, 0.7),
+              flexDirection: "row", alignItems: "center", gap: 8,
+              backgroundColor: speaking ? t.accent : hovered ? tint(t.accent, 0.24) : tint(t.accent, 0.14), opacity: pressed ? 0.8 : 1,
+            },
+            webCursor, focusRing(focused, t.accent),
+          ]}
+        >
+          <Animated.View style={beatStyle}><Pic name="listen" size={26} /></Animated.View>
+          <Text maxFontSizeMultiplier={1.4} style={{ color: speaking ? t.field : t.ink, fontSize: 15, fontWeight: "800" }}>
+            {speaking ? tt("listen.busy") : tt("listen.label")}
+          </Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 

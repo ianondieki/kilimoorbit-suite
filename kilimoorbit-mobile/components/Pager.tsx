@@ -2,12 +2,18 @@
  * A swipeable, one-page-at-a-time slider for the Today cards (news, shows,
  * trivia): snaps page by page on a phone, and on the web adds ‹ › buttons
  * and arrow keys since a mouse can't swipe. Dots show where you are and are
- * tappable. Nothing moves on its own: a farmer reads at their own pace.
+ * tappable.
+ *
+ * With `autoplay`, the slider turns its own pages every few seconds so the
+ * card reads as live (the active dot fills up as the next turn approaches).
+ * It never fights the farmer: a touch, a drag, a tap on a dot, a hover or a
+ * keyboard focus pauses it for a while, the app going to the background
+ * stops it, and the system's reduce-motion setting turns it off altogether.
  */
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { View, Pressable, ScrollView, type NativeSyntheticEvent, type NativeScrollEvent } from "react-native";
+import { AppState, View, Pressable, ScrollView, type NativeSyntheticEvent, type NativeScrollEvent } from "react-native";
 import Text from "./Text";
-import { useReducedMotion } from "react-native-reanimated";
+import Animated, { Easing, cancelAnimation, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
 import { useTheme } from "../lib/theme-context";
 import { useLang } from "../lib/session";
 import { focusRing, isWeb, webCursor, type PressState } from "../lib/ui";
@@ -17,10 +23,13 @@ import { ChevronGlyph } from "./Glyphs";
 // Web: scroll-snap keeps a mouse-wheel or drag landing on a page too.
 const snapPage: any = isWeb ? { scrollSnapAlign: "start" } : null;
 
+/** How long a farmer's touch keeps the autoplay quiet. */
+export const AUTOPLAY_REST_MS = 15_000;
+
 export type PagerHandle = { go: (index: number) => void; index: () => number };
 
 export default function Pager<T>({
-  items, render, keyOf, label, testID, onIndexChange, arrows = isWeb, controller, dotTone,
+  items, render, keyOf, label, testID, onIndexChange, arrows = isWeb, controller, dotTone, autoplay = 0,
 }: {
   items: T[];
   render: (item: T, index: number) => React.ReactNode;
@@ -35,6 +44,8 @@ export default function Pager<T>({
   controller?: React.MutableRefObject<PagerHandle | null>;
   /** Colours a dot by what happened on that page (the trivia: right or wrong). */
   dotTone?: (index: number) => "ok" | "bad" | null | undefined;
+  /** Milliseconds between automatic page turns; 0 (the default) keeps the slider still. */
+  autoplay?: number;
 }) {
   const t = useTheme();
   const { t: tt } = useLang();
@@ -75,14 +86,55 @@ export default function Pager<T>({
     return () => { controller.current = null; };
   });
 
+  /* ── autoplay ── */
+  const [resting, setResting] = useState(false);   // the farmer touched it: wait
+  const [hovering, setHovering] = useState(false); // a mouse is over it
+  const [awake, setAwake] = useState(true);        // the app is in front
+  const restTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rest = useCallback(() => {
+    setResting(true);
+    if (restTimer.current) clearTimeout(restTimer.current);
+    restTimer.current = setTimeout(() => setResting(false), AUTOPLAY_REST_MS);
+  }, []);
+  useEffect(() => () => { if (restTimer.current) clearTimeout(restTimer.current); }, []);
+  useEffect(() => {
+    if (!autoplay) return;
+    const sub = AppState.addEventListener("change", (s) => setAwake(s === "active"));
+    const onVis = () => setAwake(typeof document === "undefined" || !document.hidden);
+    if (isWeb && typeof document !== "undefined") document.addEventListener("visibilitychange", onVis);
+    return () => {
+      sub.remove();
+      if (isWeb && typeof document !== "undefined") document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [autoplay]);
+  const playing = autoplay > 0 && n > 1 && w > 0 && !reduce && !resting && !hovering && awake;
+
+  // The next turn, and the active dot filling up towards it.
+  const fill = useSharedValue(0);
+  useEffect(() => {
+    if (!playing) { cancelAnimation(fill); fill.value = withTiming(0, { duration: 160 }); return; }
+    fill.value = 0;
+    fill.value = withTiming(1, { duration: autoplay, easing: Easing.linear });
+    const id = setTimeout(() => {
+      const next = (indexRef.current + 1) % n;
+      ref.current?.scrollTo({ x: next * w, animated: true });
+      land(next);
+    }, autoplay);
+    return () => { clearTimeout(id); cancelAnimation(fill); };
+  }, [playing, index, autoplay, n, w]);
+  const fillStyle = useAnimatedStyle(() => ({ width: `${Math.round(fill.value * 100)}%` }));
+
   if (!n) return null;
   const keys = isWeb
     ? {
         tabIndex: 0,
         onKeyDown: (e: any) => {
-          if (e.key === "ArrowRight") { e.preventDefault?.(); go(indexRef.current + 1); }
-          if (e.key === "ArrowLeft") { e.preventDefault?.(); go(indexRef.current - 1); }
+          if (e.key === "ArrowRight") { e.preventDefault?.(); rest(); go(indexRef.current + 1); }
+          if (e.key === "ArrowLeft") { e.preventDefault?.(); rest(); go(indexRef.current - 1); }
         },
+        onFocus: rest,
+        onMouseEnter: () => setHovering(true),
+        onMouseLeave: () => setHovering(false),
       }
     : {};
 
@@ -92,8 +144,11 @@ export default function Pager<T>({
       accessibilityLabel={label}
       {...(isWeb ? ({ role: "group" } as any) : null)}
       {...(keys as any)}
+      onTouchStart={autoplay ? rest : undefined}
+      {...(autoplay && isWeb ? { onPointerDown: rest } : null)}
       style={{ width: "100%" }}
       testID={testID}
+      {...(autoplay ? ({ dataSet: { autoplay: playing ? "on" : "off" } } as any) : null)}
     >
       <ScrollView
         ref={ref}
@@ -105,6 +160,7 @@ export default function Pager<T>({
         snapToAlignment="start"
         disableIntervalMomentum
         onScroll={onScroll}
+        onScrollBeginDrag={autoplay ? rest : undefined}
         onMomentumScrollEnd={(e) => w && land(Math.round(e.nativeEvent.contentOffset.x / w))}
         scrollEventThrottle={32}
         style={{ width: "100%" }}
@@ -121,29 +177,33 @@ export default function Pager<T>({
 
       {n > 1 && (
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 10 }}>
-          {arrows && <Arrow dir="left" disabled={index === 0} onPress={() => go(index - 1)} label={tt("pager.prev")} />}
+          {arrows && <Arrow dir="left" disabled={index === 0} onPress={() => { rest(); go(index - 1); }} label={tt("pager.prev")} />}
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 6 }}>
             {items.map((it, i) => {
               const tone = dotTone?.(i);
-              const fill = tone === "ok" ? t.ok : tone === "bad" ? t.alert : i === index ? t.accent : t.line;
+              const active = i === index;
+              const fillColor = tone === "ok" ? t.ok : tone === "bad" ? t.alert : active ? t.accent : t.line;
               return (
               <Pressable
                 key={keyOf(it, i)}
-                onPress={() => go(i)}
+                onPress={() => { rest(); go(i); }}
                 accessibilityRole="button"
                 accessibilityLabel={tt("pager.page", { n: i + 1, of: n })}
-                accessibilityState={{ selected: i === index }}
-                {...(isWeb ? ({ "aria-selected": i === index } as any) : null)}
+                accessibilityState={{ selected: active }}
+                {...(isWeb ? ({ "aria-selected": active } as any) : null)}
                 hitSlop={8}
                 testID={testID ? `${testID}-dot-${i}` : undefined}
                 style={({ focused }: PressState) => [{ padding: 2, borderRadius: 999 }, webCursor, focusRing(focused, t.accent)]}
               >
-                <View style={{ width: i === index ? 18 : 7, height: 7, borderRadius: 4, backgroundColor: fill }} />
+                <View style={{ width: active ? 22 : 7, height: 7, borderRadius: 4, backgroundColor: active && !tone ? t.line : fillColor, overflow: "hidden" }}>
+                  {/* The active dot fills up as the next automatic turn approaches. */}
+                  {active && !tone ? <Animated.View style={[{ height: 7, borderRadius: 4, backgroundColor: t.accent, minWidth: autoplay ? 7 : 22 }, autoplay ? fillStyle : { width: "100%" }]} /> : null}
+                </View>
               </Pressable>
               );
             })}
           </View>
-          {arrows && <Arrow dir="right" disabled={index === n - 1} onPress={() => go(index + 1)} label={tt("pager.next")} />}
+          {arrows && <Arrow dir="right" disabled={index === n - 1} onPress={() => { rest(); go(index + 1); }} label={tt("pager.next")} />}
         </View>
       )}
     </View>
