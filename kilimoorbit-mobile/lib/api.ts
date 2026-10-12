@@ -1,5 +1,5 @@
 import { getApiBase, hydrateApiBase } from "./config";
-import { cleanBooking, cleanForecast, cleanHistory, cleanListing, cleanMeta, cleanNews, cleanPestWatch, cleanShows } from "./validate";
+import { cleanBooking, cleanDigest, cleanForecast, cleanHistory, cleanListing, cleanMeta, cleanNews, cleanPestWatch, cleanShows } from "./validate";
 
 /* ── Apex v2.0 result types (the fields the app renders) ── */
 export type ArbitrageResult = {
@@ -205,12 +205,25 @@ export const getShows = async (county: string) =>
 export type BookingStep = { agent: string; action: string; latency_ms: number };
 export type Booking = {
   booking_id: string; token: string; status: "BOOKED"; event: Omit<Show, "days_until" | "distance_km">;
-  calendar_url: string; ics: string; email: "SENT" | "SIMULATED" | "NONE" | "FAILED"; remind_on: string; steps: BookingStep[];
+  calendar_url: string; ics: string; email: "SENT" | "SIMULATED" | "NONE" | "FAILED"; remind_on: string;
+  /** The days the reminder emails go out (N days before, and the morning of the show). */
+  reminders: string[];
+  steps: BookingStep[];
 };
 export const bookShow = (input: { event_id: string; name: string; email?: string | null; county?: string | null; remind_days: 1 | 3 | 7 }) =>
   post<unknown>("/api/events/book", input, 20000).then((r) => must(cleanBooking(r), "booking"));
 export const cancelBooking = (id: string, token: string) =>
   request<{ ok: boolean }>(`/api/events/book/${encodeURIComponent(id)}?token=${encodeURIComponent(token)}`, { method: "DELETE" }, 10000);
+
+/* ── Records digest (POST /api/records/digest): the farmer's own totals, emailed to them ── */
+export type DigestInput = {
+  name: string; email: string; lang: "sw" | "en"; period: string;
+  totals: { income: number; expense: number }; crops: { crop: string; profit: number }[];
+  entries: number; last: string | null; text: string;
+};
+export type DigestResult = { status: "SENT" | "SIMULATED"; email: string };
+export const sendDigest = (input: DigestInput) =>
+  post<unknown>("/api/records/digest", input, 20000).then((r) => must(cleanDigest(r), "digest"));
 
 /* ── Soko marketplace (/api/soko) ── */
 export type SokoStatus = "open" | "claimed" | "delivered" | "cancelled";

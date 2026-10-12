@@ -34,7 +34,10 @@ export function googleCalendarUrl(s: Pick<Show, "name" | "start" | "end" | "venu
 /* ── the farmer's bookings ── */
 export type MyBooking = {
   id: string; token: string; event_id: string; name: string; start: string; end: string; town: string;
-  calendar_url: string; remind_on: string; email: "SENT" | "SIMULATED" | "NONE" | "FAILED"; created: string;
+  calendar_url: string; remind_on: string;
+  /** The days the reminder emails go out. */
+  reminders: string[];
+  email: "SENT" | "SIMULATED" | "NONE" | "FAILED"; created: string;
 };
 export type BookingsStore = { v: 1; bookings: MyBooking[] };
 export const EMPTY_BOOKINGS: BookingsStore = { v: 1, bookings: [] };
@@ -49,9 +52,11 @@ export function sanitizeBookings(raw: any): BookingsStore {
     .map((b: any): MyBooking | null => {
       if (!b || !str(b.id, 64) || !str(b.token, 64) || !str(b.event_id, 60) || !str(b.name, 120) || !DAY.test(String(b.start)) || !DAY.test(String(b.end))) return null;
       if (!str(b.calendar_url, 1500)?.startsWith("https://")) return null;
+      const remind_on = DAY.test(String(b.remind_on)) ? b.remind_on : b.start;
+      const reminders = (Array.isArray(b.reminders) ? b.reminders : []).filter((d: unknown): d is string => typeof d === "string" && DAY.test(d)).slice(0, 4);
       return {
         id: b.id, token: b.token, event_id: b.event_id, name: b.name, start: b.start, end: b.end, town: str(b.town, 40) ?? "",
-        calendar_url: b.calendar_url, remind_on: DAY.test(String(b.remind_on)) ? b.remind_on : b.start,
+        calendar_url: b.calendar_url, remind_on, reminders: reminders.length ? reminders : [remind_on],
         email: ["SENT", "SIMULATED", "NONE", "FAILED"].includes(b.email) ? b.email : "NONE",
         created: str(b.created, 40) ?? "",
       };

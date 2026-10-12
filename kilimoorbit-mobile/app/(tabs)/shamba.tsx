@@ -32,9 +32,13 @@ import { announce, focusRing, webCursor, webLang, type PressState } from "../../
 import { bestQuote, cropName } from "../../lib/prices";
 import { useSentinel } from "../../lib/sentinel";
 import { buildReport, shareText } from "../../lib/report";
+import { seasonStartKey } from "../../lib/digest";
+import { buildDigest } from "../../lib/digest-store";
+import { sendDigest } from "../../lib/api";
+import Pic from "../../components/Pic";
 import { CROPS, cropsForSeason, inputsFor, pick, stageAt, type CropKey } from "../../lib/agronomy";
 import { daysBetween, dayMonth, todayKey } from "../../lib/dates";
-import { SEASON_START, seasonFor } from "../../lib/season";
+import { seasonFor } from "../../lib/season";
 import { acresText, byCrop, farmActions, fmtMoney, tasksOf, totals, useFarm, type Entry, type Planting } from "../../lib/farm";
 import type { Key } from "../../lib/i18n";
 import type { WxDay } from "../../lib/api";
@@ -377,12 +381,6 @@ function SuggestCard({ onPick, onBudget }: { onPick: (k: CropKey) => void; onBud
 }
 
 /* ───────────────────────── Records (daftari) ───────────────────────── */
-function seasonStartKey(): string {
-  const s = seasonFor();
-  const d = new Date(s.year, SEASON_START[s.key], 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-}
-
 function Records({ onAdd }: { onAdd: () => void }) {
   const t = useTheme();
   const { lang, t: tt } = useLang();
@@ -390,6 +388,8 @@ function Records({ onAdd }: { onAdd: () => void }) {
   const { profile } = useSession();
   const { meta } = useSentinel();
   const [shared, setShared] = useState<null | "copied" | "failed">(null);
+  // "Email me this report": the same report, sent to the farmer's own address through the server.
+  const [mailed, setMailed] = useState<null | "sending" | "SENT" | "SIMULATED" | "failed">(null);
   const { herd } = useHerd();
   const [period, setPeriod] = useState<"season" | "all">("season");
   const [limit, setLimit] = useState(12);
@@ -399,6 +399,15 @@ function Records({ onAdd }: { onAdd: () => void }) {
     .sort((a, b) => (a.date === b.date ? 0 : a.date < b.date ? 1 : -1));
   const sum = totals(entries);
   const crops = byCrop(entries);
+  // The livestock line and the period's milk and eggs, for the shared and the emailed report.
+  const herdSummary = () => {
+    const counts = new Map<string, number>();
+    for (const a of herd.animals) counts.set(a.species, (counts.get(a.species) ?? 0) + (a.species === "chicken" ? a.count ?? 1 : 1));
+    const herdLine = [...counts].map(([sp, n]) => `${tt(`sp.${sp}` as Key)} ${n.toLocaleString("en-KE")}`).join(", ");
+    const milkLitres = herd.milk.filter((m) => period === "all" || m.date >= from).reduce((x, m) => x + m.litres, 0);
+    const eggs = herd.eggs.filter((e) => period === "all" || e.date >= from).reduce((x, e) => x + e.eggs, 0);
+    return { herdLine, milkLitres, eggs };
+  };
 
   if (!farm.entries.length)
     return (
@@ -419,9 +428,9 @@ function Records({ onAdd }: { onAdd: () => void }) {
           <Chip role="radio" selected={period === "all"} onPress={() => setPeriod("all")} label={tt("rec.all")} />
         </ChipRow>
         <View style={{ flexDirection: "row", marginTop: 14, gap: 8 }}>
-          <Figure label={tt("rec.income")} value={fmtMoney(sum.income)} color={t.ink} />
-          <Figure label={tt("rec.expense")} value={fmtMoney(sum.expense)} color={t.ink} />
-          <Figure label={sum.profit < 0 ? tt("rec.loss") : tt("rec.profit")} value={fmtMoney(Math.abs(sum.profit))} color={sum.profit < 0 ? t.alert : t.ok} strong />
+          <Figure label={tt("rec.income")} value={sum.income} color={t.ink} />
+          <Figure label={tt("rec.expense")} value={sum.expense} color={t.ink} />
+          <Figure label={sum.profit < 0 ? tt("rec.loss") : tt("rec.profit")} value={Math.abs(sum.profit)} color={sum.profit < 0 ? t.alert : t.ok} strong />
         </View>
         {crops.length > 0 && (
           <View style={{ marginTop: 16 }}>
@@ -455,12 +464,7 @@ function Records({ onAdd }: { onAdd: () => void }) {
           kind="secondary"
           label={shared === "copied" ? tt("rec.copied") : shared === "failed" ? tt("rec.shareFail") : tt("rec.share")}
           onPress={async () => {
-            const counts = new Map<string, number>();
-            for (const a of herd.animals) counts.set(a.species, (counts.get(a.species) ?? 0) + (a.species === "chicken" ? a.count ?? 1 : 1));
-            const herdLine = [...counts].map(([sp, n]) => `${tt(`sp.${sp}` as Key)} ${n.toLocaleString("en-KE")}`).join(", ");
-            const milkLitres = herd.milk.filter((m) => period === "all" || m.date >= from).reduce((x, m) => x + m.litres, 0);
-            const eggs = herd.eggs.filter((e) => period === "all" || e.date >= from).reduce((x, e) => x + e.eggs, 0);
-            const text = buildReport({ lang, tt, name: profile?.name, farm, entries, periodLabel: tt(period === "all" ? "rec.all" : "rec.season"), herdLine, milkLitres, eggs });
+            const text = buildReport({ lang, tt, name: profile?.name, farm, entries, periodLabel: tt(period === "all" ? "rec.all" : "rec.season"), ...herdSummary() });
             const r = await shareText(text);
             if (r !== "shared") { setShared(r); announce(tt(r === "copied" ? "rec.copied" : "rec.shareFail")); setTimeout(() => setShared(null), 2500); }
           }}
@@ -469,6 +473,35 @@ function Records({ onAdd }: { onAdd: () => void }) {
           testID="records-share"
         />
       </View>
+      {profile?.email ? (
+        <Btn
+          kind="secondary"
+          label={
+            mailed === "sending" ? tt("rec.sending")
+            : mailed === "SENT" ? tt("rec.emailed", { email: profile.email })
+            : mailed === "SIMULATED" ? tt("rec.emailLogged")
+            : mailed === "failed" ? tt("rec.emailFail")
+            : tt("rec.email")
+          }
+          disabled={mailed === "sending"}
+          onPress={async () => {
+            const input = buildDigest({ lang, tt, profile, farm, period, ...herdSummary() });
+            if (!input) return;
+            setMailed("sending");
+            try {
+              const r = await sendDigest(input);
+              setMailed(r.status);
+              announce(r.status === "SENT" ? tt("rec.emailed", { email: profile.email ?? "" }) : tt("rec.emailLogged"));
+            } catch {
+              setMailed("failed");
+              announce(tt("rec.emailFail"));
+            }
+            setTimeout(() => setMailed(null), 4000);
+          }}
+          icon={() => <Pic name="mail" size={22} />}
+          testID="records-email"
+        />
+      ) : null}
 
       <Card>
         <Eyebrow domain="money" icon={(c) => <CoinGlyph size={15} color={c} />} text={tt("rec.recent")} />
@@ -485,12 +518,13 @@ function Records({ onAdd }: { onAdd: () => void }) {
   );
 }
 
-function Figure({ label, value, color, strong }: { label: string; value: string; color: string; strong?: boolean }) {
+/** A money tile: the label with its currency on top, the figure below in the figures face, so KES 1,250,000 still fits a phone. */
+function Figure({ label, value, color, strong }: { label: string; value: number; color: string; strong?: boolean }) {
   const t = useTheme();
   return (
-    <View style={{ flex: 1, padding: 10, borderRadius: 12, backgroundColor: t.raised, gap: 2 }}>
-      <Text style={{ color: t.dim, fontSize: 12.5, lineHeight: 16, fontWeight: "700" }}>{label}</Text>
-      <Text adjustsFontSizeToFit numberOfLines={1} style={{ color, fontSize: strong ? 17 : 15, lineHeight: 22, fontWeight: "800" }}>{value}</Text>
+    <View style={{ flex: 1, padding: 10, borderRadius: 12, backgroundColor: t.raised, gap: 2 }} accessible accessibilityLabel={`${label}: ${fmtMoney(value)}`}>
+      <Text numberOfLines={1} style={{ color: t.dim, fontSize: 11.5, lineHeight: 15, fontWeight: "700", fontFamily: "monospace", letterSpacing: 0.4, textTransform: "uppercase" }}>{label} · KES</Text>
+      <Text adjustsFontSizeToFit numberOfLines={1} style={{ color, ...T.figure, fontSize: strong ? 20 : 18, lineHeight: 24, letterSpacing: -0.3 }}>{Math.round(value).toLocaleString("en-KE")}</Text>
     </View>
   );
 }

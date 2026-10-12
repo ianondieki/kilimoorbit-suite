@@ -22,7 +22,12 @@ import { alertHits, suggestTarget } from "../lib/pricewatch";
 import { taskHint } from "../lib/advice";
 import { CROPS, CROP_KEYS, acresFromSteps, bagsFor, inputsFor } from "../lib/agronomy";
 import { diagnose } from "../lib/pests";
-import { cleanArb, cleanBooking, cleanFeed, cleanForecast, cleanListing, cleanNews, cleanPestWatch, cleanShows } from "../lib/validate";
+import { cleanArb, cleanBooking, cleanDigest, cleanFeed, cleanForecast, cleanListing, cleanNews, cleanPestWatch, cleanShows } from "../lib/validate";
+import { PROVERBS, proverbFor } from "../lib/proverbs";
+import { entryLine, periodEntries } from "../lib/digest";
+import { tr, type Key, type Vars } from "../lib/i18n";
+import type { Entry } from "../lib/farm-types";
+import { skyPhoto, wxPicName } from "../lib/sky";
 import type { WxDay } from "../lib/api";
 
 const TODAY = "2026-10-05";
@@ -528,5 +533,54 @@ test.describe("news and shows answers are cleaned", () => {
     expect(b.steps).toHaveLength(1);
     expect(b.email).toBe("SIMULATED");
     expect(cleanBooking({ booking_id: "b", token: "t", calendar_url: "data:text/html", ics: "x", remind_on: "2026-10-04", event: {} })).toBeNull();
+  });
+});
+
+test.describe("today's belief", () => {
+  test("one proverb a day, the same for everyone, and the whole list gets a turn", () => {
+    expect(proverbFor("2026-10-12")).toBe(proverbFor("2026-10-12"));
+    const seen = new Set<string>();
+    for (let i = 0; i < PROVERBS.length; i++) seen.add(proverbFor(addDays("2026-10-01", i)).id);
+    expect(seen.size).toBe(PROVERBS.length);
+    for (const p of PROVERBS) { expect(p.sw.length).toBeGreaterThan(8); expect(p.meaning.en).toBeTruthy(); expect(p.farm.sw).toBeTruthy(); }
+  });
+});
+
+test.describe("the records digest", () => {
+  const tt = (k: Key, v?: Vars) => tr("en", k, v);
+  const entries: Entry[] = [
+    { id: "a", kind: "income", category: "sale", amount: 12000, crop: "maize", kg: 300, date: "2026-10-10" },
+    { id: "b", kind: "expense", category: "fertilizer", amount: 3500, crop: "maize", date: "2026-10-11" },
+    { id: "c", kind: "expense", category: "feed", amount: 800, date: "2026-01-05" },
+  ];
+  test("the season's entries, newest first; the whole history on request", () => {
+    expect(periodEntries(entries, "season", "2026-10-01").map((e) => e.id)).toEqual(["b", "a"]);
+    expect(periodEntries(entries, "all").map((e) => e.id)).toEqual(["b", "a", "c"]);
+  });
+  test("the entry just saved reads as one line, in the farmer's language", () => {
+    expect(entryLine("en", tt, entries[0])).toBe("Income · Crop sale · Maize · KES 12,000 (300 kg) · 10 Oct");
+    expect(entryLine("en", tt, entries[1])).toBe("Costs · Fertiliser · Maize · KES 3,500 · 11 Oct");
+    expect(entryLine("sw", (k, v) => tr("sw", k, v), entries[2])).toBe("Gharama · Chakula cha mifugo · KES 800 · 5 Jan");
+  });
+  test("the server's answer is checked", () => {
+    expect(cleanDigest({ status: "SENT", email: "w@example.com", subject: "x" })).toEqual({ status: "SENT", email: "w@example.com" });
+    expect(cleanDigest({ status: "LOST", email: "w@example.com" })).toBeNull();
+    expect(cleanDigest("ok")).toBeNull();
+  });
+});
+
+test.describe("the sky's pictures", () => {
+  test("a photograph and a pictogram for every sky at every hour", () => {
+    const skies = ["sunny", "partly", "cloudy", "showers", "rain", "heavy", "storm"] as const;
+    for (const sky of skies) for (const part of ["dawn", "day", "dusk", "night"] as const) {
+      expect(skyPhoto(sky, part)).toBeTruthy();
+      expect(wxPicName(sky, part)).toBeTruthy();
+    }
+    expect(skyPhoto("sunny", "night")).toBe("clear-night");
+    expect(skyPhoto("rain", "night")).toBe("heavy-night");
+    expect(skyPhoto("storm", "dawn")).toBe("storm");
+    expect(skyPhoto("sunny", "dusk")).toBe("sunny-dusk");
+    expect(wxPicName("sunny", "night")).toBe("clear-night");
+    expect(wxPicName("heavy")).toBe("extreme-day-rain");
   });
 });

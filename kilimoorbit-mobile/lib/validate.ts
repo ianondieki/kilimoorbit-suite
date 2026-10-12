@@ -6,7 +6,7 @@
  * Each cleaner returns null when there's nothing usable.
  */
 import type {
-  ArbitrageResult, Booking, CommodityFeed, Forecast, Meta, News, NewsItem, PestWatch, PriceHistory, Show, Shows, Sky, SokoListing, SokoStatus, Verdict, WxDay,
+  ArbitrageResult, Booking, CommodityFeed, Forecast, Meta, News, NewsItem, PestWatch, PriceHistory, Show, Shows, Sky, SokoListing, SokoStatus, Verdict, WxDay, DigestResult,
 } from "./api";
 
 const obj = (v: unknown): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -243,10 +243,17 @@ export function cleanBooking(b: unknown): Booking | null {
   const steps = arr(b.steps)
     .filter((x) => obj(x) && str(x.agent) && str(x.action))
     .map((x) => ({ agent: x.agent.slice(0, 20), action: x.action.slice(0, 200), latency_ms: num(x.latency_ms) ? x.latency_ms : 0 }));
+  // The reminder days; an older server sends only remind_on.
+  const reminders = arr(b.reminders).filter((d): d is string => str(d) && DAY.test(d)).slice(0, 4);
   return {
     booking_id: b.booking_id.slice(0, 64), token: b.token.slice(0, 64), status: "BOOKED", event,
     calendar_url: b.calendar_url.slice(0, 1500), ics: b.ics.slice(0, 4000),
     email: EMAIL_STATES.includes(b.email as any) ? (b.email as Booking["email"]) : "NONE",
-    remind_on: b.remind_on, steps,
+    remind_on: b.remind_on, reminders: reminders.length ? reminders : [b.remind_on], steps,
   };
+}
+
+export function cleanDigest(r: unknown): DigestResult | null {
+  if (!obj(r) || !str(r.email) || (r.status !== "SENT" && r.status !== "SIMULATED")) return null;
+  return { status: r.status, email: r.email.slice(0, 254) };
 }

@@ -19,21 +19,8 @@ export const FARM_KEY = "ko-farm";
 
 export type Planting = { id: string; crop: CropKey; acres: number; plantedOn: string };
 
-export type ExpenseCat = "seed" | "fertilizer" | "chemicals" | "labour" | "transport" | "feed" | "vet" | "other";
-export type IncomeCat = "sale" | "milk" | "eggs" | "animals" | "other";
-export const EXPENSE_CATS: ExpenseCat[] = ["seed", "fertilizer", "chemicals", "labour", "transport", "feed", "vet", "other"];
-export const INCOME_CATS: IncomeCat[] = ["sale", "milk", "eggs", "animals", "other"];
-export type Entry = {
-  id: string;
-  kind: "income" | "expense";
-  category: ExpenseCat | IncomeCat;
-  amount: number;
-  crop?: CropKey;
-  /** Sales only: kilos sold, so the ledger knows the price actually received. */
-  kg?: number;
-  note?: string;
-  date: string;
-};
+export { EXPENSE_CATS, INCOME_CATS, type ExpenseCat, type IncomeCat, type Entry } from "./farm-types";
+import { EXPENSE_CATS, INCOME_CATS, type ExpenseCat, type IncomeCat, type Entry } from "./farm-types";
 
 export type Farm = {
   v: 1;

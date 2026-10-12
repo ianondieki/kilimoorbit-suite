@@ -7,8 +7,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, Pressable, TextInput } from "react-native";
 import Text from "./Text";
 import { useTheme } from "../lib/theme-context";
-import { useLang } from "../lib/session";
+import { useLang, useSession } from "../lib/session";
 import { announce, focusRing, webCursor, type PressState } from "../lib/ui";
+import { buildDigest, scheduleDigest, useDigestPref } from "../lib/digest-store";
 import { cropName } from "../lib/prices";
 import { searchCounties } from "../lib/counties";
 import { CROPS, CROP_KEYS, acresFromSteps, inputsFor, pick, type CropKey } from "../lib/agronomy";
@@ -292,6 +293,9 @@ export function RecordSheet({
   const t = useTheme();
   const { lang, t: tt } = useLang();
   const { farm } = useFarm();
+  const { profile } = useSession();
+  // "Email me an update": the season's totals go to the farmer's own address after each record (lib/digest.ts).
+  const [digestOn, setDigestOn] = useDigestPref();
   const [kind, setKind] = useState<Entry["kind"]>("expense");
   const [cat, setCat] = useState<Entry["category"]>("seed");
   const [amount, setAmount] = useState("");
@@ -316,7 +320,10 @@ export function RecordSheet({
 
   const save = () => {
     if (!valid) { setTried(true); amountRef.current?.focus(); return; }
-    farmActions.addEntry({ kind, category: cat, amount: Math.round(value), crop, kg: kg > 0 ? kg : undefined, note: note.trim() || undefined, date });
+    const entry: Entry = { id: "new", kind, category: cat, amount: Math.round(value), crop, kg: kg > 0 ? kg : undefined, note: note.trim() || undefined, date };
+    farmActions.addEntry({ kind: entry.kind, category: entry.category, amount: entry.amount, crop, kg: entry.kg, note: entry.note, date });
+    if (profile?.email && digestOn)
+      scheduleDigest(buildDigest({ lang, tt, profile, farm: { ...farm, entries: [entry, ...farm.entries] }, period: "season", last: entry }));
     announce(tt("rec.saved"));
     onClose();
   };
@@ -400,6 +407,18 @@ export function RecordSheet({
         statusMinHeight={0}
         inputProps={{ placeholder: tt("rec.notePh"), maxLength: 80 }}
       />
+      {profile?.email ? (
+        <ChipRow role="group" label={tt("rec.updates")}>
+          <Chip
+            role="checkbox"
+            selected={digestOn}
+            onPress={() => setDigestOn(!digestOn)}
+            label={tt("rec.updates")}
+            sub={tt("rec.updatesSub", { email: profile.email })}
+            testID="record-digest"
+          />
+        </ChipRow>
+      ) : null}
     </Sheet>
   );
 }

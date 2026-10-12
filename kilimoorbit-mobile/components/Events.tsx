@@ -1,9 +1,11 @@
 /**
- * Farm shows near the farmer (ASK calendar + Nairobi expos), one per page,
- * and the booking sheet: confirm, and the server's booking agent puts the
- * show in a calendar entry, emails a confirmation and schedules a reminder.
- * The farmer then taps "Open in Google Calendar" to save it on the phone.
- * Data and the farmer's bookings: lib/events.ts.
+ * Farm shows near the farmer (ASK calendar + Nairobi expos), one per page on
+ * a slider that turns by itself until touched, and the booking sheet: the
+ * farmer gives an email address, and the server's booking agent emails a
+ * confirmation at once, a reminder N days before the show and one on the
+ * morning it starts. A Google Calendar link and the .ics file are offered
+ * too, for the phone's own calendar. Data and the farmer's bookings:
+ * lib/events.ts.
  */
 import React, { useEffect, useRef, useState } from "react";
 import { View, Platform } from "react-native";
@@ -13,7 +15,7 @@ import { useTheme } from "../lib/theme-context";
 import { useLang, useSession } from "../lib/session";
 import { announce, isWeb, webLang } from "../lib/ui";
 import { ageText } from "../lib/prices";
-import { todayKey } from "../lib/dates";
+import { dayMonth, todayKey } from "../lib/dates";
 import { bookShow, cancelBooking, type Booking, type Show } from "../lib/api";
 import { bookingActions, googleCalendarUrl, onNow, useBookings, useShows, whenText, type MyBooking } from "../lib/events";
 import { openLink } from "../lib/news";
@@ -22,10 +24,13 @@ import type { Key } from "../lib/i18n";
 import { Btn, Card, Chip, ChipRow, Eyebrow, Group, Sheet, T, Tag } from "./Kit";
 import { Skeleton } from "./Motion";
 import Field from "./Field";
-import { ArrowGlyph, CheckCoin, SignalOffGlyph, CalendarGlyph } from "./Glyphs";
+import { ArrowGlyph, CheckCoin, CheckGlyph, SignalOffGlyph, CalendarGlyph } from "./Glyphs";
+import Pic from "./Pic";
 import Pager from "./Pager";
 
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/;
+/** Shows turn every 9 s (the news every 8, so the two sliders never move in step). */
+export const SHOWS_AUTOPLAY_MS = 9000;
 
 export function ShowsCard({ county }: { county: string }) {
   const t = useTheme();
@@ -38,7 +43,7 @@ export function ShowsCard({ county }: { county: string }) {
   const list = d?.events.slice(0, 6) ?? [];
   return (
     <Card>
-      <Eyebrow domain="shows" icon={(c) => <CalendarGlyph size={15} color={c} />} text={tt("shows.eyebrow", { county: (d?.county ?? county).toUpperCase() })} />
+      <Eyebrow domain="shows" text={tt("shows.eyebrow", { county: (d?.county ?? county).toUpperCase() })} />
       {shows.status === "loading" && !d ? (
         <View style={{ gap: 10 }}>
           <Skeleton height={44} color={t.raised} radius={10} />
@@ -59,6 +64,7 @@ export function ShowsCard({ county }: { county: string }) {
             keyOf={(s) => s.id}
             label={tt("shows.eyebrowA11y")}
             testID="shows"
+            autoplay={SHOWS_AUTOPLAY_MS}
             render={(s) => <ShowPage s={s} today={today} booked={bookings.some((b) => b.event_id === s.id && b.end >= today)} onOpen={() => setOpen(s)} />}
           />
           <Text style={{ color: t.dim, fontSize: 12.5, lineHeight: 17, marginTop: 8 }}>{tt("shows.note")}</Text>
@@ -77,7 +83,7 @@ function ShowPage({ s, today, booked, onOpen }: { s: Show; today: string; booked
   return (
     <View style={{ gap: 6, paddingRight: 2 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <Text style={{ color: live ? t.ok : t.dim, ...T.meta, fontWeight: "700" }}>{when}</Text>
+        <Text style={{ color: live ? t.ok : t.dim, ...T.meta, fontWeight: "700", fontFamily: "monospace" }}>{when}</Text>
         {s.estimated && <Tag tone="warn" label={tt("shows.estimated")} />}
         {booked && <Tag tone="ok" label={tt("shows.going")} />}
       </View>
@@ -138,18 +144,20 @@ export function ShowSheet({ show, onClose }: { show: Show | null; onClose: () =>
   }, [phase, result, shown]);
 
   if (!show) return null;
-  const emailOk = !email.trim() || EMAIL_RE.test(email.trim());
+  // The reminders are emails, so an address is required.
+  const emailOk = EMAIL_RE.test(email.trim());
   const name = profile?.name?.trim() || tt("shows.farmer");
+  const dates = (ds: string[]) => ds.map((d) => dayMonth(lang, d)).join(", ");
 
   const book = async () => {
     if (!emailOk) { setTried(true); return; }
     setPhase("working");
     try {
-      const r = await bookShow({ event_id: show.id, name, email: email.trim() || null, county: farm.county, remind_days: remind });
+      const r = await bookShow({ event_id: show.id, name, email: email.trim(), county: farm.county, remind_days: remind });
       if (!alive.current) return;
       bookingActions.add({
         id: r.booking_id, token: r.token, event_id: show.id, name: show.name, start: r.event.start, end: r.event.end, town: show.town,
-        calendar_url: r.calendar_url, remind_on: r.remind_on, email: r.email, created: new Date().toISOString(),
+        calendar_url: r.calendar_url, remind_on: r.remind_on, reminders: r.reminders, email: r.email, created: new Date().toISOString(),
       });
       setResult(r);
       announce(tt("shows.booked"));
@@ -174,10 +182,12 @@ export function ShowSheet({ show, onClose }: { show: Show | null; onClose: () =>
       testID="sheet-show"
       footer={
         phase === "form" && !mine
-          ? <Btn label={tt("shows.confirm")} onPress={book} style={{ flex: 1 }} icon={(c) => <CalendarGlyph size={16} color={c} />} testID="show-book" />
+          ? <Btn label={tt("shows.confirm")} onPress={book} style={{ flex: 1 }} icon={() => <Pic name="mail" size={20} />} testID="show-book" />
           : phase === "working"
             ? <Btn label={tt("shows.working")} onPress={() => {}} disabled style={{ flex: 1 }} />
-            : <Btn label={tt("shows.openCalendar")} onPress={() => openLink(calendarUrl)} style={{ flex: 1 }} icon={(c) => <CalendarGlyph size={16} color={c} />} testID="show-calendar" />
+            : phase === "failed"
+              ? <Btn label={tt("shows.openCalendar")} onPress={() => openLink(calendarUrl)} style={{ flex: 1 }} icon={(c) => <CalendarGlyph size={16} color={c} />} testID="show-calendar" />
+              : <Btn label={tt("shows.done")} onPress={onClose} style={{ flex: 1 }} icon={(c) => <CheckGlyph size={16} color={c} />} testID="show-done-close" />
       }
     >
       <View style={{ gap: 4 }}>
@@ -193,13 +203,14 @@ export function ShowSheet({ show, onClose }: { show: Show | null; onClose: () =>
         <View style={{ gap: 10 }} testID="show-mine">
           <Tag tone="ok" label={tt("shows.going")} />
           <Text style={{ color: t.ink, ...T.meta }}>
-            {tt(mine.email === "SENT" ? "shows.mine.sent" : mine.email === "SIMULATED" ? "shows.mine.simulated" : "shows.mine.calendar", { date: whenText(lang, mine.remind_on, mine.remind_on) })}
+            {tt(mine.email === "SENT" ? "shows.mine.sent" : mine.email === "SIMULATED" ? "shows.mine.simulated" : "shows.mine.calendar", { list: dates(mine.reminders), date: whenText(lang, mine.remind_on, mine.remind_on) })}
           </Text>
+          <Btn kind="ghost" small label={tt("shows.openCalendar")} onPress={() => openLink(calendarUrl)} icon={(c) => <CalendarGlyph size={14} color={c} />} style={{ alignSelf: "flex-start" }} testID="show-calendar" />
           <Btn kind="ghost" small label={tt("shows.cancel")} onPress={cancel} style={{ alignSelf: "flex-start" }} testID="show-cancel" />
         </View>
       ) : phase === "form" ? (
         <>
-          <Text style={{ color: t.ink, ...T.body }}>{tt("shows.how")}</Text>
+          <Text style={{ color: t.ink, ...T.body }}>{tt("shows.how", { n: remind })}</Text>
           <Field
             label={tt("shows.email")}
             glyph={null}
@@ -234,7 +245,7 @@ export function ShowSheet({ show, onClose }: { show: Show | null; onClose: () =>
             <View key={i} style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }} testID={`agent-step-${i}`}>
               <CheckCoin size={22} bg={t.ok} fg={t.field} style={{ marginTop: 1 }} />
               <View style={{ flex: 1 }}>
-                <Text style={{ color: t.dim, fontSize: 12, lineHeight: 16, fontFamily: "monospace", fontWeight: "700" }}>{s.agent.toUpperCase()}</Text>
+                <Text style={{ color: t.dim, ...T.eyebrow, fontSize: 11 }}>{s.agent}</Text>
                 <Text {...webLang("en")} style={{ color: t.ink, ...T.meta }}>{s.action}</Text>
               </View>
             </View>
@@ -242,8 +253,9 @@ export function ShowSheet({ show, onClose }: { show: Show | null; onClose: () =>
           {phase === "working" && <Text style={{ color: t.dim, ...T.meta }}>{tt("shows.working")}</Text>}
           {phase === "done" && result && (
             <View style={{ gap: 8, marginTop: 4 }} testID="show-done">
-              <Tag block tone={result.email === "FAILED" ? "warn" : "ok"} label={tt(`shows.email.${result.email}` as Key, { date: whenText(lang, result.remind_on, result.remind_on) })} />
+              <Tag block tone={result.email === "FAILED" ? "warn" : "ok"} label={tt(`shows.email.${result.email}` as Key, { list: dates(result.reminders), email: email.trim(), date: whenText(lang, result.remind_on, result.remind_on) })} />
               <Text style={{ color: t.ink, ...T.meta }}>{tt("shows.nextStep")}</Text>
+              <Btn kind="ghost" small label={tt("shows.openCalendar")} onPress={() => openLink(calendarUrl)} icon={(c) => <CalendarGlyph size={14} color={c} />} style={{ alignSelf: "flex-start" }} testID="show-calendar" />
               {isWeb && <Btn kind="ghost" small label={tt("shows.ics")} onPress={() => downloadIcs(result.ics)} style={{ alignSelf: "flex-start" }} testID="show-ics" />}
             </View>
           )}

@@ -9,7 +9,8 @@
  */
 import { test as base, expect, type Page } from "@playwright/test";
 import { byId, pickDaily } from "../lib/trivia";
-import { todayKey } from "../lib/dates";
+import { addDays, dayMonth, todayKey } from "../lib/dates";
+import { whenText } from "../lib/shows";
 
 const test = base.extend<{ noCrash: void }>({
   noCrash: [async ({ page }, use) => {
@@ -34,13 +35,15 @@ async function start(
   page: Page, path: string, lang: "en" | "sw" = "en",
   farm?: { county?: string; plantings?: ReturnType<typeof planted>[]; store?: StoredLot[]; soilPh?: number },
   herd?: HerdSeed,
+  /** Signed in with an email too (the records digest and the show reminders use it). */
+  email?: string,
 ) {
-  await page.addInitScript(([l, f, h]) => {
+  await page.addInitScript(([l, f, h, em]) => {
     if (sessionStorage.getItem("ko-e2e-seeded")) return;
     sessionStorage.setItem("ko-e2e-seeded", "1");
     localStorage.clear();
     localStorage.setItem("ko-profile", JSON.stringify({
-      v: 2, name: "Wanjiru Kamau", method: "phone", phone: "+254712345678",
+      v: 2, name: "Wanjiru Kamau", method: "phone", phone: "+254712345678", ...(em ? { email: em } : null),
       lang: l, signedInAt: new Date().toISOString(), serverAck: true,
     }));
     localStorage.setItem("ko-lang", l);
@@ -63,7 +66,7 @@ async function start(
       };
       localStorage.setItem("ko-herd", JSON.stringify(h, (_k, v) => (typeof v === "string" && /^@\d+$/.test(v) ? key(Number(v.slice(1))) : v)));
     }
-  }, [lang, farm ?? null, herd ?? null] as const);
+  }, [lang, farm ?? null, herd ?? null, email ?? null] as const);
   await page.goto(path);
 }
 
@@ -107,8 +110,8 @@ test("Shamba records: an empty amount is refused; income minus costs is the prof
   await page.getByTestId("record-amount").fill("10000");
   await page.getByTestId("record-save").click();
 
-  await expect(page.getByText("KES 10,000", { exact: true })).toBeVisible();
-  await expect(page.getByText("KES 6,000", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Income: KES 10,000")).toBeVisible(); // the money tiles name themselves for a screen reader
+  await expect(page.getByLabel("Profit: KES 6,000")).toBeVisible();
 });
 
 test("Shamba calendar: a crop shows its stage, inputs for its size, and can be removed", async ({ page }) => {
@@ -577,21 +580,26 @@ const NEWS = {
     { id: "n2", title: "Maize prices ease as the harvest starts", source: "Kilimo News", link: "https://example.com/n2", published: new Date(Date.now() - 2 * 86400_000).toISOString(), summary: "", image: null, scope: "national", county: null },
   ],
 };
+// The Kitale show starts in two days whatever today's date, so "You're going" and the dates stay true.
+const SHOW_START = addDays(todayKey(), 2);
+const SHOW_END = addDays(todayKey(), 5);
+const REMINDERS = [addDays(todayKey(), 1), SHOW_START]; // 1 day before, and the morning of the show
+const REMINDERS_TEXT = REMINDERS.map((d) => dayMonth("en", d)).join(", ");
 const SHOWS = {
   county: "Nakuru", today: todayKey(), theme: "", source: "ASK 2026 calendar",
   events: [
-    { id: "ask-kitale-2026", name: "Kitale National Show", organiser: "Agricultural Society of Kenya", town: "Kitale", county: "Trans Nzoia", venue: "Kitale Showground", start: "2026-10-07", end: "2026-10-10", kind: "show", url: "https://ask.co.ke/calendar-of-events1/", estimated: false, days_until: 2, distance_km: 127 },
-    { id: "ask-nakuru-2026", name: "Nakuru National Agricultural Show", organiser: "Agricultural Society of Kenya", town: "Nakuru", county: "Nakuru", venue: "Nakuru Showground", start: "2027-07-01", end: "2027-07-05", kind: "show", url: null, estimated: true, days_until: 269, distance_km: 0 },
+    { id: "ask-kitale-2026", name: "Kitale National Show", organiser: "Agricultural Society of Kenya", town: "Kitale", county: "Trans Nzoia", venue: "Kitale Showground", start: SHOW_START, end: SHOW_END, kind: "show", url: "https://ask.co.ke/calendar-of-events1/", estimated: false, days_until: 2, distance_km: 127 },
+    { id: "ask-nakuru-2026", name: "Nakuru National Agricultural Show", organiser: "Agricultural Society of Kenya", town: "Nakuru", county: "Nakuru", venue: "Nakuru Showground", start: addDays(todayKey(), 269), end: addDays(todayKey(), 273), kind: "show", url: null, estimated: true, days_until: 269, distance_km: 0 },
   ],
 };
 const BOOKING = {
-  booking_id: "bk1", token: "tok", status: "BOOKED", event: SHOWS.events[0], email: "SIMULATED", remind_on: "2026-10-04",
+  booking_id: "bk1", token: "tok", status: "BOOKED", event: SHOWS.events[0], email: "SIMULATED", remind_on: REMINDERS[0], reminders: REMINDERS,
   calendar_url: "https://calendar.google.com/calendar/render?action=TEMPLATE&text=Kitale+National+Show", ics: "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n",
   steps: [
     { agent: "Scout", action: "Found Kitale National Show", latency_ms: 1 },
     { agent: "Planner", action: "Prepared the calendar entry (.ics and a Google Calendar link)", latency_ms: 2 },
     { agent: "Messenger", action: "Simulated (no SMTP configured) the confirmation email to w•••@example.com", latency_ms: 3 },
-    { agent: "Reminder", action: "Reminder email scheduled for 2026-10-04 (3 days before)", latency_ms: 4 },
+    { agent: "Reminder", action: `Reminder emails scheduled for ${REMINDERS[0]} (1 day before) and ${REMINDERS[1]} (the morning of the show)`, latency_ms: 4 },
   ],
 };
 const json = (body: unknown, status = 200) => ({ status, contentType: "application/json", body: JSON.stringify(body) });
@@ -645,30 +653,35 @@ test("Farm news: the county's story comes first and opens; a sample tip opens th
   await expect(page.getByTestId("scout-open")).toBeVisible();
 });
 
-test("Farm shows: the nearest shows slide; booking runs the agent, offers Google Calendar, and can be cancelled", async ({ page, context }) => {
+test("Farm shows: the nearest shows slide; booking needs an email, runs the agent, schedules two reminder emails, offers Google Calendar, and can be cancelled", async ({ page, context }) => {
   await context.route("http://localhost:4517/api/events?**", (r) => r.fulfill(json(SHOWS)));
-  await context.route("http://localhost:4517/api/events/book", (r) => r.fulfill(json(BOOKING, 201)));
+  let sent: any = null;
+  await context.route("http://localhost:4517/api/events/book", (r) => { sent = r.request().postDataJSON(); return r.fulfill(json(BOOKING, 201)); });
   await start(page, "/", "en", { county: "Nakuru" });
   const card = page.getByTestId("shows-card");
   await card.scrollIntoViewIfNeeded();
   await expect(card).toContainText("Kitale National Show");
-  await expect(card).toContainText("7–10 Oct · Kitale · 127 km away");
+  await expect(card).toContainText(`${whenText("en", SHOW_START, SHOW_END)} · Kitale · 127 km away`);
   await expect(card).toContainText("In 2 days");
   await page.getByTestId("shows-dot-1").click();
   await expect(card.getByText("Estimated", { exact: true })).toBeVisible();
 
   await page.getByTestId("show-open-ask-kitale-2026").click();
+  await page.getByTestId("show-book").click(); // no email yet: the reminders are emails, so it asks for one
+  await expect(page.getByText("Enter a valid email address")).toBeVisible();
   await page.getByTestId("show-email").fill("wanjiru@example.com");
-  await page.getByTestId("show-remind-7").click();
+  await page.getByTestId("show-remind-1").click();
   await page.getByTestId("show-book").click();
-  await expect(page.getByTestId("agent-step-3")).toContainText("Reminder email scheduled");
+  await expect(page.getByTestId("agent-step-3")).toContainText("Reminder emails scheduled");
+  expect(sent).toMatchObject({ event_id: "ask-kitale-2026", email: "wanjiru@example.com", remind_days: 1 });
   await expect(page.getByTestId("show-done")).toContainText("no email (SMTP) set up yet");
+  await expect(page.getByTestId("show-done")).toContainText(REMINDERS_TEXT);
   await expect(page.getByTestId("show-calendar")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(card.getByText("You're going ✓")).toBeVisible();
 
   await page.getByTestId("show-open-ask-kitale-2026").click();
-  await expect(page.getByTestId("show-mine")).toContainText("reminder is logged on the server");
+  await expect(page.getByTestId("show-mine")).toContainText(`reminders for ${REMINDERS_TEXT} are logged on the server`);
   await page.getByTestId("show-cancel").click();
   await expect(card.getByText("You're going ✓")).toHaveCount(0);
 });
@@ -677,14 +690,56 @@ test("Farm shows: when the server can't be reached, booking fails politely and t
   await context.route("http://localhost:4517/api/events?**", (r) => r.fulfill(json(SHOWS)));
   await context.route("http://localhost:4517/api/events/book", (r) => r.abort());
   await context.route("https://calendar.google.com/**", (r) => r.fulfill({ status: 200, contentType: "text/html", body: "<html>calendar</html>" }));
-  await start(page, "/", "en", { county: "Nakuru" });
+  await start(page, "/", "en", { county: "Nakuru" }, undefined, "wanjiru@example.com"); // the email is filled in from the profile
   await page.getByTestId("shows-card").scrollIntoViewIfNeeded();
   await page.getByTestId("show-open-ask-kitale-2026").click();
+  await expect(page.getByTestId("show-email")).toHaveValue("wanjiru@example.com");
   await page.getByTestId("show-book").click();
   await expect(page.getByTestId("show-failed")).toContainText("Couldn't reach the KilimoOrbit server");
   const popup = page.waitForEvent("popup");
   await page.getByTestId("show-calendar").click();
   expect((await popup).url()).toContain("calendar.google.com/calendar/render?action=TEMPLATE");
+});
+
+test("Records by email: saving a cost emails the season's totals to the farmer; the Records tab can email the report; the tick box turns updates off", async ({ page, context }) => {
+  const digests: any[] = [];
+  await context.route("http://localhost:4517/api/records/digest", (r) => { digests.push(r.request().postDataJSON()); return r.fulfill(json({ status: "SIMULATED", email: "wanjiru@example.com", subject: "x" })); });
+  await start(page, "/shamba?tab=records", "en", { county: "Nakuru", plantings: [planted("maize", 30)] }, undefined, "wanjiru@example.com");
+  await page.getByTestId("records-add").click();
+  await expect(page.getByTestId("record-digest")).toHaveAttribute("aria-checked", "true"); // on by default for a farmer with an email
+  await expect(page.getByTestId("record-digest")).toContainText("To wanjiru@example.com");
+  await page.getByTestId("record-amount").fill("3500");
+  await page.getByTestId("record-save").click();
+  await expect.poll(() => digests.length).toBe(1);
+  expect(digests[0]).toMatchObject({ email: "wanjiru@example.com", lang: "en", totals: { income: 0, expense: 3500 }, entries: 1 });
+  expect(digests[0].last).toContain("Costs · Seed · Maize · KES 3,500");
+  expect(digests[0].text).toContain("Costs: KES 3,500");
+
+  await page.getByTestId("records-email").click();
+  await expect(page.getByTestId("records-email")).toContainText("No email (SMTP) on the server");
+  await expect.poll(() => digests.length).toBe(2);
+  expect(digests[1]).toMatchObject({ totals: { income: 0, expense: 3500 } });
+
+  await page.getByTestId("records-add").click();
+  await page.getByTestId("record-digest").click(); // off: no update for this one
+  await expect(page.getByTestId("record-digest")).toHaveAttribute("aria-checked", "false");
+  await page.getByTestId("record-amount").fill("500");
+  await page.getByTestId("record-save").click();
+  await expect(page.getByLabel("Costs: KES 4,000")).toBeVisible();
+  await page.waitForTimeout(2500);
+  expect(digests.length).toBe(2);
+});
+
+test("Today: the day's belief is the same proverb for everyone; the listen pill, the belief and the sliders are there", async ({ page }) => {
+  await start(page, "/", "en", { county: "Nakuru" });
+  const belief = page.getByTestId("belief-card");
+  await expect(belief).toBeVisible();
+  const first = await page.getByTestId("belief-proverb").textContent();
+  await expect(belief).toContainText("On the farm today:");
+  await page.reload();
+  await expect(page.getByTestId("belief-proverb")).toHaveText(first!);
+  await expect(page.getByTestId("fab")).toBeVisible();
+  await expect(page.getByTestId("eyebrow-weather").first().getByTestId("icon-badge")).toBeVisible(); // the section picture on its badge
 });
 
 test("Connection: the offline banner opens the server screen; a typed address is tested, saved and shown in settings", async ({ page, context }) => {
@@ -716,19 +771,21 @@ test("Markets: each crop chip carries today's best price; there is no ticker", a
   await expect(page.getByText(/E-BODA/)).toHaveCount(0);
 });
 
-test("Type: the bundled serif and sans are loaded and used (greeting and question in Fraunces, the rest in Nunito Sans)", async ({ page }) => {
+test("Type: the three bundled faces are loaded and used (greeting, question and proverb in Fraunces; tags, eyebrows and figures in Space Grotesk; sentences in Nunito Sans)", async ({ page }) => {
   await start(page, "/", "en", { county: "Nakuru" });
   await expect(page.getByText("0/5 today")).toBeVisible();
   const loaded = await page.evaluate(async () => {
     await document.fonts.ready;
     return [...document.fonts].filter((f) => f.status === "loaded").map((f) => f.family);
   });
-  expect(loaded).toEqual(expect.arrayContaining(["Fraunces_600SemiBold", "NunitoSans_400Regular", "NunitoSans_700Bold"]));
+  expect(loaded).toEqual(expect.arrayContaining(["Fraunces_600SemiBold", "NunitoSans_400Regular", "NunitoSans_700Bold", "SpaceGrotesk_700Bold"]));
   const greeting = page.getByRole("heading").filter({ hasText: /^(Good (morning|afternoon|evening|night)|Hello|Habari|Jambo)/ }).first();
   await expect(greeting).toHaveCSS("font-family", /Fraunces_600SemiBold/);
   const first = byId(pickDaily(todayKey(), {})[0])!;
   await expect(page.getByTestId("trivia-card").getByText(first.q.en)).toHaveCSS("font-family", /Fraunces_600SemiBold/);
-  await expect(page.getByText("0/5 today")).toHaveCSS("font-family", /NunitoSans_700Bold/);
+  await expect(page.getByTestId("belief-proverb")).toHaveCSS("font-family", /Fraunces_600SemiBold/);
+  await expect(page.getByText("0/5 today")).toHaveCSS("font-family", /SpaceGrotesk_700Bold/); // a tag: the figures face
+  await expect(page.getByTestId("eyebrow-quiz").first().getByRole("heading")).toHaveCSS("font-family", /SpaceGrotesk_700Bold/); // an eyebrow
   await expect(page.getByTestId("trivia-option-1-0").getByText(first.options[0].en)).toHaveCSS("font-family", /NunitoSans_600SemiBold/);
 });
 
