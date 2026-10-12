@@ -19,6 +19,7 @@ import { focusRing, webCursor, type PressState } from "../lib/ui";
 import { PlusGlyph } from "./Glyphs";
 import { Sheet } from "./Kit";
 import Pic, { type PicName } from "./Pic";
+import { useScreenFocused } from "./Motion";
 
 export type FabAction = { label: string; glyph?: (color: string) => React.ReactNode; pic?: PicName; onPress: () => void; testID?: string };
 
@@ -27,20 +28,21 @@ export default function FAB({ actions }: { actions: FabAction[] }) {
   const { t: tt } = useLang();
   const [open, setOpen] = useState(false);
   const reduce = useReducedMotion();
+  const focused = useScreenFocused();
 
-  // Breathing: two halos rise off the button in turn.
+  // Breathing: two halos rise off the button in turn (each with its own animation).
   const halo1 = useSharedValue(0);
   const halo2 = useSharedValue(0);
-  const live = !reduce && !open;
+  const live = !reduce && !open && focused;
   useEffect(() => {
     if (!live) {
       cancelAnimation(halo1); cancelAnimation(halo2);
       halo1.value = 0; halo2.value = 0;
       return;
     }
-    const rise = withRepeat(withSequence(withTiming(0, { duration: 0 }), withTiming(1, { duration: 2600, easing: Easing.out(Easing.quad) })), -1, false);
-    halo1.value = rise;
-    halo2.value = withDelay(1300, rise);
+    const rise = () => withRepeat(withSequence(withTiming(0, { duration: 0 }), withTiming(1, { duration: 2600, easing: Easing.out(Easing.quad) })), -1, false);
+    halo1.value = rise();
+    halo2.value = withDelay(1300, rise());
     return () => { cancelAnimation(halo1); cancelAnimation(halo2); };
   }, [live]);
   const ring1 = useAnimatedStyle(() => ({ opacity: 0.5 * (1 - halo1.value), transform: [{ scale: 1 + halo1.value * 1.1 }] }));

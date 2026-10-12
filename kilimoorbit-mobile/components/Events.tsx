@@ -147,7 +147,7 @@ export function ShowSheet({ show, onClose }: { show: Show | null; onClose: () =>
   // The reminders are emails, so an address is required.
   const emailOk = EMAIL_RE.test(email.trim());
   const name = profile?.name?.trim() || tt("shows.farmer");
-  const dates = (ds: string[]) => ds.map((d) => dayMonth(lang, d)).join(", ");
+  const dates = (ds: string[]) => (ds.length ? ds.map((d) => dayMonth(lang, d)).join(", ") : tt("shows.started"));
 
   const book = async () => {
     if (!emailOk) { setTried(true); return; }
@@ -210,7 +210,7 @@ export function ShowSheet({ show, onClose }: { show: Show | null; onClose: () =>
         </View>
       ) : phase === "form" ? (
         <>
-          <Text style={{ color: t.ink, ...T.body }}>{tt("shows.how", { n: remind })}</Text>
+          <Text style={{ color: t.ink, ...T.body }}>{remind === 1 ? tt("shows.how1") : tt("shows.how", { n: remind })}</Text>
           <Field
             label={tt("shows.email")}
             glyph={null}

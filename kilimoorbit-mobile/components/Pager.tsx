@@ -7,11 +7,13 @@
  * With `autoplay`, the slider turns its own pages every few seconds so the
  * card reads as live (the active dot fills up as the next turn approaches).
  * It never fights the farmer: a touch, a drag, a tap on a dot, a hover or a
- * keyboard focus pauses it for a while, the app going to the background
- * stops it, and the system's reduce-motion setting turns it off altogether.
+ * keyboard focus pauses it for a while; the screen going behind another
+ * tab, a sheet opening (`paused`), the app going to the background, a
+ * screen reader being on, or the system's reduce-motion setting stops it.
+ * Only the farmer's own page turns tick (haptics); automatic ones are silent.
  */
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, View, Pressable, ScrollView, type NativeSyntheticEvent, type NativeScrollEvent } from "react-native";
+import { AccessibilityInfo, AppState, View, Pressable, ScrollView, type NativeSyntheticEvent, type NativeScrollEvent } from "react-native";
 import Text from "./Text";
 import Animated, { Easing, cancelAnimation, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
 import { useTheme } from "../lib/theme-context";
@@ -19,6 +21,7 @@ import { useLang } from "../lib/session";
 import { focusRing, isWeb, webCursor, type PressState } from "../lib/ui";
 import { haptic } from "../lib/haptics";
 import { ChevronGlyph } from "./Glyphs";
+import { useScreenFocused } from "./Motion";
 
 // Web: scroll-snap keeps a mouse-wheel or drag landing on a page too.
 const snapPage: any = isWeb ? { scrollSnapAlign: "start" } : null;
@@ -29,7 +32,7 @@ export const AUTOPLAY_REST_MS = 15_000;
 export type PagerHandle = { go: (index: number) => void; index: () => number };
 
 export default function Pager<T>({
-  items, render, keyOf, label, testID, onIndexChange, arrows = isWeb, controller, dotTone, autoplay = 0,
+  items, render, keyOf, label, testID, onIndexChange, arrows = isWeb, controller, dotTone, autoplay = 0, paused = false,
 }: {
   items: T[];
   render: (item: T, index: number) => React.ReactNode;
@@ -46,6 +49,8 @@ export default function Pager<T>({
   dotTone?: (index: number) => "ok" | "bad" | null | undefined;
   /** Milliseconds between automatic page turns; 0 (the default) keeps the slider still. */
   autoplay?: number;
+  /** Holds the automatic turns (a sheet is open over the card). */
+  paused?: boolean;
 }) {
   const t = useTheme();
   const { t: tt } = useLang();
@@ -57,12 +62,15 @@ export default function Pager<T>({
   const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
   const n = items.length;
 
-  const land = useCallback((i: number) => {
+  // A page turn the slider started itself: no haptic tick for it.
+  const autoTurn = useRef(false);
+  const land = useCallback((i: number, byFarmer = true) => {
     const next = Math.max(0, Math.min(n - 1, i));
     if (next === indexRef.current) return;
     indexRef.current = next;
     setIndex(next);
-    haptic.select();
+    if (byFarmer && !autoTurn.current) haptic.select();
+    autoTurn.current = false;
     onIndexChange?.(next);
   }, [n, onIndexChange]);
 
@@ -77,8 +85,9 @@ export default function Pager<T>({
     if (!w) return;
     const x = e.nativeEvent.contentOffset.x;
     if (settle.current) clearTimeout(settle.current);
-    settle.current = setTimeout(() => land(Math.round(x / w)), 90);
+    settle.current = setTimeout(() => land(Math.round(x / w), !autoTurn.current), 90);
   };
+  useEffect(() => () => { if (settle.current) clearTimeout(settle.current); }, []);
 
   useEffect(() => {
     if (!controller) return;
@@ -90,6 +99,8 @@ export default function Pager<T>({
   const [resting, setResting] = useState(false);   // the farmer touched it: wait
   const [hovering, setHovering] = useState(false); // a mouse is over it
   const [awake, setAwake] = useState(true);        // the app is in front
+  const [reader, setReader] = useState(false);     // a screen reader is on: the slider never moves by itself
+  const focused = useScreenFocused();              // this screen is the one showing
   const restTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rest = useCallback(() => {
     setResting(true);
@@ -99,15 +110,20 @@ export default function Pager<T>({
   useEffect(() => () => { if (restTimer.current) clearTimeout(restTimer.current); }, []);
   useEffect(() => {
     if (!autoplay) return;
+    let alive = true;
     const sub = AppState.addEventListener("change", (s) => setAwake(s === "active"));
     const onVis = () => setAwake(typeof document === "undefined" || !document.hidden);
     if (isWeb && typeof document !== "undefined") document.addEventListener("visibilitychange", onVis);
+    AccessibilityInfo.isScreenReaderEnabled().then((v) => { if (alive) setReader(!!v); }).catch(() => {});
+    const srSub = AccessibilityInfo.addEventListener("screenReaderChanged", (v) => setReader(!!v));
     return () => {
+      alive = false;
       sub.remove();
+      srSub.remove();
       if (isWeb && typeof document !== "undefined") document.removeEventListener("visibilitychange", onVis);
     };
   }, [autoplay]);
-  const playing = autoplay > 0 && n > 1 && w > 0 && !reduce && !resting && !hovering && awake;
+  const playing = autoplay > 0 && n > 1 && w > 0 && !reduce && !resting && !hovering && awake && focused && !paused && !reader;
 
   // The next turn, and the active dot filling up towards it.
   const fill = useSharedValue(0);
@@ -117,12 +133,14 @@ export default function Pager<T>({
     fill.value = withTiming(1, { duration: autoplay, easing: Easing.linear });
     const id = setTimeout(() => {
       const next = (indexRef.current + 1) % n;
+      autoTurn.current = true;
       ref.current?.scrollTo({ x: next * w, animated: true });
-      land(next);
+      land(next, false);
     }, autoplay);
     return () => { clearTimeout(id); cancelAnimation(fill); };
   }, [playing, index, autoplay, n, w]);
-  const fillStyle = useAnimatedStyle(() => ({ width: `${Math.round(fill.value * 100)}%` }));
+  // A transform, not a width: no layout pass per frame on a slow phone.
+  const fillStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: fill.value }] }));
 
   if (!n) return null;
   const keys = isWeb
@@ -197,7 +215,7 @@ export default function Pager<T>({
               >
                 <View style={{ width: active ? 22 : 7, height: 7, borderRadius: 4, backgroundColor: active && !tone ? t.line : fillColor, overflow: "hidden" }}>
                   {/* The active dot fills up as the next automatic turn approaches. */}
-                  {active && !tone ? <Animated.View style={[{ height: 7, borderRadius: 4, backgroundColor: t.accent, minWidth: autoplay ? 7 : 22 }, autoplay ? fillStyle : { width: "100%" }]} /> : null}
+                  {active && !tone ? <Animated.View style={[{ height: 7, width: 22, borderRadius: 4, backgroundColor: t.accent, transformOrigin: "left" }, autoplay ? fillStyle : null]} /> : null}
                 </View>
               </Pressable>
               );

@@ -16,7 +16,7 @@ import { useTheme, useThemeControls } from "../../lib/theme-context";
 import { useLang } from "../../lib/session";
 import { focusRing, isWeb, spaceActivates, webCursor, type PressState } from "../../lib/ui";
 import type { Lang } from "../../lib/i18n";
-import { PressScale } from "../Motion";
+import { PressScale, useScreenFocused } from "../Motion";
 import { OrbitSpinner } from "../SeasonOrbit";
 import { ArrowGlyph, CheckGlyph, ChevronGlyph, CrossGlyph, SignalOffGlyph, SunGlyph } from "../Glyphs";
 import Pic from "../Pic";
@@ -167,6 +167,8 @@ export function ListenPill({ script }: { script: string }) {
   const { lang, t: tt } = useLang();
   const reduce = useReducedMotion();
   const voice = useVoiceFor(lang);
+  const hasVoice = !!voice;
+  const focused = useScreenFocused();
   const [speaking, setSpeaking] = useState(false);
 
   useEffect(() => () => { Speech.stop(); }, []);
@@ -174,11 +176,12 @@ export function ListenPill({ script }: { script: string }) {
 
   // At rest the pill breathes (a halo rising off it, like the heartbeat in the
   // header), an invitation to press it; while reading, the picture pulses with
-  // the voice. The pill itself keeps its box, so a tap always lands.
+  // the voice. The pill itself keeps its box, so a tap always lands. Nothing
+  // runs while the pill is hidden (no voice) or its screen is behind another.
   const halo = useSharedValue(0);
   const beat = useSharedValue(1);
   useEffect(() => {
-    if (reduce) return;
+    if (reduce || !hasVoice || !focused) { cancelAnimation(halo); cancelAnimation(beat); halo.value = 0; beat.value = 1; return; }
     if (speaking) {
       cancelAnimation(halo); halo.value = withTiming(0, { duration: 200 });
       beat.value = withRepeat(withTiming(1.18, { duration: 380, easing: Easing.inOut(Easing.quad) }), -1, true);
@@ -187,7 +190,7 @@ export function ListenPill({ script }: { script: string }) {
       halo.value = withRepeat(withSequence(withTiming(0, { duration: 0 }), withTiming(1, { duration: 2400, easing: Easing.out(Easing.quad) }), withTiming(1, { duration: 600 })), -1, false);
     }
     return () => { cancelAnimation(halo); cancelAnimation(beat); };
-  }, [speaking, reduce]);
+  }, [speaking, reduce, hasVoice, focused]);
   const haloStyle = useAnimatedStyle(() => ({ opacity: 0.55 * (1 - halo.value), transform: [{ scaleX: 1 + halo.value * 0.22 }, { scaleY: 1 + halo.value * 0.7 }] }));
   const beatStyle = useAnimatedStyle(() => ({ transform: [{ scale: beat.value }] }));
 

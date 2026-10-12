@@ -1,14 +1,26 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Platform, Pressable, View, ViewStyle, StyleProp, TextStyle,
   type AccessibilityState, type AccessibilityRole,
 } from "react-native";
+import { useFocusEffect } from "expo-router";
 import Text from "./Text";
 import Animated, {
   FadeIn, FadeInDown, FadeInUp, useSharedValue, useAnimatedStyle,
   withSpring, withRepeat, withTiming, Easing, useReducedMotion, cancelAnimation, ReduceMotion,
 } from "react-native-reanimated";
 import { focusRing } from "../lib/ui";
+
+/**
+ * Whether the screen this component sits on is the one in front. The tabs
+ * keep every screen mounted, so a looping animation (the sky, a halo, an
+ * auto-turning slider) stops while another tab or screen is showing.
+ */
+export function useScreenFocused(): boolean {
+  const [focused, setFocused] = useState(true);
+  useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
+  return focused;
+}
 
 /* ── Staggered spring entrance (your F1-app signature) ── */
 export function Enter({

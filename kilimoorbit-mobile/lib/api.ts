@@ -138,7 +138,7 @@ export type SignInResult = {
  * waits on the SMTP handshake, which on rural data can pass 8s, so that path
  * gets 20s: fewer "may not arrive" answers for an email that was in fact sent.
  */
-export const signIn = (input: { name: string; phone?: string; email?: string }) =>
+export const signIn = (input: { name: string; phone?: string; email?: string; lang?: "sw" | "en" }) =>
   post<SignInResult>("/api/signin", input, input.email ? 20000 : 8000);
 
 export const fmtKES = (n: number | null | undefined) =>
@@ -224,6 +224,27 @@ export type DigestInput = {
 export type DigestResult = { status: "SENT" | "SIMULATED"; email: string };
 export const sendDigest = (input: DigestInput) =>
   post<unknown>("/api/records/digest", input, 20000).then((r) => must(cleanDigest(r), "digest"));
+
+/* ── The morning brief (POST /api/brief) and a price alert (POST /api/alerts/email), emailed to the farmer ── */
+export type BriefSection = { title: string; lines: string[] };
+export type BriefInput = { name: string; email: string; lang: "sw" | "en"; date: string; county: string | null; sections: BriefSection[] };
+export const sendBrief = (input: BriefInput) =>
+  post<unknown>("/api/brief", input, 20000).then((r) => must(cleanDigest(r), "brief"));
+export type AlertMailInput = { name: string; email: string; lang: "sw" | "en"; hits: { key: string; crop: string; market: string; price: number; target: number }[] };
+export const sendAlertMail = (input: AlertMailInput) =>
+  post<unknown>("/api/alerts/email", input, 20000).then((r) => must(cleanDigest(r), "price alert"));
+
+/** Asks the server to send the confirmation link again (or says the address is already confirmed). */
+export type ConfirmResult = { status: "SENT" | "SIMULATED" | "CONFIRMED"; email: string };
+export const resendConfirmation = (input: { name: string; email: string; lang: "sw" | "en" }) =>
+  post<unknown>("/api/mail/confirm/send", input, 15000).then((r) => {
+    const o = r as any;
+    if (!o || typeof o.email !== "string" || !["SENT", "SIMULATED", "CONFIRMED"].includes(o.status)) throw new Error("Sentinel server sent an unusable answer");
+    return { status: o.status, email: o.email } as ConfirmResult;
+  });
+/** Why a farmer email was refused: the address is not confirmed yet, today's cap is reached, or something else. */
+export const mailFailure = (e: unknown): "unconfirmed" | "cap" | "failed" =>
+  e instanceof ApiError && e.errorType === "EMAIL_UNCONFIRMED" ? "unconfirmed" : e instanceof ApiError && e.errorType === "RECIPIENT_CAP" ? "cap" : "failed";
 
 /* ── Soko marketplace (/api/soko) ── */
 export type SokoStatus = "open" | "claimed" | "delivered" | "cancelled";

@@ -3,7 +3,7 @@
  * store; the "will it pay?" budget), livestock, and the daftari (money in and
  * out, profit per crop). All on the phone.
  */
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View, ScrollView, Pressable } from "react-native";
 import Text from "../../components/Text";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -34,7 +34,7 @@ import { useSentinel } from "../../lib/sentinel";
 import { buildReport, shareText } from "../../lib/report";
 import { seasonStartKey } from "../../lib/digest";
 import { buildDigest } from "../../lib/digest-store";
-import { sendDigest } from "../../lib/api";
+import { mailFailure, resendConfirmation, sendDigest } from "../../lib/api";
 import Pic from "../../components/Pic";
 import { CROPS, cropsForSeason, inputsFor, pick, stageAt, type CropKey } from "../../lib/agronomy";
 import { daysBetween, dayMonth, todayKey } from "../../lib/dates";
@@ -389,7 +389,10 @@ function Records({ onAdd }: { onAdd: () => void }) {
   const { meta } = useSentinel();
   const [shared, setShared] = useState<null | "copied" | "failed">(null);
   // "Email me this report": the same report, sent to the farmer's own address through the server.
-  const [mailed, setMailed] = useState<null | "sending" | "SENT" | "SIMULATED" | "failed">(null);
+  const [mailed, setMailed] = useState<null | "sending" | "SENT" | "SIMULATED" | "failed" | "unconfirmed" | "cap" | "resent" | "resendFail">(null);
+  const mailedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mailedFor = (ms: number) => { if (mailedTimer.current) clearTimeout(mailedTimer.current); mailedTimer.current = setTimeout(() => setMailed(null), ms); };
+  useEffect(() => () => { if (mailedTimer.current) clearTimeout(mailedTimer.current); }, []);
   const { herd } = useHerd();
   const [period, setPeriod] = useState<"season" | "all">("season");
   const [limit, setLimit] = useState(12);
@@ -427,9 +430,12 @@ function Records({ onAdd }: { onAdd: () => void }) {
           <Chip role="radio" selected={period === "season"} onPress={() => setPeriod("season")} label={tt("rec.season")} />
           <Chip role="radio" selected={period === "all"} onPress={() => setPeriod("all")} label={tt("rec.all")} />
         </ChipRow>
+        {/* Income and costs side by side; the answer (profit or loss) on its own line beneath. */}
         <View style={{ flexDirection: "row", marginTop: 14, gap: 8 }}>
           <Figure label={tt("rec.income")} value={sum.income} color={t.ink} />
           <Figure label={tt("rec.expense")} value={sum.expense} color={t.ink} />
+        </View>
+        <View style={{ marginTop: 8 }}>
           <Figure label={sum.profit < 0 ? tt("rec.loss") : tt("rec.profit")} value={Math.abs(sum.profit)} color={sum.profit < 0 ? t.alert : t.ok} strong />
         </View>
         {crops.length > 0 && (
@@ -474,33 +480,56 @@ function Records({ onAdd }: { onAdd: () => void }) {
         />
       </View>
       {profile?.email ? (
-        <Btn
-          kind="secondary"
-          label={
-            mailed === "sending" ? tt("rec.sending")
-            : mailed === "SENT" ? tt("rec.emailed", { email: profile.email })
-            : mailed === "SIMULATED" ? tt("rec.emailLogged")
-            : mailed === "failed" ? tt("rec.emailFail")
-            : tt("rec.email")
-          }
-          disabled={mailed === "sending"}
-          onPress={async () => {
-            const input = buildDigest({ lang, tt, profile, farm, period, ...herdSummary() });
-            if (!input) return;
-            setMailed("sending");
-            try {
-              const r = await sendDigest(input);
-              setMailed(r.status);
-              announce(r.status === "SENT" ? tt("rec.emailed", { email: profile.email ?? "" }) : tt("rec.emailLogged"));
-            } catch {
-              setMailed("failed");
-              announce(tt("rec.emailFail"));
+        <View style={{ gap: 8 }}>
+          <Btn
+            kind="secondary"
+            label={
+              mailed === "sending" ? tt("rec.sending")
+              : mailed === "SENT" ? tt("rec.emailed", { email: profile.email })
+              : mailed === "SIMULATED" ? tt("rec.emailLogged")
+              : mailed === "failed" ? tt("rec.emailFail")
+              : mailed === "cap" ? tt("mail.cap")
+              : tt("rec.email")
             }
-            setTimeout(() => setMailed(null), 4000);
-          }}
-          icon={() => <Pic name="mail" size={22} />}
-          testID="records-email"
-        />
+            disabled={mailed === "sending" || mailed === "unconfirmed"}
+            onPress={async () => {
+              const input = buildDigest({ lang, tt, profile, farm, period, ...herdSummary() });
+              if (!input) return;
+              setMailed("sending");
+              try {
+                const r = await sendDigest(input);
+                setMailed(r.status);
+                announce(r.status === "SENT" ? tt("rec.emailed", { email: profile.email ?? "" }) : tt("rec.emailLogged"));
+                mailedFor(4000);
+              } catch (e) {
+                const why = mailFailure(e);
+                setMailed(why);
+                announce(tt(why === "unconfirmed" ? "mail.unconfirmed" : why === "cap" ? "mail.cap" : "rec.emailFail"));
+                if (why !== "unconfirmed") mailedFor(4000);
+              }
+            }}
+            icon={() => <Pic name="mail" size={22} />}
+            testID="records-email"
+          />
+          {/* The server really sends email and this address has not opened its welcome link yet. */}
+          {mailed === "unconfirmed" || mailed === "resent" || mailed === "resendFail" ? (
+            <View style={{ gap: 6 }} testID="records-unconfirmed">
+              <Tag block tone="warn" label={tt("mail.unconfirmed")} />
+              <Btn
+                kind="ghost"
+                small
+                label={mailed === "resent" ? tt("mail.resent") : mailed === "resendFail" ? tt("mail.resendFail") : tt("mail.resend")}
+                onPress={async () => {
+                  try { await resendConfirmation({ name: profile.name, email: profile.email!, lang }); setMailed("resent"); }
+                  catch { setMailed("resendFail"); }
+                  mailedFor(6000);
+                }}
+                style={{ alignSelf: "flex-start" }}
+                testID="records-resend"
+              />
+            </View>
+          ) : null}
+        </View>
       ) : null}
 
       <Card>
@@ -522,9 +551,9 @@ function Records({ onAdd }: { onAdd: () => void }) {
 function Figure({ label, value, color, strong }: { label: string; value: number; color: string; strong?: boolean }) {
   const t = useTheme();
   return (
-    <View style={{ flex: 1, padding: 10, borderRadius: 12, backgroundColor: t.raised, gap: 2 }} accessible accessibilityLabel={`${label}: ${fmtMoney(value)}`}>
+    <View style={{ flex: 1, padding: strong ? 12 : 10, borderRadius: 12, backgroundColor: t.raised, gap: 2, ...(strong ? { borderLeftWidth: 3, borderLeftColor: color } : null) }} accessible accessibilityLabel={`${label}: ${fmtMoney(value)}`}>
       <Text numberOfLines={1} style={{ color: t.dim, fontSize: 11.5, lineHeight: 15, fontWeight: "700", fontFamily: "monospace", letterSpacing: 0.4, textTransform: "uppercase" }}>{label} · KES</Text>
-      <Text adjustsFontSizeToFit numberOfLines={1} style={{ color, ...T.figure, fontSize: strong ? 20 : 18, lineHeight: 24, letterSpacing: -0.3 }}>{Math.round(value).toLocaleString("en-KE")}</Text>
+      <Text adjustsFontSizeToFit numberOfLines={1} style={{ color, ...T.figure, fontSize: strong ? 26 : 18, lineHeight: strong ? 32 : 24, letterSpacing: -0.4 }}>{Math.round(value).toLocaleString("en-KE")}</Text>
     </View>
   );
 }

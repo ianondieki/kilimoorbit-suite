@@ -53,10 +53,11 @@ export function sanitizeBookings(raw: any): BookingsStore {
       if (!b || !str(b.id, 64) || !str(b.token, 64) || !str(b.event_id, 60) || !str(b.name, 120) || !DAY.test(String(b.start)) || !DAY.test(String(b.end))) return null;
       if (!str(b.calendar_url, 1500)?.startsWith("https://")) return null;
       const remind_on = DAY.test(String(b.remind_on)) ? b.remind_on : b.start;
-      const reminders = (Array.isArray(b.reminders) ? b.reminders : []).filter((d: unknown): d is string => typeof d === "string" && DAY.test(d)).slice(0, 4);
+      // None when the show had started at booking time; an older record has only remind_on.
+      const reminders = Array.isArray(b.reminders) ? b.reminders.filter((d: unknown): d is string => typeof d === "string" && DAY.test(d)).slice(0, 4) : [remind_on];
       return {
         id: b.id, token: b.token, event_id: b.event_id, name: b.name, start: b.start, end: b.end, town: str(b.town, 40) ?? "",
-        calendar_url: b.calendar_url, remind_on, reminders: reminders.length ? reminders : [remind_on],
+        calendar_url: b.calendar_url, remind_on, reminders,
         email: ["SENT", "SIMULATED", "NONE", "FAILED"].includes(b.email) ? b.email : "NONE",
         created: str(b.created, 40) ?? "",
       };

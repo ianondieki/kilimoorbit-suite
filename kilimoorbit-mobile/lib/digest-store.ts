@@ -10,7 +10,8 @@
  */
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { sendDigest, type DigestInput, type DigestResult } from "./api";
+import { ApiError, sendDigest, type DigestInput, type DigestResult } from "./api";
+import { todayKey } from "./dates";
 import { buildReport } from "./report";
 import { byCrop, totals, type Entry, type Farm } from "./farm";
 import type { Profile } from "./session";
@@ -68,17 +69,61 @@ export function useDigestPref(): [boolean, (v: boolean) => void] {
 
 /* ── sending ── */
 /**
- * Sends the digest after a record is saved: a few entries typed in a row go
- * out as one email (the last one wins), and nothing is reported back; the
- * Records tab's own button shows the outcome when the farmer wants it.
+ * After a record is saved the digest waits a couple of minutes, so an evening
+ * of entries typed one after another goes out as one email with the final
+ * totals. A pending digest is remembered on the phone: if the app is closed
+ * before it went, Today sends it next time (flushPendingDigest). At most a
+ * few automatic digests a day, well under the server's cap; a refusal that
+ * will not change by retrying (not confirmed, the cap, bad input) is dropped.
  */
+export const DIGEST_DELAY_MS = 2 * 60_000;
+export const DIGEST_DAILY_CAP = 6;
+export const DIGEST_PENDING_KEY = "ko-digest-pending";
+export const DIGEST_COUNT_KEY = "ko-digest-count";
 let pending: ReturnType<typeof setTimeout> | null = null;
-export const DIGEST_DEBOUNCE_MS = 1500;
+let pendingInput: DigestInput | null = null;
+
+async function underCap(): Promise<boolean> {
+  try {
+    const c = JSON.parse((await AsyncStorage.getItem(DIGEST_COUNT_KEY)) ?? "null");
+    return !(c && c.day === todayKey() && c.n >= DIGEST_DAILY_CAP);
+  } catch { return true; }
+}
+async function countOne() {
+  try {
+    const c = JSON.parse((await AsyncStorage.getItem(DIGEST_COUNT_KEY)) ?? "null");
+    const n = c && c.day === todayKey() ? c.n + 1 : 1;
+    await AsyncStorage.setItem(DIGEST_COUNT_KEY, JSON.stringify({ day: todayKey(), n }));
+  } catch {}
+}
+async function flush(onDone?: (r: DigestResult | null) => void) {
+  pending = null;
+  const input = pendingInput;
+  pendingInput = null;
+  if (!input) return;
+  if (!(await underCap())) { AsyncStorage.removeItem(DIGEST_PENDING_KEY).catch(() => {}); onDone?.(null); return; }
+  try {
+    const r = await sendDigest(input);
+    await countOne();
+    AsyncStorage.removeItem(DIGEST_PENDING_KEY).catch(() => {});
+    onDone?.(r);
+  } catch (e) {
+    // Not confirmed, capped or refused: retrying would not help; anything else (offline) stays pending for the next start.
+    if (e instanceof ApiError && e.status >= 400 && e.status < 500) AsyncStorage.removeItem(DIGEST_PENDING_KEY).catch(() => {});
+    onDone?.(null);
+  }
+}
 export function scheduleDigest(input: DigestInput | null, onDone?: (r: DigestResult | null) => void) {
   if (!input) return;
+  pendingInput = input;
+  AsyncStorage.setItem(DIGEST_PENDING_KEY, "1").catch(() => {});
   if (pending) clearTimeout(pending);
-  pending = setTimeout(() => {
-    pending = null;
-    sendDigest(input).then((r) => onDone?.(r)).catch(() => onDone?.(null));
-  }, DIGEST_DEBOUNCE_MS);
+  pending = setTimeout(() => { flush(onDone); }, DIGEST_DELAY_MS);
+}
+/** On Today: a digest the last session never sent goes now, built from today's records. */
+export async function flushPendingDigest(build: () => DigestInput | null) {
+  if (pending) return;
+  try { if ((await AsyncStorage.getItem(DIGEST_PENDING_KEY)) !== "1") return; } catch { return; }
+  pendingInput = build();
+  await flush();
 }
