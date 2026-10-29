@@ -1,10 +1,16 @@
 /**
- * View-only glyph kit (no SVG, no icon fonts). Every glyph is decorative:
- * hidden from assistive tech, the adjacent text carries the meaning.
+ * The glyph kit: small named marks (check, chevron, speaker, sun...) drawn from
+ * Material Design Icons through components/Icon.tsx, so they are crisp vector
+ * shapes at any size and match the navigation icons. (They used to be built
+ * from bordered boxes, which broke apart at small sizes: the Listen speaker,
+ * the "no network" bars.) Every glyph is decorative: hidden from assistive
+ * tech, the adjacent text carries the meaning. The props are unchanged, so
+ * callers keep their sizes and colours.
  */
 import React from "react";
 import { View, type ViewStyle, type StyleProp } from "react-native";
 import Animated from "react-native-reanimated";
+import Icon, { type IconName } from "./Icon";
 
 export type GlyphProps = {
   size?: number;
@@ -14,7 +20,6 @@ export type GlyphProps = {
 };
 
 const r = Math.round;
-const strokeFor = (size: number) => Math.max(2, r(size * 0.1));
 
 function Root({ size, children, style }: { size: number; children?: React.ReactNode; style?: StyleProp<ViewStyle> }) {
   return (
@@ -29,306 +34,90 @@ function Root({ size, children, style }: { size: number; children?: React.ReactN
   );
 }
 
-/** Absolutely centered child inside the glyph box. */
-const center = (size: number, w: number, h: number): ViewStyle => ({
-  position: "absolute",
-  left: r((size - w) / 2),
-  top: r((size - h) / 2),
-  width: w,
-  height: h,
-});
-
-export function CheckGlyph({ size = 24, color, style }: GlyphProps) {
-  const s = strokeFor(size);
+/** One icon centred in a size × size box; `scale` evens out icons whose drawing is smaller or larger than the box. */
+function drawMark(name: IconName, scale: number, { size = 24, color, style }: GlyphProps) {
+  // The icon font's line box can sit a pixel off-centre; lineHeight = size pins it.
+  const s = r(size * scale);
   return (
     <Root size={size} style={style}>
-      <View
-        style={{
-          width: r(size * 0.5), height: r(size * 0.25),
-          borderLeftWidth: s, borderBottomWidth: s, borderColor: color,
-          transform: [{ rotate: "-45deg" }], marginTop: -r(size * 0.1),
-        }}
-      />
+      <Icon name={name} size={s} color={color} style={{ lineHeight: s, width: s, height: s, textAlign: "center" }} />
     </Root>
   );
 }
 
-export function CrossGlyph({ size = 24, color, style }: GlyphProps) {
-  const s = strokeFor(size);
-  const len = r(size * 0.7);
-  return (
-    <Root size={size} style={style}>
-      <View style={[center(size, len, s), { backgroundColor: color, borderRadius: s / 2, transform: [{ rotate: "45deg" }] }]} />
-      <View style={[center(size, len, s), { backgroundColor: color, borderRadius: s / 2, transform: [{ rotate: "-45deg" }] }]} />
-    </Root>
-  );
+function mark(name: IconName, scale = 1) {
+  return function Mark(p: GlyphProps) {
+    return drawMark(name, scale, p);
+  };
 }
 
-const CHEVRON_ROT = { right: "-45deg", down: "45deg", left: "135deg", up: "-135deg" } as const;
+export const CheckGlyph = mark("check-bold", 1.05);
+export const CrossGlyph = mark("close-thick");
+export const PlusGlyph = mark("plus-thick");
+export const MinusGlyph = mark("minus-thick");
+export const MenuGlyph = mark("menu", 1.1);
+export const PhoneGlyph = mark("cellphone");
+export const PersonGlyph = mark("account-outline", 1.1);
+export const LeafGlyph = mark("leaf");
+export const GridGlyph = mark("view-grid-outline");
+export const ChatGlyph = mark("message-text-outline");
+export const RouteGlyph = mark("map-marker-path");
+export const SignalOffGlyph = mark("wifi-off");
+export const ExitGlyph = mark("logout");
+export const SproutGlyph = mark("sprout-outline", 1.05);
+export const BarsGlyph = mark("chart-bar");
+export const LensGlyph = mark("magnify");
+export const CloudGlyph = mark("cloud");
+export const SunGlyph = mark("white-balance-sunny", 1.05);
+/** Three lines of different lengths: a news story. */
+export const NewsGlyph = mark("newspaper-variant-outline");
+/** A calendar page. */
+export const CalendarGlyph = mark("calendar-month-outline");
+/** A light bulb: ideas, questions. */
+export const BulbGlyph = mark("lightbulb-on-outline");
+/** A storage box. */
+export const BoxGlyph = mark("package-variant-closed");
+/** A coin: money, prices, records. */
+export const CoinGlyph = mark("cash-multiple");
+/** A drop: milk, water. */
+export const DropGlyph = mark("water");
+/** An egg. */
+export const EggGlyph = mark("egg");
+
+const CHEVRON = { right: "chevron-right", left: "chevron-left", up: "chevron-up", down: "chevron-down" } as const;
+const ARROW = { right: "arrow-right", left: "arrow-left", up: "arrow-up", down: "arrow-down" } as const;
 
 export function ChevronGlyph({ size = 24, color, dir = "right", style }: GlyphProps) {
-  const s = strokeFor(size);
-  const box = r(size * 0.35);
-  // Nudge the chevron against its direction so the visual centre sits in the box.
-  const nudge = r(box * 0.2);
-  const offset: ViewStyle =
-    dir === "right" ? { marginLeft: -nudge } : dir === "left" ? { marginLeft: nudge } :
-    dir === "down" ? { marginTop: -nudge } : { marginTop: nudge };
-  return (
-    <Root size={size} style={style}>
-      <View
-        style={[{
-          width: box, height: box, borderRightWidth: s, borderBottomWidth: s, borderColor: color,
-          transform: [{ rotate: CHEVRON_ROT[dir] }],
-        }, offset]}
-      />
-    </Root>
-  );
+  // The chevron drawing is narrow; a touch larger reads at the same weight as the text beside it.
+  return drawMark(CHEVRON[dir], 1.2, { size, color, style });
 }
 
-export function ArrowGlyph({ size = 24, color, style }: GlyphProps) {
-  const s = strokeFor(size);
-  const bar = r(size * 0.6);
-  const head = r(size * 0.32);
-  return (
-    <Root size={size} style={style}>
-      <View style={[center(size, bar, s), { backgroundColor: color, borderRadius: s / 2 }]} />
-      <View
-        style={{
-          position: "absolute",
-          left: r((size - bar) / 2) + bar - head - r(s * 0.3),
-          top: r((size - head) / 2),
-          width: head, height: head,
-          borderRightWidth: s, borderTopWidth: s, borderColor: color,
-          transform: [{ rotate: "45deg" }],
-        }}
-      />
-    </Root>
-  );
+export function ArrowGlyph({ size = 24, color, dir = "right", style }: GlyphProps) {
+  return drawMark(ARROW[dir], 1, { size, color, style });
 }
 
-export function PlusGlyph({ size = 24, color, style }: GlyphProps) {
-  const s = strokeFor(size);
-  const len = r(size * 0.7);
-  return (
-    <Root size={size} style={style}>
-      <View style={[center(size, len, s), { backgroundColor: color, borderRadius: s / 2 }]} />
-      <View style={[center(size, s, len), { backgroundColor: color, borderRadius: s / 2 }]} />
-    </Root>
-  );
+/** The moon of the night theme. `cutout` (the old drawn crescent's background) is no longer needed. */
+export function MoonGlyph({ size = 24, color, style }: GlyphProps & { cutout?: string }) {
+  return drawMark("moon-waning-crescent", 1.05, { size, color, style });
 }
 
-export function MenuGlyph({ size = 24, color, style }: GlyphProps) {
-  const s = strokeFor(size);
-  const w = r(size * 0.75);
-  return (
-    <Root size={size} style={style}>
-      <View style={{ gap: r(size * 0.18) }}>
-        {[0, 1, 2].map((i) => (
-          <View key={i} style={{ width: w, height: s, borderRadius: s / 2, backgroundColor: color }} />
-        ))}
-      </View>
-    </Root>
-  );
-}
-
-export function PhoneGlyph({ size = 24, color, style }: GlyphProps) {
-  const s = strokeFor(size);
-  return (
-    <Root size={size} style={style}>
-      <View
-        style={{
-          width: r(size * 0.5), height: r(size * 0.83), borderWidth: s, borderColor: color, borderRadius: 3,
-          alignItems: "center", justifyContent: "flex-end", paddingBottom: r(size * 0.06),
-        }}
-      >
-        <View style={{ width: r(size * 0.17), height: s, backgroundColor: color, borderRadius: 1 }} />
-      </View>
-    </Root>
-  );
-}
-
-export function PersonGlyph({ size = 24, color, style }: GlyphProps) {
-  const s = strokeFor(size);
-  const head = r(size * 0.38);
-  const sh = r(size * 0.38);
-  return (
-    <Root size={size} style={style}>
-      <View style={{ alignItems: "center" }}>
-        <View style={{ width: head, height: head, borderRadius: head / 2, borderWidth: s, borderColor: color }} />
-        <View
-          style={{
-            width: r(size * 0.75), height: sh, marginTop: 2,
-            borderWidth: s, borderBottomWidth: 0, borderColor: color,
-            borderTopLeftRadius: size * 0.38, borderTopRightRadius: size * 0.38,
-          }}
-        />
-      </View>
-    </Root>
-  );
-}
-
+/**
+ * The Listen speaker: the speaker with one sound wave always shown, and the
+ * outer waves on top, whose opacity `arcStyle` pulses while it speaks.
+ */
 export function SpeakerGlyph({
   size = 24, color, style, arcStyle,
 }: GlyphProps & { arcStyle?: any }) {
-  const s = strokeFor(size);
-  const body = { w: r(size * 0.2), h: r(size * 0.33) };
-  const tri = r(size * 0.3);
-  const arc = r(size * 0.55);
+  const box = { position: "absolute" as const, left: 0, top: 0, width: size, height: size, alignItems: "center" as const, justifyContent: "center" as const };
+  const iconStyle = { lineHeight: size, width: size, height: size, textAlign: "center" as const };
   return (
     <Root size={size} style={style}>
-      <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -r(size * 0.2) }}>
-        <View style={{ width: body.w, height: body.h, backgroundColor: color, borderRadius: 1 }} />
-        <View
-          style={{
-            width: 0, height: 0, marginLeft: -r(size * 0.02),
-            borderRightWidth: tri, borderRightColor: color,
-            borderTopWidth: tri, borderBottomWidth: tri,
-            borderTopColor: "transparent", borderBottomColor: "transparent",
-          }}
-        />
+      <View style={box}>
+        <Icon name="volume-low" size={size} color={color} style={iconStyle} />
       </View>
-      <Animated.View
-        style={[{
-          position: "absolute", width: arc, height: arc, borderRadius: arc / 2,
-          left: r(size * 0.28), top: r((size - arc) / 2),
-          borderWidth: s, borderColor: "transparent", borderRightColor: color,
-        }, arcStyle]}
-      />
-    </Root>
-  );
-}
-
-export function SunGlyph({ size = 24, color, style }: GlyphProps) {
-  const core = r(size * 0.42);
-  const ray = { w: Math.max(2, r(size * 0.1)), h: Math.max(3, r(size * 0.17)) };
-  return (
-    <Root size={size} style={style}>
-      <View style={{ width: core, height: core, borderRadius: core / 2, backgroundColor: color }} />
-      {Array.from({ length: 8 }, (_, i) => (
-        <View
-          key={i}
-          style={{ position: "absolute", left: 0, top: 0, width: size, height: size, alignItems: "center", transform: [{ rotate: `${i * 45}deg` }] }}
-        >
-          <View style={{ width: ray.w, height: ray.h, borderRadius: ray.w / 2, backgroundColor: color }} />
-        </View>
-      ))}
-    </Root>
-  );
-}
-
-export function MoonGlyph({ size = 24, color, cutout, style }: GlyphProps & { cutout: string }) {
-  const d = r(size * 0.67);
-  const c = r(size * 0.58);
-  return (
-    <Root size={size} style={style}>
-      <View style={{ width: d, height: d, borderRadius: d / 2, backgroundColor: color, overflow: "hidden" }}>
-        <View
-          style={{
-            position: "absolute", width: c, height: c, borderRadius: c / 2, backgroundColor: cutout,
-            left: r(size * 0.22), top: -r(size * 0.06),
-          }}
-        />
-      </View>
-    </Root>
-  );
-}
-
-export function LeafGlyph({ size = 24, color, style }: GlyphProps) {
-  const d = r(size * 0.67);
-  return (
-    <Root size={size} style={style}>
-      <View style={{ width: d, height: d, backgroundColor: color, borderTopLeftRadius: d, borderBottomRightRadius: d }} />
-    </Root>
-  );
-}
-
-export function GridGlyph({ size = 24, color, style }: GlyphProps) {
-  const q = r(size * 0.33);
-  const g = r(size * 0.12);
-  return (
-    <Root size={size} style={style}>
-      <View style={{ width: q * 2 + g, flexDirection: "row", flexWrap: "wrap", gap: g }}>
-        {[0, 1, 2, 3].map((i) => (
-          <View key={i} style={{ width: q, height: q, borderRadius: 2, backgroundColor: color }} />
-        ))}
-      </View>
-    </Root>
-  );
-}
-
-export function ChatGlyph({ size = 24, color, style }: GlyphProps) {
-  const s = strokeFor(size);
-  const w = r(size * 0.75);
-  const h = r(size * 0.58);
-  const tail = r(size * 0.14);
-  return (
-    <Root size={size} style={style}>
-      <View style={{ marginTop: -r(size * 0.08) }}>
-        <View style={{ width: w, height: h, borderWidth: s, borderColor: color, borderRadius: 5 }} />
-        <View
-          style={{
-            position: "absolute", left: r(size * 0.12), top: h - 1, width: 0, height: 0,
-            borderTopWidth: tail, borderTopColor: color,
-            borderRightWidth: tail, borderRightColor: "transparent",
-          }}
-        />
-      </View>
-    </Root>
-  );
-}
-
-export function RouteGlyph({ size = 24, color, style }: GlyphProps) {
-  const s = strokeFor(size);
-  const dot = r(size * 0.25);
-  const dash = r(size * 0.15);
-  const ring = r(size * 0.33);
-  return (
-    <Root size={size} style={style}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: Math.max(1, r(size * 0.04)) }}>
-        <View style={{ width: dot, height: dot, borderRadius: dot / 2, backgroundColor: color }} />
-        <View style={{ width: dash, height: s, backgroundColor: color }} />
-        <View style={{ width: dash, height: s, backgroundColor: color, opacity: 0.6 }} />
-        <View style={{ width: ring, height: ring, borderRadius: ring / 2, borderWidth: s, borderColor: color }} />
-      </View>
-    </Root>
-  );
-}
-
-export function SignalOffGlyph({ size = 24, color, style }: GlyphProps) {
-  const s = strokeFor(size);
-  const w = r(size * 0.16);
-  const hs = [0.25, 0.46, 0.67].map((f) => r(size * f));
-  return (
-    <Root size={size} style={style}>
-      <View style={{ flexDirection: "row", alignItems: "flex-end", gap: r(size * 0.08), height: hs[2] }}>
-        {hs.map((h, i) => (
-          <View key={i} style={{ width: w, height: h, borderRadius: 1, backgroundColor: color, opacity: i === 0 ? 1 : 0.35 }} />
-        ))}
-      </View>
-      <View
-        style={{
-          position: "absolute", width: r(size * 0.72), height: s, borderRadius: s / 2, backgroundColor: color,
-          left: r(size * 0.62 - size * 0.36), top: r(size * 0.5 - s / 2), transform: [{ rotate: "45deg" }],
-        }}
-      />
-    </Root>
-  );
-}
-
-export function ExitGlyph({ size = 24, color, style }: GlyphProps) {
-  const s = strokeFor(size);
-  const arrow = r(size * 0.6);
-  return (
-    <Root size={size} style={style}>
-      <View
-        style={{
-          position: "absolute", left: r(size * 0.14), top: r(size * 0.125),
-          width: r(size * 0.42), height: r(size * 0.75),
-          borderWidth: s, borderRightWidth: 0, borderColor: color, borderTopLeftRadius: 2, borderBottomLeftRadius: 2,
-        }}
-      />
-      <ArrowGlyph size={arrow} color={color} style={{ position: "absolute", left: r(size * 0.38), top: r((size - arrow) / 2) }} />
+      <Animated.View style={[box, arcStyle]}>
+        <Icon name="volume-high" size={size} color={color} style={iconStyle} />
+      </Animated.View>
     </Root>
   );
 }
@@ -341,202 +130,27 @@ export function CheckCoin({ size = 28, bg, fg, style }: { size?: number; bg: str
       aria-hidden
       style={[{ pointerEvents: "none", width: size, height: size, borderRadius: size / 2, backgroundColor: bg, alignItems: "center", justifyContent: "center" }, style]}
     >
-      <CheckGlyph size={r(size * 0.5)} color={fg} />
+      <CheckGlyph size={r(size * 0.6)} color={fg} />
     </View>
-  );
-}
-
-/* ── v1.2: farm navigation and weather ── */
-
-export function SproutGlyph({ size = 24, color, style }: GlyphProps) {
-  const s = strokeFor(size);
-  const leaf = r(size * 0.36);
-  return (
-    <Root size={size} style={style}>
-      <View style={{ position: "absolute", left: r((size - s) / 2), top: r(size * 0.42), width: s, height: r(size * 0.48), borderRadius: s / 2, backgroundColor: color }} />
-      <View style={{ position: "absolute", left: r(size * 0.5) - leaf, top: r(size * 0.18), width: leaf, height: leaf, backgroundColor: color, borderTopLeftRadius: leaf, borderBottomRightRadius: leaf }} />
-      <View style={{ position: "absolute", left: r(size * 0.5), top: r(size * 0.08), width: leaf, height: leaf, backgroundColor: color, borderTopRightRadius: leaf, borderBottomLeftRadius: leaf }} />
-    </Root>
-  );
-}
-
-export function BarsGlyph({ size = 24, color, style }: GlyphProps) {
-  const w = Math.max(3, r(size * 0.18));
-  return (
-    <Root size={size} style={style}>
-      <View style={{ flexDirection: "row", alignItems: "flex-end", gap: Math.max(2, r(size * 0.1)), height: r(size * 0.72) }}>
-        {[0.38, 0.62, 1].map((f, i) => (
-          <View key={i} style={{ width: w, height: r(size * 0.72 * f), borderRadius: 2, backgroundColor: color }} />
-        ))}
-      </View>
-    </Root>
-  );
-}
-
-export function LensGlyph({ size = 24, color, style }: GlyphProps) {
-  const s = strokeFor(size);
-  const d = r(size * 0.56);
-  const handle = r(size * 0.34);
-  return (
-    <Root size={size} style={style}>
-      <View style={{ position: "absolute", left: r(size * 0.1), top: r(size * 0.1), width: d, height: d, borderRadius: d / 2, borderWidth: s, borderColor: color }} />
-      <View
-        style={{
-          position: "absolute", width: handle, height: Math.max(3, r(s * 1.3)), borderRadius: s, backgroundColor: color,
-          left: r(size * 0.56), top: r(size * 0.7), transform: [{ rotate: "45deg" }],
-        }}
-      />
-    </Root>
-  );
-}
-
-export function CloudGlyph({ size = 24, color, style }: GlyphProps) {
-  return (
-    <Root size={size} style={style}>
-      <View style={{ position: "absolute", left: r(size * 0.08), top: r(size * 0.46), width: r(size * 0.84), height: r(size * 0.3), borderRadius: r(size * 0.15), backgroundColor: color }} />
-      <View style={{ position: "absolute", left: r(size * 0.16), top: r(size * 0.3), width: r(size * 0.36), height: r(size * 0.36), borderRadius: size, backgroundColor: color }} />
-      <View style={{ position: "absolute", left: r(size * 0.36), top: r(size * 0.18), width: r(size * 0.46), height: r(size * 0.46), borderRadius: size, backgroundColor: color }} />
-    </Root>
   );
 }
 
 export type SkyKind = "sunny" | "partly" | "cloudy" | "showers" | "rain" | "heavy" | "storm";
 
-/** Forecast pictogram from the glyph kit: sun, cloud and rain drops. */
+const SKY: Record<SkyKind, IconName> = {
+  sunny: "weather-sunny",
+  partly: "weather-partly-cloudy",
+  cloudy: "weather-cloudy",
+  showers: "weather-partly-rainy",
+  rain: "weather-rainy",
+  heavy: "weather-pouring",
+  storm: "weather-lightning-rainy",
+};
+
+/** Forecast pictogram: the sun in its colour on clear days, otherwise the cloud and rain in the water colour. */
 export function WeatherGlyph({
   sky, size = 32, sun, cloud, water, alert, style,
 }: { sky: SkyKind; size?: number; sun: string; cloud: string; water: string; alert?: string; style?: StyleProp<ViewStyle> }) {
-  if (sky === "sunny") return <SunGlyph size={size} color={sun} style={style} />;
-  if (sky === "partly")
-    return (
-      <Root size={size} style={style}>
-        <SunGlyph size={r(size * 0.62)} color={sun} style={{ position: "absolute", left: 0, top: 0 }} />
-        <CloudGlyph size={r(size * 0.8)} color={cloud} style={{ position: "absolute", right: 0, bottom: r(size * 0.02) }} />
-      </Root>
-    );
-  if (sky === "cloudy") return <CloudGlyph size={size} color={cloud} style={style} />;
-  const drops = sky === "showers" ? 2 : 3;
-  const dw = Math.max(2, r(size * 0.08));
-  const dh = r(size * (sky === "heavy" || sky === "storm" ? 0.24 : 0.18));
-  return (
-    <Root size={size} style={style}>
-      <CloudGlyph size={r(size * 0.86)} color={cloud} style={{ position: "absolute", left: r(size * 0.07), top: -r(size * 0.12) }} />
-      <View style={{ position: "absolute", left: 0, right: 0, top: r(size * 0.66), flexDirection: "row", justifyContent: "center", gap: r(size * 0.14) }}>
-        {Array.from({ length: drops }, (_, i) => (
-          <View
-            key={i}
-            style={{
-              width: dw, height: dh, borderRadius: dw, transform: [{ rotate: "18deg" }],
-              backgroundColor: sky === "storm" && i === 1 ? alert ?? sun : water,
-            }}
-          />
-        ))}
-      </View>
-    </Root>
-  );
-}
-
-export function MinusGlyph({ size = 24, color, style }: GlyphProps) {
-  const s = strokeFor(size);
-  const len = r(size * 0.7);
-  return (
-    <Root size={size} style={style}>
-      <View style={[center(size, len, s), { backgroundColor: color, borderRadius: s / 2 }]} />
-    </Root>
-  );
-}
-
-/* ── section marks (news, shows, trivia, store, money, milk, eggs) ── */
-
-/** Three lines of different lengths: a news story. */
-export function NewsGlyph({ size = 24, color, style }: GlyphProps) {
-  const s = strokeFor(size);
-  const w = r(size * 0.7);
-  return (
-    <Root size={size} style={style}>
-      <View style={{ width: w, gap: Math.max(2, r(size * 0.12)) }}>
-        {[1, 0.72, 0.5].map((f, i) => (
-          <View key={i} style={{ width: r(w * f), height: s, borderRadius: s / 2, backgroundColor: color }} />
-        ))}
-      </View>
-    </Root>
-  );
-}
-
-/** A calendar page: a bordered box with a header bar and two day dots. */
-export function CalendarGlyph({ size = 24, color, style }: GlyphProps) {
-  const s = strokeFor(size);
-  const w = r(size * 0.74), h = r(size * 0.68);
-  const dot = Math.max(2, r(size * 0.12));
-  return (
-    <Root size={size} style={style}>
-      <View style={{ width: w, height: h, borderRadius: r(size * 0.14), borderWidth: s, borderColor: color, overflow: "hidden" }}>
-        <View style={{ height: r(h * 0.28), backgroundColor: color }} />
-        <View style={{ flexDirection: "row", gap: dot, paddingHorizontal: r(size * 0.1), paddingTop: r(size * 0.09) }}>
-          <View style={{ width: dot, height: dot, borderRadius: dot / 2, backgroundColor: color }} />
-          <View style={{ width: dot, height: dot, borderRadius: dot / 2, backgroundColor: color }} />
-        </View>
-      </View>
-    </Root>
-  );
-}
-
-/** A light bulb: ideas, questions. */
-export function BulbGlyph({ size = 24, color, style }: GlyphProps) {
-  const s = strokeFor(size);
-  const d = r(size * 0.56);
-  const base = { w: r(size * 0.3), h: Math.max(2, r(size * 0.11)) };
-  return (
-    <Root size={size} style={style}>
-      <View style={{ width: d, height: d, borderRadius: d / 2, borderWidth: s, borderColor: color, marginBottom: r(size * 0.2) }} />
-      <View style={{ position: "absolute", bottom: r(size * 0.1), width: base.w, height: base.h, borderRadius: base.h / 2, backgroundColor: color }} />
-    </Root>
-  );
-}
-
-/** A storage box with its lid line. */
-export function BoxGlyph({ size = 24, color, style }: GlyphProps) {
-  const s = strokeFor(size);
-  const w = r(size * 0.74), h = r(size * 0.62);
-  return (
-    <Root size={size} style={style}>
-      <View style={{ width: w, height: h, borderRadius: r(size * 0.12), borderWidth: s, borderColor: color, overflow: "hidden" }}>
-        <View style={{ position: "absolute", left: 0, right: 0, top: r(h * 0.28), height: s, backgroundColor: color }} />
-        <View style={{ position: "absolute", alignSelf: "center", top: r(h * 0.28) + s + r(size * 0.06), width: r(w * 0.26), height: Math.max(2, r(s * 0.9)), borderRadius: 2, backgroundColor: color }} />
-      </View>
-    </Root>
-  );
-}
-
-/** A coin: money, prices, records. */
-export function CoinGlyph({ size = 24, color, style }: GlyphProps) {
-  const s = strokeFor(size);
-  const d = r(size * 0.74), inner = r(size * 0.3);
-  return (
-    <Root size={size} style={style}>
-      <View style={{ width: d, height: d, borderRadius: d / 2, borderWidth: s, borderColor: color, alignItems: "center", justifyContent: "center" }}>
-        <View style={{ width: inner, height: inner, borderRadius: inner / 2, backgroundColor: color }} />
-      </View>
-    </Root>
-  );
-}
-
-/** A drop: milk, water. */
-export function DropGlyph({ size = 24, color, style }: GlyphProps) {
-  const d = r(size * 0.5);
-  return (
-    <Root size={size} style={style}>
-      <View style={{ width: d, height: d, backgroundColor: color, borderRadius: d / 2, borderTopLeftRadius: 0, transform: [{ rotate: "45deg" }], marginTop: r(size * 0.08) }} />
-    </Root>
-  );
-}
-
-/** An egg. */
-export function EggGlyph({ size = 24, color, style }: GlyphProps) {
-  const w = r(size * 0.56), h = r(size * 0.74);
-  return (
-    <Root size={size} style={style}>
-      <View style={{ width: w, height: h, backgroundColor: color, borderTopLeftRadius: r(w * 0.62), borderTopRightRadius: r(w * 0.62), borderBottomLeftRadius: r(w / 2), borderBottomRightRadius: r(w / 2) }} />
-    </Root>
-  );
+  const color = sky === "sunny" || sky === "partly" ? sun : sky === "cloudy" ? cloud : sky === "storm" ? alert ?? water : water;
+  return drawMark(SKY[sky], 1, { size, color, style });
 }

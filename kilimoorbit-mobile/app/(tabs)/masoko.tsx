@@ -11,7 +11,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import Header from "../../components/Header";
 import Field from "../../components/Field";
 import { Bounded } from "../../components/Bounded";
-import { Btn, Card, Chip, ChipRow, Eyebrow, T, Tag } from "../../components/Kit";
+import { B, Btn, Card, Chip, ChipRow, Eyebrow, S, T, Tag, useSpace } from "../../components/Kit";
 import { Enter, CountUp, Skeleton } from "../../components/Motion";
 import { CropCoin, DemoTag } from "../../components/ShambaPanel";
 import { ArrowGlyph, RouteGlyph, SignalOffGlyph, BarsGlyph } from "../../components/Glyphs";
@@ -31,6 +31,7 @@ import { useFarm } from "../../lib/farm";
 import { fmtKES, getPriceHistory, type Commodity, type PriceHistory } from "../../lib/api";
 import type { Key } from "../../lib/i18n";
 import { HeroChip, PhotoHero } from "../../components/PhotoHero";
+import { PHOTO_SETS } from "../../lib/photos";
 
 export default function Masoko() {
   const t = useTheme();
@@ -60,6 +61,7 @@ export default function Masoko() {
   // can't easily scroll sideways, and there is room).
   const { width } = useWindowDimensions();
   const wrapChips = width >= 700;
+  const sp = useSpace();
   // Each chip carries today's best price and its move, so the board reads at a glance (no marquee).
   const chips = feed?.commodities.map((c) => {
     const best = [...c.quotes].sort((a, b) => b.price - a.price)[0];
@@ -83,11 +85,11 @@ export default function Masoko() {
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]} {...webLang(lang)}>
       <Header title={tt("mk.title")} engine={s.engine} />
       <ScrollView
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: S.x5 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await s.reload(); setRefreshing(false); }} tintColor={t.accent} />}
       >
-        <Bounded style={{ padding: 16, gap: 14 }}>
-          <PhotoHero photo="markets" icon="storefront-outline" eyebrow={tt("ph.markets.eyebrow")} title={tt("ph.markets.title")} subtitle={tt("ph.markets.sub")} testID="markets-hero">
+        <Bounded style={{ paddingHorizontal: sp.pad, paddingTop: sp.gap, gap: sp.gap }}>
+          <PhotoHero photo="markets" photos={PHOTO_SETS.markets} icon="storefront-outline" eyebrow={tt("ph.markets.eyebrow")} title={tt("ph.markets.title")} subtitle={tt("ph.markets.sub")} testID="markets-hero" style={{ marginBottom: sp.gap }}>
             {heroBest ? (
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                 <HeroChip icon="cash" value={`KES ${heroBest.price}/kg`} label={`${cropName(lang, crop ?? "")} · ${tt("ph.markets.best")}`} />
@@ -104,12 +106,13 @@ export default function Masoko() {
           ) : !feed ? (
             <Card>
               <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
-                <SignalOffGlyph size={20} color={t.dim} />
-                <Text style={{ flex: 1, color: t.dim, ...T.body }}>{tt("mk.none")}</Text>
+                <SignalOffGlyph size={20} color={t.ink} />
+                <Text style={{ flex: 1, color: t.ink, ...T.body, fontWeight: "700" }}>{tt("mk.none")}</Text>
               </View>
-              <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
-                <Btn kind="secondary" label={tt("result.retry")} onPress={s.reload} style={{ flex: 1 }} />
-                <Btn kind="ghost" label={tt("sentinel.fix")} onPress={() => setSheet("connection")} style={{ flex: 1 }} icon={(c) => <SignalOffGlyph size={15} color={c} />} testID="mk-fix-connection" />
+              {/* Side by side when there is room, stacked full width on a phone so neither label wraps. */}
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 12 }}>
+                <Btn kind="secondary" label={tt("result.retry")} onPress={s.reload} style={{ flexGrow: 1, flexBasis: 200 }} />
+                <Btn kind="ghost" label={tt("sentinel.fix")} onPress={() => setSheet("connection")} style={{ flexGrow: 1, flexBasis: 200 }} icon={(c) => <SignalOffGlyph size={15} color={c} />} testID="mk-fix-connection" />
               </View>
             </Card>
           ) : (
@@ -124,10 +127,10 @@ export default function Masoko() {
                   accessibilityRole="radiogroup"
                   accessibilityLabel={tt("mk.crops")}
                   contentContainerStyle={{ gap: 8, paddingVertical: 2 }}
-                  style={{ marginHorizontal: -16, paddingHorizontal: 16, flexGrow: 0 }}
+                  style={{ marginHorizontal: -sp.pad, paddingHorizontal: sp.pad, flexGrow: 0 }}
                 >
                   {chips}
-                  <View style={{ width: 16 }} />
+                  <View style={{ width: sp.pad }} />
                 </ScrollView>
               )}
 
@@ -334,7 +337,7 @@ function RunCard() {
           {markets.map((m) => {
             const win = m.market_name === c.optimal_market_destination;
             return (
-              <View key={m.market_name} style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: 48, borderTopWidth: 1, borderTopColor: t.line }}>
+              <View key={m.market_name} style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: 48, borderTopWidth: B.line, borderTopColor: t.line }}>
                 <View style={{ flex: 1 }}>
                   <Text {...webLang("en")} style={{ color: win ? t.accent : t.ink, fontSize: 15, lineHeight: 20, fontWeight: win ? "800" : "600" }}>{win ? "★ " : ""}{m.market_name}</Text>
                   <Text style={{ color: t.dim, fontSize: 12.5, lineHeight: 17 }}>{tt("mk.distance", { km: m.distance_km, c: fmtKES(m.transit_cost_kes) })}</Text>
@@ -362,8 +365,9 @@ function Stat({ label, value }: { label: string; value: string }) {
   const t = useTheme();
   return (
     <View style={{ flex: 1, borderRadius: 12, backgroundColor: t.raised, padding: 10, gap: 2 }}>
-      <Text numberOfLines={1} adjustsFontSizeToFit style={{ color: t.ink, fontFamily: "monospace", fontWeight: "700", fontSize: 13.5 }}>{value}</Text>
-      <Text numberOfLines={2} style={{ color: t.dim, fontSize: 11.5, lineHeight: 15, fontWeight: "600" }}>{label}</Text>
+      {/* A price people act on: the text face with tabular figures; wraps rather than shrinking below the scale. */}
+      <Text style={{ color: t.ink, ...T.meta, fontWeight: "800", fontVariant: ["tabular-nums"] }}>{value}</Text>
+      <Text style={{ color: t.dim, fontSize: 12, lineHeight: 16, fontWeight: "600" }}>{label}</Text>
     </View>
   );
 }

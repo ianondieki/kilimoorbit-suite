@@ -5,7 +5,7 @@ import { useTheme } from "../lib/theme-context";
 import { useLang } from "../lib/session";
 import { focusRing, webCursor, type PressState } from "../lib/ui";
 import { PlusGlyph } from "./Glyphs";
-import { Sheet } from "./Kit";
+import { B, R, Sheet } from "./Kit";
 
 export type FabAction = { label: string; glyph: (color: string) => React.ReactNode; onPress: () => void; testID?: string };
 
@@ -64,6 +64,6 @@ const s = StyleSheet.create({
       ? ({ boxShadow: "0 4px 14px rgba(0,0,0,0.35)" } as object)
       : { shadowColor: "#000", shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } }),
   },
-  action: { minHeight: 60, borderRadius: 14, paddingHorizontal: 8, flexDirection: "row", alignItems: "center", gap: 14, marginHorizontal: -8 },
-  coin: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  action: { minHeight: 60, borderRadius: R.md, paddingHorizontal: 8, flexDirection: "row", alignItems: "center", gap: 14, marginHorizontal: -8 },
+  coin: { width: 44, height: 44, borderRadius: 22, borderWidth: B.line, alignItems: "center", justifyContent: "center" },
 });

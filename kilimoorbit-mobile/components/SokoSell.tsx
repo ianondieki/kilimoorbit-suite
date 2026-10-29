@@ -17,7 +17,7 @@ import { useFarm } from "../lib/farm";
 import { sokoActions, useMyListings } from "../lib/soko";
 import { ApiError, type SokoStatus } from "../lib/api";
 import type { Key } from "../lib/i18n";
-import { Btn, Card, Eyebrow, Sheet, T, Tag } from "./Kit";
+import { B, Btn, Card, Eyebrow, R, Sheet, T, Tag } from "./Kit";
 import { CropCoin } from "./ShambaPanel";
 import Field from "./Field";
 
@@ -88,7 +88,7 @@ export function SokoSheet({
       </View>
 
       {!farm.county ? (
-        <View style={{ padding: 14, borderRadius: 14, backgroundColor: t.raised, gap: 10 }}>
+        <View style={{ padding: 14, borderRadius: R.md, backgroundColor: t.raised, gap: 10 }}>
           <Text style={{ color: t.ink, ...T.body, fontWeight: "600" }}>{tt("soko.needCounty")}</Text>
           <Btn kind="secondary" small label={tt("wx.chooseCounty")} onPress={onNeedCounty} style={{ alignSelf: "flex-start" }} testID="soko-county" />
         </View>
@@ -150,7 +150,7 @@ export function SokoSheet({
       </View>
 
       {error ? (
-        <View accessibilityRole="alert" style={{ padding: 12, borderRadius: 12, borderWidth: 1, borderColor: t.alert }}>
+        <View accessibilityRole="alert" style={{ padding: 12, borderRadius: R.md, borderWidth: B.line, borderColor: t.alert }}>
           <Text style={{ color: t.ink, ...T.meta, fontWeight: "600" }}>{error}</Text>
         </View>
       ) : null}
@@ -179,7 +179,7 @@ export function MyListings() {
     <Card>
       <Eyebrow domain="market" icon={(c) => <BarsGlyph size={15} color={c} />} text={tt("soko.mine")} />
       {mine.map((l, i) => (
-        <View key={l.id} style={{ paddingVertical: 10, gap: 8, borderTopWidth: i ? 1 : 0, borderTopColor: t.line }} testID={`listing-${l.crop}`}>
+        <View key={l.id} style={{ paddingVertical: 10, gap: 8, borderTopWidth: i ? B.line : 0, borderTopColor: t.line }} testID={`listing-${l.crop}`}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
             <CropCoin cropKey={l.crop} size={32} />
             <View style={{ flex: 1 }}>

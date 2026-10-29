@@ -5,6 +5,7 @@ import Text from "./Text";
 import { useTheme } from "../lib/theme-context";
 import { focusElement, focusRing, radioKeys, webCursor, type PressState } from "../lib/ui";
 import { haptic } from "../lib/haptics";
+import { B, R } from "./Kit";
 
 type Option<V extends string> = { value: V; label: string };
 
@@ -22,12 +23,12 @@ export default function Segmented<V extends string>({
     <View
       accessibilityRole="radiogroup"
       accessibilityLabel={accessibilityLabel}
-      style={{ minHeight: 52, borderRadius: 14, borderWidth: 2, borderColor: t.dim, flexDirection: "row" }}
+      style={{ minHeight: 52, borderRadius: R.btn, borderWidth: B.control, borderColor: t.dim, flexDirection: "row" }}
     >
       {options.map((o, i) => {
         const selected = o.value === value;
-        // Each segment's touch box is the full 48px inside the 2px border; the
-        // selected fill is drawn 3px in, so the look matches the 52/14 + 11 spec.
+        // Each segment's touch box is at least 48px inside the control border;
+        // the selected fill is drawn 3px in, its radius following the shell's.
         return (
           <Pressable
             key={o.value}
@@ -44,7 +45,7 @@ export default function Segmented<V extends string>({
             aria-checked={selected}
             style={({ pressed, focused }: PressState) => [
               {
-                flex: 1, minHeight: 48, borderRadius: 12, alignItems: "center", justifyContent: "center",
+                flex: 1, minHeight: 48, borderRadius: R.btn - B.control, alignItems: "center", justifyContent: "center",
                 opacity: pressed ? 0.8 : 1,
               },
               webCursor,
@@ -55,7 +56,7 @@ export default function Segmented<V extends string>({
               <>
                 <View
                   style={{
-                    position: "absolute", left: 3, right: 3, top: 3, bottom: 3, borderRadius: 11,
+                    position: "absolute", left: 3, right: 3, top: 3, bottom: 3, borderRadius: R.btn - 3,
                     backgroundColor: selected ? t.accent : hovered ? t.raised : "transparent",
                   }}
                 />

@@ -6,6 +6,9 @@ import { useLang } from "../lib/session";
 import { focusRing, webCursor, webLang, type PressState } from "../lib/ui";
 import { useMenu } from "./MenuContext";
 import { MenuGlyph } from "./Glyphs";
+import { Logotype } from "./auth/Controls";
+import { DISPLAY, LABEL } from "../lib/typography";
+import { B } from "./Kit";
 
 /** 48x48 drawer opener for phone and medium widths (not rendered when docked). */
 export function MenuButton({ style }: { style?: StyleProp<ViewStyle> }) {
@@ -53,11 +56,12 @@ export default function Header({
     <View style={[s.row, { borderBottomColor: t.line, backgroundColor: t.bg }]}>
       <MenuButton style={{ marginLeft: -12, marginVertical: -8 }} />
       {brand && !isDocked ? (
-        <Text style={[s.brand, { color: t.ink }]} numberOfLines={1}>
-          KILIMO<Text style={{ color: t.accent }}>ORBIT</Text>
-        </Text>
+        // Still the screen's one level-1 heading, named for the screen as well as the brand.
+        <View style={{ flex: 1 }} accessible accessibilityRole="header" aria-level={1} accessibilityLabel={`KilimoOrbit · ${title}`}>
+          <Logotype size={19} />
+        </View>
       ) : (
-        <Text accessibilityRole="header" {...webLang(lang)} numberOfLines={1} style={[s.brand, { color: t.ink }]}>{title.toUpperCase()}</Text>
+        <Text accessibilityRole="header" aria-level={1} {...webLang(lang)} numberOfLines={1} style={[s.title, { color: t.ink }]}>{title}</Text>
       )}
       {right ?? (engine ? <EngineStatus engine={engine} /> : null)}
     </View>
@@ -122,11 +126,11 @@ export function EngineStatus({ engine }: { engine: Engine }) {
 }
 const s = StyleSheet.create({
   // minHeight 56 (border included) lines up with the docked sidebar head row.
-  row: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 8, minHeight: 56, borderBottomWidth: 1, gap: 14 },
-  brand: { flex: 1, fontSize: 14, fontWeight: "800", letterSpacing: 2 },
+  row: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 8, minHeight: 56, borderBottomWidth: B.line, gap: 14 },
+  title: { flex: 1, fontFamily: DISPLAY["600"], fontSize: 20, lineHeight: 26, letterSpacing: -0.2 },
   status: { flexDirection: "row", alignItems: "center", gap: 6 },
   dotWrap: { width: 8, height: 8, alignItems: "center", justifyContent: "center" },
   halo: { position: "absolute", width: 8, height: 8, borderRadius: 4 },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  statusTxt: { fontSize: 10.5, fontWeight: "700", letterSpacing: 1 },
+  statusTxt: { fontFamily: LABEL["600"], fontSize: 12, lineHeight: 16, letterSpacing: 1.2 },
 });

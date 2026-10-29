@@ -34,10 +34,10 @@ import { ListenPill } from "../../components/auth/Controls";
 import TaskRows from "../../components/TaskRows";
 import { useMenu } from "../../components/MenuContext";
 import { AddCropSheet, FarmProfileSheet, RecordSheet } from "../../components/FarmSheets";
-import { Btn, Card, Eyebrow, T, Tag } from "../../components/Kit";
+import { Btn, Card, Eyebrow, Notice, S, Section, T, Tag, useSpace } from "../../components/Kit";
 import { Enter, CountUp, Skeleton } from "../../components/Motion";
 import { DemoTag } from "../../components/ShambaPanel";
-import { ArrowGlyph, BarsGlyph, ChatGlyph, CheckCoin, LensGlyph, PlusGlyph, SignalOffGlyph, LeafGlyph } from "../../components/Glyphs";
+import { ArrowGlyph, BarsGlyph, ChatGlyph, CheckCoin, LensGlyph, PlusGlyph, LeafGlyph } from "../../components/Glyphs";
 import { useTheme } from "../../lib/theme-context";
 import { useLang, useSession } from "../../lib/session";
 import { webLang } from "../../lib/ui";
@@ -72,6 +72,9 @@ export default function Today() {
   // Two columns once the content area (window minus the docked sidebar) is wide enough.
   const contentW = width - (isDocked ? 280 : 0);
   const wide = contentW >= 980;
+  const sp = useSpace();
+  // The market section shows while the board loads and whenever it has a route or a climate watch.
+  const showMarket = (sentinel.status !== "ready" && !sentinel.arb) || !!sentinel.arb?.cargo_optimized_route || !!sentinel.arb?.climate_risk_sentinel;
 
   const hour = new Date().getHours();
   const hello = tt(hour < 12 ? "today.morning" : hour < 17 ? "today.afternoon" : "today.evening");
@@ -135,8 +138,9 @@ export default function Today() {
   const market = <Guard name="market"><MarketCard /></Guard>;
   const climate = <Guard name="climate"><ClimateCard /></Guard>;
   // Discover: the county's farm news, the shows near it, and five questions a day.
-  const news = <Guard name="news"><NewsCard county={farm.county} /></Guard>;
-  const shows = <Guard name="shows"><ShowsCard county={county} /></Guard>;
+  // Side by side on a wide screen, the rows don't peek: two peeking edges would meet in the gutter.
+  const news = <Guard name="news"><NewsCard county={farm.county} peek={wide ? 0 : undefined} /></Guard>;
+  const shows = <Guard name="shows"><ShowsCard county={county} peek={wide ? 0 : undefined} /></Guard>;
   const trivia = <Guard name="trivia"><TriviaCard /></Guard>;
 
   return (
@@ -146,45 +150,40 @@ export default function Today() {
         contentContainerStyle={{ flexGrow: 1, paddingBottom: 110 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={t.accent} />}
       >
-        <View style={{ width: "100%", maxWidth: wide ? 1120 : 760, alignSelf: "center", padding: 16, gap: 14 }}>
-          <Enter index={0}>
-            <TodayHero title={first ? `${hello}, ${first}` : hello} subtitle={`${longDay(lang, todayKey())} · ${tt(`season.${season.key}.name` as Key)}`} stats={heroStats} />
-            {/* Hidden by ListenPill itself when the phone has no voice for the language. */}
-            <View style={{ flexDirection: "row", marginTop: 10 }}>
-              <ListenPill script={script} />
-            </View>
-          </Enter>
+        <View style={{ width: "100%", maxWidth: wide ? 1120 : 760, alignSelf: "center", paddingHorizontal: sp.pad, paddingTop: sp.gap, gap: sp.section }}>
+          <View style={{ gap: sp.gap }}>
+            <Enter index={0}>
+              <TodayHero title={hello} name={first || undefined} subtitle={`${longDay(lang, todayKey())} · ${tt(`season.${season.key}.name` as Key)}`} stats={heroStats} />
+              {/* Hidden by ListenPill itself (margin and all) when the phone has no voice for the language. */}
+              <ListenPill script={script} style={{ marginTop: S.md, alignSelf: "flex-start" }} />
+            </Enter>
 
-          <ProblemBanner onFix={() => setSheet("connection")} />
-          <Guard name="alerts"><AlertsCard /></Guard>
-          {/* Only when neighbours are finding fall armyworm above the threshold, and only for maize growers. */}
-          {farm.plantings.some((p) => p.crop === "maize") && <Guard name="pest-watch"><PestWatchCard county={county} compact /></Guard>}
+            <ProblemBanner onFix={() => setSheet("connection")} />
+            <Guard name="alerts"><AlertsCard /></Guard>
+            {/* Only when neighbours are finding fall armyworm above the threshold, and only for maize growers. */}
+            {farm.plantings.some((p) => p.crop === "maize") && <Guard name="pest-watch"><PestWatchCard county={county} compact /></Guard>}
+          </View>
 
-          {wide ? (
-            <View style={{ flexDirection: "row", gap: 14, alignItems: "flex-start" }}>
-              <View style={{ flex: 1, gap: 14 }}>
-                <Enter index={1}>{weather}</Enter>
-                <Enter index={3}>{climate}</Enter>
-                <Enter index={5}>{news}</Enter>
+          {/* Three sections, set apart by space rather than boxes: the farm, the market, then things to read. */}
+          <Section title={tt("today.sec.farm")} sub={tt("today.sec.farmSub")} testID="today-sec-farm">
+            <Pair wide={wide} gap={sp.gap} a={<Enter index={1}>{weather}</Enter>} b={<Enter index={2}>{tasks}</Enter>} />
+          </Section>
+
+          {showMarket && (
+            <Section title={tt("today.sec.market")} sub={tt("today.sec.marketSub")} testID="today-sec-market">
+              <Pair wide={wide} gap={sp.gap} a={<Enter index={3}>{market}</Enter>} b={<Enter index={4}>{climate}</Enter>} />
+            </Section>
+          )}
+
+          <Section title={tt("today.sec.discover")} sub={tt("today.sec.discoverSub")} testID="today-sec-discover">
+            <View style={{ gap: sp.section }}>
+              <Pair wide={wide} gap={sp.gap} a={<Enter index={5}>{news}</Enter>} b={<Enter index={6}>{shows}</Enter>} />
+              {/* The quiz keeps a reading width on wide screens; the space beside it is left open on purpose. */}
+              <View style={wide ? { width: "50%", paddingRight: sp.gap / 2 } : null}>
                 <Enter index={7}>{trivia}</Enter>
               </View>
-              <View style={{ flex: 1, gap: 14 }}>
-                <Enter index={2}>{tasks}</Enter>
-                <Enter index={4}>{market}</Enter>
-                <Enter index={6}>{shows}</Enter>
-              </View>
             </View>
-          ) : (
-            <>
-              <Enter index={1}>{weather}</Enter>
-              <Enter index={2}>{tasks}</Enter>
-              <Enter index={3}>{market}</Enter>
-              <Enter index={4}>{climate}</Enter>
-              <Enter index={5}>{news}</Enter>
-              <Enter index={6}>{shows}</Enter>
-              <Enter index={7}>{trivia}</Enter>
-            </>
-          )}
+          </Section>
         </View>
       </ScrollView>
 
@@ -214,24 +213,31 @@ export default function Today() {
   );
 }
 
-/* ── Offline / Apex problem: one quiet line, not a red card ── */
+/* ── Two cards side by side on a wide screen, one above the other on a phone ── */
+function Pair({ wide, gap, a, b }: { wide: boolean; gap: number; a: React.ReactNode; b: React.ReactNode }) {
+  if (!wide) return <View style={{ gap }}>{a}{b}</View>;
+  return (
+    <View style={{ flexDirection: "row", gap, alignItems: "flex-start" }}>
+      <View style={{ flex: 1, minWidth: 0 }}>{a}</View>
+      <View style={{ flex: 1, minWidth: 0 }}>{b}</View>
+    </View>
+  );
+}
+
+/* ── Offline / Apex problem: a quiet callout with one action, not a red card ── */
 function ProblemBanner({ onFix }: { onFix: () => void }) {
-  const t = useTheme();
   const { t: tt } = useLang();
   const { problem, reload, refreshing } = useSentinel();
   if (!problem) return null;
   const text = problem.kind === "cached" ? tt("sentinel.cached", { n: problem.mins }) : problem.kind === "offline" ? tt("sentinel.offline") : tt("sentinel.apex");
   return (
-    <View
-      accessibilityRole="alert"
-      style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6, paddingLeft: 14, paddingRight: 6, borderRadius: 14, backgroundColor: t.raised, borderWidth: 1, borderColor: t.line }}
-    >
-      <SignalOffGlyph size={18} color={t.ink} />
-      <Text style={{ flex: 1, color: t.ink, ...T.meta, fontWeight: "600" }}>{text}</Text>
-      {problem.kind === "apex"
-        ? <Btn kind="ghost" small label={tt("result.retry")} onPress={reload} disabled={refreshing} />
-        : <Btn kind="ghost" small label={tt("sentinel.fix")} onPress={onFix} icon={(c) => <SignalOffGlyph size={14} color={c} />} testID="fix-connection" />}
-    </View>
+    <Notice
+      tone={problem.kind === "apex" ? "error" : "offline"}
+      title={text}
+      action={problem.kind === "apex"
+        ? { label: tt("result.retry"), onPress: reload, disabled: refreshing }
+        : { label: tt("sentinel.fix"), onPress: onFix, testID: "fix-connection" }}
+    />
   );
 }
 
@@ -323,7 +329,7 @@ function MarketCard() {
       <Eyebrow domain="market" icon={(c) => <BarsGlyph size={15} color={c} />} text={tt("market.eyebrow", { crop: cropName(lang, c.crop_type).toUpperCase() })} right={demo ? <DemoTag /> : null} />
       <Text style={{ color: t.ink, ...T.title }} {...webLang("en")}>{c.optimal_market_destination}</Text>
       {c.live_market_wholesale_price_per_kg != null && (
-        <Text style={{ color: t.dim, ...T.meta, fontFamily: "monospace" }}>KES {c.live_market_wholesale_price_per_kg}/kg</Text>
+        <Text style={{ color: t.dim, ...T.meta, fontWeight: "700", fontVariant: ["tabular-nums"] }}>KES {c.live_market_wholesale_price_per_kg}/kg</Text>
       )}
       {c.net_profit_projection_kes != null ? (
         <View style={{ marginTop: 10 }}>

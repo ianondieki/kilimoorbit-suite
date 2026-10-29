@@ -14,7 +14,7 @@ import { weekday, weekdayShort, todayKey, addDays } from "../lib/dates";
 import type { Forecast, WxDay } from "../lib/api";
 import type { WeatherState } from "../lib/weather";
 import type { Key, Lang, Vars } from "../lib/i18n";
-import { Btn, Card, Eyebrow, T } from "./Kit";
+import { B, Btn, Card, Eyebrow, R, T } from "./Kit";
 import { DemoTag } from "./ShambaPanel";
 import { Skeleton } from "./Motion";
 import { CheckCoin, ChevronGlyph, CrossGlyph, SignalOffGlyph } from "./Glyphs";
@@ -53,14 +53,15 @@ export default function WeatherCard({
 
       {!countySet && (
         <View style={{ marginTop: -6, marginBottom: 6 }}>
-          <Text style={{ color: t.dim, ...T.meta }}>{tt("wx.setCounty")}</Text>
+          {/* Body size, like the tasks card beside it: this is the card's message, not a footnote. */}
+          <Text style={{ color: t.ink, ...T.body }}>{tt("wx.setCounty")}</Text>
           <Btn
             kind="ghost"
             small
             label={tt("wx.chooseCounty")}
             onPress={onChooseCounty}
             icon={(c) => <ChevronGlyph size={11} color={c} dir="right" />}
-            style={{ flexDirection: "row-reverse", alignSelf: "flex-start", minHeight: 40 }}
+            style={{ flexDirection: "row-reverse", alignSelf: "flex-start", minHeight: 44 }}
             testID="choose-county"
           />
         </View>
@@ -100,12 +101,12 @@ function Body({ f, cachedAgeMin }: { f: Forecast; cachedAgeMin?: number }) {
       <View
         accessible
         accessibilityLabel={tt("wx.dayA11y", { day: tt("common.today"), sky: sky(d0), tmax: d0.tmax, tmin: d0.tmin, p: d0.rain_chance })}
-        style={{ borderRadius: 16, overflow: "hidden", borderWidth: 1, borderColor: t.line }}
+        style={{ borderRadius: R.card, overflow: "hidden", borderWidth: B.line, borderColor: t.line }}
         testID="wx-hero"
       >
         <SkyScene sky={d0.sky} hour={hour} height={176} />
         <View style={{ position: "absolute", left: 16, top: 12, right: hasSunOrMoon(d0.sky, part) ? 104 : 20 }}>
-          <Text style={{ color: "#FFFFFF", fontSize: 54, lineHeight: 60, fontWeight: "800", letterSpacing: -1.5 }}>{d0.tmax}°</Text>
+          <Text style={{ color: "#FFFFFF", ...T.displayLg, fontSize: 56, lineHeight: 60, letterSpacing: -2, fontVariant: ["tabular-nums"] }}>{d0.tmax}°</Text>
           <Text display numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={{ color: "#FFFFFF", fontSize: 22, lineHeight: 28 }}>{skyWord}</Text>
           <Text style={{ color: "rgba(255,255,255,0.86)", ...T.meta, fontWeight: "700", marginTop: 2 }}>{tt("wx.low", { n: d0.tmin })}</Text>
         </View>
@@ -124,7 +125,7 @@ function Body({ f, cachedAgeMin }: { f: Forecast; cachedAgeMin?: number }) {
       ) : null}
 
       {/* 7-day strip: each day is one labelled group for screen readers. */}
-      <View style={{ flexDirection: "row", borderTopWidth: 1, borderBottomWidth: 1, borderColor: t.line, paddingVertical: 10 }}>
+      <View style={{ flexDirection: "row", borderTopWidth: B.line, borderBottomWidth: B.line, borderColor: t.line, paddingVertical: 10 }}>
         {f.days.slice(0, 7).map((d) => {
           const isToday = d.date === today;
           const name = isToday ? tt("common.today") : weekdayShort(lang, d.date);
@@ -138,15 +139,15 @@ function Body({ f, cachedAgeMin }: { f: Forecast; cachedAgeMin?: number }) {
             >
               <Text style={{ color: isToday ? t.accent : t.dim, fontSize: 12, lineHeight: 16, fontWeight: "800" }} numberOfLines={1}>{name}</Text>
               <Icon name={skyIcon(d.sky, t).name} size={26} color={skyIcon(d.sky, t).color} />
-              <Text style={{ color: t.ink, fontSize: 14, lineHeight: 18, fontWeight: "700" }}>{d.tmax}°</Text>
-              <Text style={{ color: d.rain_chance >= 50 ? t.water : t.dim, fontSize: 11.5, lineHeight: 15, fontWeight: "700" }}>{d.rain_chance}%</Text>
+              <Text style={{ color: t.ink, fontSize: 14, lineHeight: 18, fontWeight: "700", fontVariant: ["tabular-nums"] }}>{d.tmax}°</Text>
+              <Text style={{ color: d.rain_chance >= 50 ? t.water : t.dim, fontSize: 12, lineHeight: 16, fontWeight: "700", fontVariant: ["tabular-nums"] }}>{d.rain_chance}%</Text>
             </View>
           );
         })}
       </View>
 
       <View style={{ gap: 10 }}>
-        <Text accessibilityRole="header" aria-level={3} style={{ color: t.dim, fontSize: 11, lineHeight: 14, fontFamily: "monospace", fontWeight: "700", letterSpacing: 1.6 }}>
+        <Text accessibilityRole="header" aria-level={3} style={{ color: t.dim, ...T.label }}>
           {tt("win.eyebrow")}
         </Text>
         {(["spray", "plant", "dry"] as Win[]).map((w) => (
@@ -163,8 +164,8 @@ function Stat({ icon, label, value, color, testID }: { icon: IconName; label: st
   return (
     <View testID={testID} style={{ flex: 1, backgroundColor: t.raised, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 10, gap: 2 }}>
       <Icon name={icon} size={18} color={t.dim} />
-      <Text numberOfLines={1} adjustsFontSizeToFit style={{ color, fontSize: 16, lineHeight: 20, fontWeight: "800", marginTop: 4 }}>{value}</Text>
-      <Text numberOfLines={1} style={{ color: t.dim, fontSize: 11.5, lineHeight: 14, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase" }}>{label}</Text>
+      <Text numberOfLines={1} adjustsFontSizeToFit style={{ color, fontSize: 16, lineHeight: 20, fontWeight: "800", marginTop: 4, fontVariant: ["tabular-nums"] }}>{value}</Text>
+      <Text numberOfLines={1} style={{ color: t.dim, ...T.label, letterSpacing: 0.8 }}>{label}</Text>
     </View>
   );
 }

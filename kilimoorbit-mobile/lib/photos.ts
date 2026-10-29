@@ -17,7 +17,7 @@ export const PHOTOS: Record<PhotoKey, Photo> = {
     license: "CC BY-SA 2.0",
     licenseUrl: "https://creativecommons.org/licenses/by-sa/2.0/",
     source: "https://www.flickr.com/photos/38476503@N08/5366719785",
-    focusY: 0.45,
+    focusY: 0.3,
   },
   doctor: {
     src: require("../assets/photos/doctor.jpg"),
@@ -103,5 +103,27 @@ export const PHOTOS: Record<PhotoKey, Photo> = {
 };
 
 export const PHOTO_KEYS = Object.keys(PHOTOS) as PhotoKey[];
+
+/**
+ * The small, related sequence each screen hero turns through, from the same
+ * ten bundled photos. The first one is the hero's own photo (shown alone, and
+ * still, with reduced motion).
+ */
+export const PHOTO_SETS = {
+  // Today is the one overview, so it turns through four sections; it never opens on another screen's own photo.
+  today: ["sacco", "livestock", "markets", "nursery"],
+  markets: ["markets", "autopilot"],
+  doctor: ["doctor", "nursery"],
+  // The conversation is the point of Chat: one still photo.
+  chat: ["chat"],
+  autopilot: ["autopilot", "markets"],
+  login: ["login", "farm", "sacco"],
+  shamba: ["farm", "livestock", "fish"],
+  livestock: ["livestock"],
+  fish: ["fish"],
+  // Heroes inside a screen (under that screen's own turning hero) stay still: one moving hero per screen.
+  sacco: ["sacco"],
+  nursery: ["nursery"],
+} satisfies Record<string, PhotoKey[]>;
 /** "Photo: CIAT · CC BY-SA 2.0" */
 export const creditLine = (p: Photo) => `${p.credit} · ${p.license}`;

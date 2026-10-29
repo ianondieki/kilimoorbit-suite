@@ -22,7 +22,7 @@ import {
 import { MONTHS } from "../lib/i18n";
 import { herdActions, useHerd } from "../lib/herd";
 import type { Key } from "../lib/i18n";
-import { Btn, Card, CheckRow, Chip, ChipRow, Empty, Eyebrow, Group, Sheet, Stepper, T, Tag, tint } from "./Kit";
+import { B, Btn, Card, CheckRow, Chip, ChipRow, Empty, Eyebrow, Group, R, Sheet, Stepper, T, Tag, tint, useSpace } from "./Kit";
 import { LevelBar } from "./Motion";
 import { DateNudge } from "./FarmSheets";
 import { dueText } from "./TaskRows";
@@ -505,7 +505,7 @@ function AnimalCard({ a, onRecord, onMilk, onEggs }: { a: Animal; onRecord: (k: 
               <Text style={{ color: t.dim, ...T.meta }}>{tt("herd.noHistory")}</Text>
             ) : (
               history.map((e) => (
-                <View key={e.id} style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: 40 }}>
+                <View key={e.id} style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: 44 }}>
                   <Text style={{ width: 52, color: t.dim, fontSize: 12.5, fontWeight: "700" }}>{dayMonth(lang, e.date)}</Text>
                   <Text style={{ flex: 1, color: t.ink, ...T.meta }}>{tt(`ev.${e.kind}` as Key)}{e.note ? ` · ${e.note}` : ""}</Text>
                   <Pressable
@@ -513,7 +513,7 @@ function AnimalCard({ a, onRecord, onMilk, onEggs }: { a: Animal; onRecord: (k: 
                     accessibilityRole="button"
                     accessibilityLabel={tt("ev.undo", { what: `${tt(`ev.${e.kind}` as Key)}, ${dayMonth(lang, e.date)}` })}
                     style={({ pressed, hovered, focused }: PressState) => [
-                      { width: 40, height: 40, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+                      { width: 44, height: 44, borderRadius: 10, alignItems: "center", justifyContent: "center" },
                       (hovered || pressed) && { backgroundColor: t.raised },
                       webCursor, focusRing(focused, t.accent),
                     ]}
@@ -788,7 +788,7 @@ function HatchSheet({ visible, onClose }: { visible: boolean; onClose: () => voi
         </ChipRow>
         <DateNudge value={set} onChange={(k) => setSet(k > today ? today : k)} label={tt("hatch.set")} />
       </Group>
-      <View style={{ backgroundColor: t.raised, borderRadius: 14, padding: 14, gap: 6 }}>
+      <View style={{ backgroundColor: t.raised, borderRadius: R.md, padding: 14, gap: 6 }}>
         {(method === "incubator" ? ["hatch.tip.temp", "hatch.tip.turn", "hatch.tip.candle"] : ["hatch.tip.hen", "hatch.tip.nest", "hatch.tip.candle"]).map((k) => (
           <View key={k} style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
             <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: t.ok, marginTop: 8 }} />
@@ -815,7 +815,7 @@ function HatchCard() {
         const next = hatchSteps(h).find((s) => addDays(h.set, s.day) >= today);
         const due = day >= HATCH_DAYS;
         return (
-          <View key={h.id} style={{ paddingVertical: 10, gap: 8, borderTopWidth: i ? 1 : 0, borderTopColor: t.line }} testID={`hatch-${h.id}`}>
+          <View key={h.id} style={{ paddingVertical: 10, gap: 8, borderTopWidth: i ? B.line : 0, borderTopColor: t.line }} testID={`hatch-${h.id}`}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
               <Text style={{ fontSize: 24 }}>🥚</Text>
               <View style={{ flex: 1 }}>
@@ -951,9 +951,10 @@ export function HerdSection() {
   const hasMilkers = herd.animals.some(isMilker);
   const hasLayers = herdHasLayers(herd.animals) || herd.eggs.length > 0;
   const [hatching, setHatching] = useState(false);
+  const sp = useSpace();
 
   return (
-    <View style={{ gap: 14 }}>
+    <View style={{ gap: sp.gap }}>
       {herd.animals.length === 0 ? (
         <Card>
           <Empty

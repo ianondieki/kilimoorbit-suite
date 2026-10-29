@@ -3,7 +3,7 @@
  * pill, Listen (text-to-speech) pill, back button, banners and buttons.
  * Every control is a real >= 48px box with a visible web focus outline.
  */
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View, Pressable, type StyleProp, type ViewStyle } from "react-native";
 import Text from "../Text";
 import Animated, {
@@ -17,8 +17,27 @@ import { useLang } from "../../lib/session";
 import { focusRing, isWeb, spaceActivates, webCursor, type PressState } from "../../lib/ui";
 import type { Lang } from "../../lib/i18n";
 import { PressScale } from "../Motion";
+import { B, R, tint } from "../Kit";
+import { DISPLAY, ITALIC, LABEL } from "../../lib/typography";
 import { OrbitSpinner } from "../SeasonOrbit";
 import { ArrowGlyph, CheckGlyph, ChevronGlyph, CrossGlyph, SignalOffGlyph, SpeakerGlyph, SunGlyph } from "../Glyphs";
+
+/* ── Logotype: an orbit mark (a gold seed circling on the forest tile) and "Kilimo" upright, "Orbit" in italic ── */
+export function Logotype({ size = 20 }: { size?: number }) {
+  const t = useTheme();
+  const tile = Math.round(size * 1.3);
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: Math.round(size * 0.45) }}>
+      <View style={{ width: tile, height: tile, borderRadius: Math.round(tile * 0.3), backgroundColor: t.key === "savanna" ? t.accent : "#1A6642", alignItems: "center", justifyContent: "center" }}>
+        <View style={{ width: tile * 0.56, height: tile * 0.56, borderRadius: tile, borderWidth: 1.5, borderColor: "rgba(255,255,255,0.7)" }} />
+        <View style={{ position: "absolute", top: tile * 0.17, right: tile * 0.17, width: tile * 0.22, height: tile * 0.22, borderRadius: tile, backgroundColor: "#E9B44C" }} />
+      </View>
+      <Text maxFontSizeMultiplier={1.4} style={{ color: t.ink, fontFamily: DISPLAY["600"], fontSize: size, lineHeight: Math.round(size * 1.2), letterSpacing: -0.3 }}>
+        Kilimo<Text style={{ fontFamily: ITALIC, color: t.accent }}>Orbit</Text>
+      </Text>
+    </View>
+  );
+}
 
 /* ── Wordmark (logotype; exempt from the text-contrast rule) ── */
 export function Wordmark({ size = "bar" }: { size?: "bar" | "panel" }) {
@@ -26,12 +45,10 @@ export function Wordmark({ size = "bar" }: { size?: "bar" | "panel" }) {
   const bar = size === "bar";
   return (
     // A logotype, not a heading: the page headline is the only level-1 heading.
-    // Web: role "img" so the label (not the all-caps letters) is what is read.
-    <View accessible accessibilityLabel="KilimoOrbit Sentinel" {...(isWeb ? ({ role: "img" } as any) : null)}>
-      <Text maxFontSizeMultiplier={1.4} style={{ color: t.ink, fontSize: bar ? 15 : 22, lineHeight: bar ? 18 : 26, fontWeight: "800", letterSpacing: bar ? 2 : 3 }}>
-        KILIMO<Text style={{ color: t.accent }}>ORBIT</Text>
-      </Text>
-      <Text maxFontSizeMultiplier={1.4} style={{ color: t.dim, fontSize: bar ? 10 : 11, fontFamily: "monospace", letterSpacing: bar ? 3 : 4, marginTop: bar ? 1 : 2 }}>
+    // Web: role "img" so the label (not the letters) is what is read.
+    <View accessible accessibilityLabel="KilimoOrbit Sentinel" {...(isWeb ? ({ role: "img" } as any) : null)} style={{ gap: bar ? 2 : 4 }}>
+      <Logotype size={bar ? 19 : 26} />
+      <Text maxFontSizeMultiplier={1.4} style={{ color: t.dim, fontFamily: LABEL["600"], fontSize: bar ? 10 : 11, lineHeight: 14, letterSpacing: bar ? 3 : 4, marginLeft: bar ? 34 : 46 /* under the letters: tile + gap */ }}>
         SENTINEL
       </Text>
     </View>
@@ -70,7 +87,7 @@ export function SunToggle({ variant }: { variant: "icon" | "pill" }) {
       aria-checked={isSavanna}
       style={({ pressed, hovered, focused }: PressState) => [
         {
-          height: 48, borderRadius: 24, borderWidth: 2, borderColor: isSavanna ? t.accent : t.dim,
+          height: 48, borderRadius: 24, borderWidth: B.control, borderColor: isSavanna ? t.accent : t.dim,
           backgroundColor: isSavanna ? t.accent : hovered ? t.raised : "transparent",
           alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8,
           opacity: pressed ? 0.8 : 1,
@@ -101,7 +118,7 @@ export function LangPill() {
       accessibilityLabel={tt("lang.a11y")}
       style={({ pressed, hovered, focused }: PressState) => [
         {
-          height: 48, paddingHorizontal: 16, borderRadius: 24, borderWidth: 2, borderColor: t.dim,
+          height: 48, paddingHorizontal: 16, borderRadius: 24, borderWidth: B.control, borderColor: t.dim,
           alignItems: "center", justifyContent: "center",
           backgroundColor: hovered ? t.raised : "transparent", opacity: pressed ? 0.8 : 1,
         },
@@ -160,7 +177,7 @@ function useVoiceFor(lang: Lang): VoiceInfo | null {
   return matches.find((v) => norm(v.language) === `${lang}-ke`) ?? matches[0] ?? null;
 }
 
-export function ListenPill({ script }: { script: string }) {
+export function ListenPill({ script, style }: { script: string; style?: StyleProp<ViewStyle> }) {
   const t = useTheme();
   const { lang, t: tt } = useLang();
   const reduce = useReducedMotion();
@@ -178,34 +195,76 @@ export function ListenPill({ script }: { script: string }) {
   }, [speaking, reduce]);
   const arcStyle = useAnimatedStyle(() => ({ opacity: arc.value }));
 
+  // Breathing: the pill swells a little and a soft ring leaves it, to say
+  // "press me". Three breaths (under 5s, so it never needs a pause control,
+  // WCAG 2.2.2) when it appears, and again when a pointer or focus reaches it.
+  // Never while it speaks, never on reduced motion.
+  const BREATH = 1500;
+  const breath = useSharedValue(1);
+  const breathingUntil = useRef(0);
+  const breathe = () => {
+    // A cycle already running finishes as it is: restarting would snap the pill back.
+    if (reduce || speaking || Date.now() < breathingUntil.current) return;
+    breathingUntil.current = Date.now() + BREATH * 3;
+    breath.value = 0;
+    breath.value = withRepeat(withTiming(1, { duration: BREATH, easing: Easing.inOut(Easing.sin) }), 3, false);
+  };
+  const hasVoice = !!voice;
+  useEffect(() => {
+    if (!hasVoice) return;
+    breathe();
+    return () => cancelAnimation(breath);
+  }, [hasVoice, reduce]);
+  const rest = () => { cancelAnimation(breath); breath.value = 1; breathingUntil.current = 0; };
+  useEffect(() => { if (speaking) rest(); }, [speaking]);
+  const swell = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.035 * Math.sin(Math.PI * breath.value) }] }));
+  // One scale on both axes keeps the ring's rounded ends round as it leaves.
+  const halo = useAnimatedStyle(() => ({
+    opacity: 0.5 * Math.sin(Math.PI * Math.min(1, breath.value * 1.4)) * (1 - breath.value * 0.4),
+    transform: [{ scale: 1 + 0.16 * breath.value }],
+  }));
+
   if (!voice) return null;
   const press = () => {
+    rest();
     if (speaking) { Speech.stop(); setSpeaking(false); return; }
     Speech.stop();
     setSpeaking(true);
     const end = () => setSpeaking(false);
     Speech.speak(script, { language: voice.language, voice: voice.identifier, onDone: end, onStopped: end, onError: end });
   };
+  // Tinted with the accent so it reads as an invitation, not a secondary outline.
+  const fill = (hovered?: boolean) => tint(t.accent, speaking ? 0.2 : hovered ? 0.16 : 0.1);
   return (
-    <Pressable
-      onPress={press}
-      accessibilityRole="button"
-      accessibilityLabel={speaking ? tt("listen.stopA11y") : tt("listen.label")}
-      accessibilityState={{ busy: speaking }}
-      style={({ pressed, hovered, focused }: PressState) => [
-        {
-          height: 48, paddingHorizontal: 14, borderRadius: 24, borderWidth: 2, borderColor: t.dim,
-          flexDirection: "row", alignItems: "center", gap: 8,
-          backgroundColor: hovered ? t.raised : "transparent", opacity: pressed ? 0.8 : 1,
-        },
-        webCursor, focusRing(focused, t.accent),
-      ]}
-    >
-      <SpeakerGlyph size={20} color={t.accent} arcStyle={arcStyle} />
-      <Text maxFontSizeMultiplier={1.4} style={{ color: t.ink, fontSize: 15, fontWeight: "700" }}>
-        {speaking ? tt("listen.busy") : tt("listen.label")}
-      </Text>
-    </Pressable>
+    <Animated.View style={[style, swell]}>
+      {/* The ring that leaves the pill on each breath: drawn behind it, never in the way. */}
+      <Animated.View
+        aria-hidden
+        style={[{ pointerEvents: "none", position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: 24, borderWidth: 2, borderColor: t.accent }, halo]}
+      />
+      <Pressable
+        onPress={press}
+        onHoverIn={breathe}
+        onFocus={breathe}
+        accessibilityRole="button"
+        // Speaking, the name starts with the visible "Reading…" and says what a press does (WCAG 2.5.3).
+        accessibilityLabel={speaking ? `${tt("listen.busy")}, ${tt("listen.stopA11y")}` : tt("listen.label")}
+        accessibilityState={{ busy: speaking }}
+        style={({ pressed, hovered, focused }: PressState) => [
+          {
+            height: 48, paddingLeft: 14, paddingRight: 18, borderRadius: 24, borderWidth: B.control, borderColor: tint(t.accent, 0.55),
+            flexDirection: "row", alignItems: "center", gap: 8,
+            backgroundColor: fill(hovered), opacity: pressed ? 0.85 : 1,
+          },
+          webCursor, focusRing(focused, t.accent),
+        ]}
+      >
+        <SpeakerGlyph size={20} color={t.accent} arcStyle={arcStyle} />
+        <Text maxFontSizeMultiplier={1.4} style={{ color: t.ink, fontSize: 15, fontWeight: "700" }}>
+          {speaking ? tt("listen.busy") : tt("listen.label")}
+        </Text>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -217,7 +276,7 @@ export function Banner({ kind, text, style }: { kind: "offline" | "rejected"; te
       accessibilityLiveRegion="polite"
       aria-live="polite"
       style={[{
-        borderRadius: 12, backgroundColor: t.raised, borderLeftWidth: 4,
+        borderRadius: R.md, backgroundColor: t.raised, borderLeftWidth: B.rule,
         borderLeftColor: kind === "offline" ? t.accent : t.alert,
         paddingVertical: 10, paddingHorizontal: 12, flexDirection: "row", gap: 10, alignItems: "flex-start",
       }, style]}
@@ -300,7 +359,7 @@ export function OutlineButton({ label, onPress, style }: { label: string; onPres
       accessibilityLabel={label}
       style={({ pressed, hovered, focused }: PressState) => [
         {
-          minHeight: 56, borderRadius: 16, borderWidth: 2, borderColor: t.dim, paddingHorizontal: 16,
+          minHeight: 56, borderRadius: 16, borderWidth: B.control, borderColor: t.dim, paddingHorizontal: 16,
           alignItems: "center", justifyContent: "center",
           backgroundColor: hovered ? t.raised : "transparent", opacity: pressed ? 0.8 : 1,
         },

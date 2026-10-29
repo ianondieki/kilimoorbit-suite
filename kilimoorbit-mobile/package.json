@@ -5,6 +5,8 @@
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
+    "web": "expo start --web",
+    "web:fast": "expo export --platform web --output-dir dist && expo serve --port 8090",
     "typecheck": "tsc --noEmit",
     "e2e": "playwright test"
   },

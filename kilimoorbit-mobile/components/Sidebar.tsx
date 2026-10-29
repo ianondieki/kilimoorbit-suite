@@ -7,13 +7,14 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Image,
-  Modal, View, Pressable, ScrollView, Switch, useWindowDimensions, type LayoutChangeEvent,
+  Modal, View, Pressable, ScrollView, Switch, useWindowDimensions, type LayoutChangeEvent, type ViewStyle,
 } from "react-native";
 import Text from "./Text";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
-  Easing, ReduceMotion, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming,
+  Easing, ReduceMotion, interpolateColor, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming,
 } from "react-native-reanimated";
+import { DISPLAY, ITALIC } from "../lib/typography";
 import { scheduleOnRN } from "react-native-worklets";
 import { useVoicePref } from "../lib/voice";
 import Constants from "expo-constants";
@@ -27,13 +28,14 @@ import { ConnectionSheet } from "./Connection";
 import { THEMES, type Theme } from "../lib/themes";
 import { useLang, useSession } from "../lib/session";
 import { maskEmail, maskPhone, initials } from "../lib/phone";
-import { focusElement, focusRing, radioKeys, spaceActivates, webCursor, isWeb, type PressState } from "../lib/ui";
+import { focusElement, focusRing, focusRingInset, noOutline, radioKeys, spaceActivates, webCursor, isWeb, type PressState } from "../lib/ui";
 import type { Key } from "../lib/i18n";
 import { useMenu, type CloseOpts } from "./MenuContext";
-import { Sheet, tint } from "./Kit";
+import { B, R, S, Sheet, T, tint } from "./Kit";
 import { PHOTOS, PHOTO_KEYS } from "../lib/photos";
 import { openLink } from "../lib/news";
 import Segmented from "./Segmented";
+import { Logotype } from "./auth/Controls";
 import { ArrowGlyph, BarsGlyph, ChatGlyph, CheckCoin, CheckGlyph, ChevronGlyph, CrossGlyph, ExitGlyph, LeafGlyph, LensGlyph, MoonGlyph, PersonGlyph, PhoneGlyph, PlusGlyph, SignalOffGlyph, SpeakerGlyph, SunGlyph } from "./Glyphs";
 
 type Variant = "drawer" | "docked";
@@ -48,7 +50,7 @@ function Docked() {
   return (
     <View
       role="navigation"
-      style={{ width: 280, height: "100%", backgroundColor: t.panel, borderRightWidth: 1, borderRightColor: t.line }}
+      style={{ width: 280, height: "100%", backgroundColor: t.rail, borderRightWidth: B.line, borderRightColor: t.line }}
     >
       <SidebarBody variant="docked" open />
     </View>
@@ -132,8 +134,8 @@ function Drawer() {
           aria-label={tt("menu.a11y")}
           style={[{
             position: "absolute", left: 0, top: 0, bottom: 0, width: W,
-            backgroundColor: t.panel, borderRightWidth: 1, borderRightColor: t.line,
-            borderTopRightRadius: 20, borderBottomRightRadius: 20, overflow: "hidden",
+            backgroundColor: t.rail, borderRightWidth: B.line, borderRightColor: t.line,
+            borderTopRightRadius: R.sheet, borderBottomRightRadius: R.sheet, overflow: "hidden",
             paddingTop: insets.top, paddingBottom: insets.bottom,
           }, panelStyle]}
         >
@@ -201,16 +203,12 @@ function SidebarBody({ variant, open }: { variant: Variant; open: boolean }) {
       <View style={[
         { height: 56, paddingLeft: 20, paddingRight: 4, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
         // Docked: the hairline lines up with the page headers beside it.
-        !drawer && { borderBottomWidth: 1, borderBottomColor: t.line },
+        !drawer && { borderBottomWidth: B.line, borderBottomColor: t.line },
       ]}>
         {/* Logotype, not a heading. */}
-        <Text
-          accessibilityLanguage={lang}
-          maxFontSizeMultiplier={1.4}
-          style={{ color: t.ink, fontSize: 14, lineHeight: 18, fontWeight: "800", letterSpacing: 2 }}
-        >
-          KILIMO<Text style={{ color: t.accent }}>ORBIT</Text>
-        </Text>
+        <View accessible accessibilityLabel="KilimoOrbit" accessibilityLanguage={lang}>
+          <Logotype size={18} />
+        </View>
         {drawer && (
           <Pressable
             ref={closeRef}
@@ -228,15 +226,16 @@ function SidebarBody({ variant, open }: { variant: Variant; open: boolean }) {
         )}
       </View>
 
-      <ScrollView ref={scrollRef} style={{ flex: 1 }}>
-        {/* 2. Profile card */}
-        <View style={{ marginHorizontal: 12, marginTop: 4, padding: 16, borderRadius: 16, backgroundColor: t.raised, borderWidth: 1, borderColor: t.line }}>
-          {signedIn ? (
-            <ProfileBlock onEdit={() => toLogin(true)} docked={!drawer} />
-          ) : (
+      <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={{ paddingTop: S.md }}>
+        {/* 2. Profile card: the one raised surface on the rail. Signed in, the
+            whole card is the way to edit the profile. */}
+        {signedIn ? (
+          <ProfileBlock onEdit={() => toLogin(true)} docked={!drawer} />
+        ) : (
+          <View style={[cardSurface(t), { marginHorizontal: S.md, padding: S.lg }]}>
             <GuestBlock onSignIn={() => toLogin(false)} />
-          )}
-        </View>
+          </View>
+        )}
 
         {/* 3. Nenda */}
         <Eyebrow text={tt("eyebrow.nav")} />
@@ -255,10 +254,8 @@ function SidebarBody({ variant, open }: { variant: Variant; open: boolean }) {
 
         {/* 4. Mipangilio */}
         <Eyebrow text={tt("eyebrow.settings")} />
-        <Text style={{ color: t.dim, fontSize: 14, lineHeight: 20, fontWeight: "700", paddingHorizontal: 20, marginBottom: 8 }}>
-          {tt("settings.lang")}
-        </Text>
-        <View style={{ marginHorizontal: 16 }}>
+        <SubLabel text={tt("settings.lang")} />
+        <View style={{ marginHorizontal: S.md }}>
           <Segmented
             accessibilityLabel={tt("settings.lang")}
             options={[{ value: "sw", label: "Kiswahili" }, { value: "en", label: "English" }]}
@@ -267,10 +264,8 @@ function SidebarBody({ variant, open }: { variant: Variant; open: boolean }) {
           />
         </View>
 
-        <Text style={{ color: t.dim, fontSize: 14, lineHeight: 20, fontWeight: "700", paddingHorizontal: 20, marginBottom: 8, marginTop: 16 }}>
-          {tt("settings.theme")}
-        </Text>
-        <View accessibilityRole="radiogroup" accessibilityLabel={tt("settings.theme")} style={{ flexDirection: "row", marginHorizontal: drawer ? 16 : 12, gap: drawer ? 8 : 6 }}>
+        <SubLabel text={tt("settings.theme")} top={S.xl} />
+        <View accessibilityRole="radiogroup" accessibilityLabel={tt("settings.theme")} style={{ flexDirection: "row", marginHorizontal: S.md, gap: drawer ? S.sm : 6 }}>
           {THEMES.map((th, i) => (
             <ThemeTile key={th.key} theme={th} selected={t.key === th.key} onPress={() => setThemeKey(th.key)}
               hint={tt(`theme.${th.key}` as Key)} narrow={!drawer}
@@ -284,66 +279,48 @@ function SidebarBody({ variant, open }: { variant: Variant; open: boolean }) {
           ))}
         </View>
 
-        <Pressable
-          onPress={() => toggleVoice(!voice)}
-          {...spaceActivates(() => toggleVoice(!voice))}
-          accessibilityRole="switch"
-          accessibilityLabel={tt("settings.voice")}
-          accessibilityState={{ checked: voice }}
-          aria-checked={voice}
-          style={({ pressed, hovered, focused }: PressState) => [
-            { marginTop: 12, minHeight: 56, paddingHorizontal: 20, flexDirection: "row", alignItems: "center", gap: 14 },
-            hovered && { backgroundColor: drawer ? t.raised : t.bg },
-            pressed && { opacity: 0.7 },
-            webCursor, focusRing(focused, t.accent),
-          ]}
-        >
-          <SpeakerGlyph size={22} color={t.ink} />
-          <Text style={{ flex: 1, color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "600" }}>{tt("settings.voice")}</Text>
-          <SwitchVisual value={voice} />
-        </Pressable>
-
-        <Pressable
-          onPress={() => setConn(true)}
-          accessibilityRole="button"
-          accessibilityLabel={`${tt("settings.server")}: ${hostOf(apiBase)}`}
-          testID="settings-server"
-          style={({ pressed, hovered, focused }: PressState) => [
-            { minHeight: 56, paddingHorizontal: 20, flexDirection: "row", alignItems: "center", gap: 14 },
-            hovered && { backgroundColor: drawer ? t.raised : t.bg },
-            pressed && { opacity: 0.7 },
-            webCursor, focusRing(focused, t.accent),
-          ]}
-        >
-          <SignalOffGlyph size={22} color={t.ink} />
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "600" }}>{tt("settings.server")}</Text>
-            <Text numberOfLines={1} style={{ color: t.dim, fontSize: 12, lineHeight: 16, fontFamily: "monospace" }}>{hostOf(apiBase)}</Text>
-          </View>
-          <ChevronGlyph size={12} color={t.dim} dir="right" />
-        </Pressable>
-
-        {/* What is running: the app version and whether the bundled fonts loaded, so an old bundle or a font that failed is visible at a glance. */}
-        <View accessible accessibilityLabel={`${tt("settings.app")}: ${appVersion}, ${tt(fontsOk ? "settings.fontsOk" : "settings.fontsFail")}`} testID="settings-app" style={{ minHeight: 48, paddingHorizontal: 20, flexDirection: "row", alignItems: "center", gap: 14 }}>
-          <LeafGlyph size={22} color={t.ink} />
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "600" }}>{tt("settings.app")}</Text>
-            <Text numberOfLines={1} style={{ color: fontsOk ? t.dim : t.alert, fontSize: 12.5, lineHeight: 16, fontWeight: "700" }}>v{appVersion} · {tt(fontsOk ? "settings.fontsOk" : "settings.fontsFail")}</Text>
+        {/* The working settings share one card; each row lights up under the
+            pointer and gives under the finger. */}
+        <View style={[cardSurface(t), { marginHorizontal: S.md, marginTop: S.xl, overflow: "hidden" }]}>
+          <SettingRow
+            onPress={() => toggleVoice(!voice)}
+            keys={spaceActivates(() => toggleVoice(!voice))}
+            role="switch"
+            label={tt("settings.voice")}
+            checked={voice}
+            glyph={(c) => <SpeakerGlyph size={20} color={c} />}
+            title={tt("settings.voice")}
+            trailing={<SwitchVisual value={voice} />}
+          />
+          <RowRule />
+          <SettingRow
+            onPress={() => setConn(true)}
+            label={`${tt("settings.server")}: ${hostOf(apiBase)}`}
+            testID="settings-server"
+            glyph={(c) => <SignalOffGlyph size={20} color={c} />}
+            title={tt("settings.server")}
+            sub={hostOf(apiBase)}
+            chevron
+          />
+          <RowRule />
+          <SettingRow
+            onPress={() => setCredits(true)}
+            label={tt("credits.title")}
+            testID="settings-credits"
+            glyph={(c) => <Icon name="camera-outline" size={20} color={c} />}
+            title={tt("credits.title")}
+            chevron
+          />
+          <RowRule />
+          {/* What is running: the app version and whether the bundled fonts loaded, so an old bundle or a font that failed is visible at a glance. */}
+          <View accessible accessibilityLabel={`${tt("settings.app")}: ${appVersion}, ${tt(fontsOk ? "settings.fontsOk" : "settings.fontsFail")}`} testID="settings-app" style={{ minHeight: 56, paddingHorizontal: S.md, paddingVertical: S.sm, flexDirection: "row", alignItems: "center", gap: S.md }}>
+            <IconWell><LeafGlyph size={20} color={t.dim} /></IconWell>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: t.ink, fontSize: 15, lineHeight: 20, fontWeight: "600" }}>{tt("settings.app")}</Text>
+              <Text numberOfLines={1} style={{ color: fontsOk ? t.dim : t.alert, fontSize: 13, lineHeight: 18, fontWeight: "600", fontVariant: ["tabular-nums"] }}>v{appVersion} · {tt(fontsOk ? "settings.fontsOk" : "settings.fontsFail")}</Text>
+            </View>
           </View>
         </View>
-        <Pressable
-          onPress={() => setCredits(true)}
-          accessibilityRole="button"
-          testID="settings-credits"
-          style={({ pressed, hovered, focused }: PressState) => [
-            { minHeight: 48, paddingHorizontal: 20, flexDirection: "row", alignItems: "center", gap: 14 },
-            hovered && { backgroundColor: drawer ? t.raised : t.bg }, pressed && { opacity: 0.7 }, webCursor, focusRing(focused, t.accent),
-          ]}
-        >
-          <Icon name="camera-outline" size={22} color={t.ink} />
-          <Text style={{ color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "600", flex: 1 }}>{tt("credits.title")}</Text>
-          <ChevronGlyph size={12} color={t.dim} dir="right" />
-        </Pressable>
         <ConnectionSheet visible={conn} onClose={() => setConn(false)} />
         <Sheet visible={credits} onClose={() => setCredits(false)} title={tt("credits.title")} testID="sheet-credits">
           <Text style={{ color: t.dim, fontSize: 15, lineHeight: 21 }}>{tt("credits.body")}</Text>
@@ -352,7 +329,7 @@ function SidebarBody({ variant, open }: { variant: Variant; open: boolean }) {
               const p = PHOTOS[k];
               return (
                 <Pressable key={k} onPress={() => openLink(p.source)} accessibilityRole="link"
-                  style={({ focused, hovered }: PressState) => [{ flexDirection: "row", gap: 12, alignItems: "center", padding: 8, borderRadius: 12, borderWidth: 1, borderColor: t.line, backgroundColor: hovered ? t.raised : t.panel }, webCursor, focusRing(focused, t.accent)]}>
+                  style={({ focused, hovered }: PressState) => [{ flexDirection: "row", gap: 12, alignItems: "center", padding: 8, borderRadius: R.md, borderWidth: B.line, borderColor: t.line, backgroundColor: hovered ? t.raised : t.panel }, webCursor, focusRing(focused, t.accent)]}>
                   <Image source={p.src} style={{ width: 64, height: 44, borderRadius: 8 }} accessible={false} />
                   <View style={{ flex: 1 }}>
                     <Text numberOfLines={2} style={{ color: t.ink, fontSize: 14, lineHeight: 19, fontWeight: "700" }}>{lang === "sw" ? p.alt.sw : p.alt.en}</Text>
@@ -366,15 +343,18 @@ function SidebarBody({ variant, open }: { variant: Variant; open: boolean }) {
         </Sheet>
 
         {/* The KilimoOrbit motto. */}
-        <View style={{ marginHorizontal: 20, marginTop: 14, padding: 14, borderRadius: 14, backgroundColor: tint(t.ok, 0.08), borderLeftWidth: 3, borderLeftColor: t.ok, gap: 4 }} testID="sidebar-motto">
-          <Text style={{ color: t.ok, fontSize: 11, lineHeight: 14, fontWeight: "800", letterSpacing: 1.2, textTransform: "uppercase" }}>{tt("motto.label")}</Text>
-          <Text display style={{ color: t.ink, fontSize: 16, lineHeight: 22 }}>{tt("motto")}</Text>
+        {/* Set like the almanac's epigraph: a short maize-gold rule, the label,
+            then the line in the display italic. No box: the rail is the page. */}
+        <View style={{ marginHorizontal: S.xxl, marginTop: S.x3, gap: S.sm }} testID="sidebar-motto">
+          <View style={{ width: S.x3, height: 2, borderRadius: 1, backgroundColor: GOLD }} />
+          <Text style={{ color: t.dim, ...T.label }}>{tt("motto.label")}</Text>
+          <Text style={{ color: t.ink, fontFamily: ITALIC, fontSize: 18, lineHeight: 26 }}>{tt("motto")}</Text>
         </View>
 
         {/* 6. Footer: its own line at the end of the scrolling body, for
             everyone. It never shares the sign-out row, and the pinned block
             gains no height. */}
-        <VersionLine style={{ paddingHorizontal: 20, paddingVertical: 14 }} />
+        <VersionLine style={{ paddingHorizontal: S.xxl, paddingTop: S.xxl, paddingBottom: S.xl }} />
       </ScrollView>
 
       {/* 5. Sign out: pinned below the scrolling body in both variants. */}
@@ -388,7 +368,7 @@ function SidebarBody({ variant, open }: { variant: Variant; open: boolean }) {
  * right is purely visual: on native an RN Switch hidden from accessibility and
  * touches; on web a View track (RNW's Switch always adds a focusable input).
  */
-function SwitchVisual({ value }: { value: boolean }) {
+export function SwitchVisual({ value }: { value: boolean }) {
   const t = useTheme();
   if (!isWeb) {
     return (
@@ -415,7 +395,7 @@ function VersionLine({ style }: { style?: object }) {
   const { tt } = useT();
   return (
     <View style={style}>
-      <Text style={{ color: t.dim, fontSize: 11, lineHeight: 14, fontFamily: "monospace" }}>
+      <Text style={{ color: t.dim, fontSize: 12, lineHeight: 16, fontVariant: ["tabular-nums"] }}>
         {tt("footer", { version: Constants.expoConfig?.version ?? "1.0.0" })}
       </Text>
     </View>
@@ -429,12 +409,109 @@ function Eyebrow({ text }: { text: string }) {
       accessibilityRole="header"
       aria-level={2}
       style={{
-        color: t.dim, fontSize: 11, lineHeight: 14, fontFamily: "monospace", fontWeight: "700",
-        letterSpacing: 2, paddingHorizontal: 20, marginTop: 20, marginBottom: 4,
+        color: t.dim, ...T.label, letterSpacing: 1.8, paddingHorizontal: S.xxl, marginTop: S.x3, marginBottom: S.sm,
       }}
     >
       {text}
     </Text>
+  );
+}
+
+/** A setting's own name above its control: quieter than the eyebrow, never uppercase. */
+function SubLabel({ text, top = 0 }: { text: string; top?: number }) {
+  const t = useTheme();
+  return (
+    <Text style={{ color: t.dim, ...T.meta, fontWeight: "600", paddingHorizontal: S.xxl, marginTop: top, marginBottom: S.sm }}>
+      {text}
+    </Text>
+  );
+}
+
+/** Maize gold: the almanac's rule colour (DESIGN.md), decorative only. */
+const GOLD = "#E9B44C";
+
+/** The one raised surface on the rail: panel, warm hairline, the soft two-layer shadow. */
+const cardSurface = (t: Theme): ViewStyle => ({
+  backgroundColor: t.panel, borderRadius: R.card, borderWidth: B.line, borderColor: t.line,
+  ...(t.key === "savanna"
+    ? ({ boxShadow: "0 1px 2px rgba(20, 32, 27, 0.04), 0 8px 24px -8px rgba(20, 32, 27, 0.08)" } as ViewStyle)
+    : { borderTopColor: tint(t.ink, 0.14) }),
+});
+
+/**
+ * Hover and press as motion, not just a colour swap: `h` eases toward 1 while a
+ * pointer is over the row (web), `p` while a finger is down. Rows read both
+ * to fade in their wash, lift their icon well and give a little under the
+ * finger. Reduced motion keeps the wash and drops the movement.
+ */
+function useLift() {
+  const reduce = useReducedMotion();
+  const h = useSharedValue(0);
+  const p = useSharedValue(0);
+  const handlers = {
+    onHoverIn: () => { h.value = withTiming(1, { duration: 160, easing: Easing.out(Easing.quad) }); },
+    onHoverOut: () => { h.value = withTiming(0, { duration: 220, easing: Easing.out(Easing.quad) }); },
+    onPressIn: () => { p.value = withTiming(1, { duration: 90 }); },
+    onPressOut: () => { p.value = withSpring(0, { damping: 16, stiffness: 320, reduceMotion: ReduceMotion.System }); },
+  };
+  return { h, p, handlers, reduce };
+}
+
+/** A 36px rounded well that holds a row's icon; the active row fills it with the accent. */
+function IconWell({ children, style }: { children: React.ReactNode; style?: object }) {
+  return (
+    <Animated.View style={[{ width: 36, height: 36, borderRadius: R.md - 2, alignItems: "center", justifyContent: "center" }, style]}>
+      {children}
+    </Animated.View>
+  );
+}
+
+function RowRule() {
+  const t = useTheme();
+  return <View style={{ height: 1, backgroundColor: t.line, marginLeft: S.md + 36 + S.md }} />;
+}
+
+function SettingRow({
+  onPress, keys, role = "button", label, checked, glyph, title, sub, trailing, chevron, testID,
+}: {
+  onPress: () => void; keys?: Record<string, unknown>; role?: "button" | "switch"; label: string; checked?: boolean;
+  glyph: (color: string) => React.ReactNode; title: string; sub?: string; trailing?: React.ReactNode; chevron?: boolean; testID?: string;
+}) {
+  const t = useTheme();
+  const { h, p, handlers, reduce } = useLift();
+  // Colours are worked out here, on the JS thread: the worklets below only interpolate strings.
+  const wellFrom = tint(t.ink, 0.05);
+  const wellTo = tint(t.accent, 0.14);
+  const wash = useAnimatedStyle(() => ({ opacity: Math.max(h.value, p.value) }));
+  const well = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(h.value, [0, 1], [wellFrom, wellTo]),
+    transform: [{ scale: reduce ? 1 : 1 - 0.06 * p.value }],
+  }));
+  const nudge = useAnimatedStyle(() => ({ transform: [{ translateX: reduce ? 0 : 3 * h.value }] }));
+  const sw = role === "switch";
+  return (
+    <Pressable
+      onPress={onPress}
+      {...handlers}
+      {...keys}
+      accessibilityRole={role}
+      accessibilityLabel={label}
+      {...(sw ? { accessibilityState: { checked }, "aria-checked": checked } : null)}
+      testID={testID}
+      style={({ focused }: PressState) => [
+        { minHeight: 56, paddingHorizontal: S.md, paddingVertical: S.sm, flexDirection: "row", alignItems: "center", gap: S.md },
+        webCursor, focusRingInset(focused, t.accent),
+      ]}
+    >
+      <Animated.View style={[{ pointerEvents: "none", position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: tint(t.ink, 0.04) }, wash]} />
+      <IconWell style={well}>{glyph(t.accent)}</IconWell>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: t.ink, fontSize: 15, lineHeight: 20, fontWeight: "600" }}>{title}</Text>
+        {!!sub && <Text numberOfLines={1} style={{ color: t.dim, fontSize: 13, lineHeight: 18, fontVariant: ["tabular-nums"] }}>{sub}</Text>}
+      </View>
+      {trailing}
+      {chevron && <Animated.View style={nudge}><ChevronGlyph size={12} color={t.dim} dir="right" /></Animated.View>}
+    </Pressable>
   );
 }
 
@@ -444,73 +521,72 @@ function ProfileBlock({ onEdit, docked }: { onEdit: () => void; docked?: boolean
   const p = useSession().profile!;
   const sub = p.phone ? maskPhone(p.phone) : p.email ? maskEmail(p.email) : "";
   const legacy = p.method === "email" && !p.phone;
+  const { h, p: down, handlers, reduce } = useLift();
+  const lineFrom = t.line;
+  const lineTo = tint(t.accent, 0.55);
+  const lift = useAnimatedStyle(() => ({
+    borderColor: interpolateColor(h.value, [0, 1], [lineFrom, lineTo]),
+    transform: [{ translateY: reduce ? 0 : -2 * h.value }, { scale: reduce ? 1 : 1 - 0.015 * down.value }],
+  }));
+  const nudge = useAnimatedStyle(() => ({ transform: [{ translateX: reduce ? 0 : 3 * h.value }] }));
+  // Docked column is 280 wide: a 44 avatar and an 18/24 name keep an
+  // ordinary two-word name on one line.
+  const av = docked ? 44 : 52;
+  const status = p.serverAck ? tt("chip.saved") : tt("chip.localOnly");
   return (
-    <View>
-      <View style={{ flexDirection: "row", gap: 14, alignItems: "center" }}>
-        {/* Docked column is 280 wide: a 48 avatar and a 17/22 name keep an
-            ordinary two-word name on one line. */}
-        <View style={{ width: docked ? 48 : 56, height: docked ? 48 : 56, borderRadius: 28, backgroundColor: t.panel, borderWidth: 2, borderColor: t.accent, alignItems: "center", justifyContent: "center" }}>
-          <Text maxFontSizeMultiplier={1.2} style={{ color: t.accent, fontSize: docked ? 19 : 22, fontWeight: "800" }}>{initials(p.name)}</Text>
+    // The whole card edits the profile: one target instead of a small "Edit"
+    // link and a chip doing the same thing. The visible "Edit" starts the name.
+    <Pressable
+      onPress={onEdit}
+      {...handlers}
+      accessibilityRole="button"
+      accessibilityLabel={`${tt("profile.edit")}: ${p.name}${sub ? `, ${sub}` : ""}. ${status}${legacy ? `. ${tt("chip.addPhone")}` : ""}`}
+      style={[{ marginHorizontal: S.md, borderRadius: R.card }, webCursor, noOutline]}
+    >
+      {({ focused }: PressState) => (
+      // The ring is drawn on the card itself, so it rises with the card on hover.
+      <Animated.View style={[cardSurface(t), { padding: S.lg, gap: S.md }, lift, focusRing(focused, t.accent)]}>
+        <View style={{ flexDirection: "row", gap: S.md, alignItems: "center" }}>
+          {/* The avatar repeats the logotype: a forest coin, a gold seed on its rim. */}
+          <View style={{ width: av, height: av, borderRadius: av / 2, backgroundColor: t.accent, alignItems: "center", justifyContent: "center" }}>
+            <Text maxFontSizeMultiplier={1.2} style={{ color: t.field, fontFamily: DISPLAY["600"], fontSize: docked ? 17 : 20, lineHeight: docked ? 22 : 26 }}>{initials(p.name)}</Text>
+            <View style={{ position: "absolute", top: 1, right: 1, width: 10, height: 10, borderRadius: 5, backgroundColor: t.accent === GOLD ? t.ok : GOLD, borderWidth: 2, borderColor: t.panel }} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text numberOfLines={2} style={{ color: t.ink, fontFamily: DISPLAY["600"], fontSize: docked ? 18 : 20, lineHeight: docked ? 24 : 26, letterSpacing: -0.2 }}>{p.name}</Text>
+            {!!sub && <Text style={{ color: t.dim, fontSize: 14, lineHeight: 20, fontVariant: ["tabular-nums"], letterSpacing: 0.3 }}>{sub}</Text>}
+          </View>
         </View>
-        <View style={{ flex: 1 }}>
-          <Text numberOfLines={2} style={{ color: t.ink, fontSize: docked ? 17 : 20, lineHeight: docked ? 22 : 26, fontWeight: "800" }}>{p.name}</Text>
-          {!!sub && <Text style={{ color: t.dim, fontSize: 15, lineHeight: 20, fontFamily: "monospace" }}>{sub}</Text>}
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: S.sm, alignItems: "center" }}>
+          {p.serverAck ? (
+            <Chip glyph={<PhoneGlyph size={14} color={t.ok} />} text={tt("chip.saved")} tone={t.ok} />
+          ) : (
+            <Chip glyph={<SignalOffGlyph size={14} color={t.dim} />} text={tt("chip.localOnly")} tone={t.dim} />
+          )}
+          {legacy && <Chip glyph={<PlusGlyph size={14} color={t.accent} />} text={tt("chip.addPhone")} tone={t.accent} />}
+          <View style={{ flex: 1 }} />
+          <View style={{ flexDirection: "row", alignItems: "center", gap: S.xs }}>
+            <Text style={{ color: t.accent, fontSize: 14, lineHeight: 20, fontWeight: "700" }}>{tt("profile.edit")}</Text>
+            <Animated.View style={nudge}><ChevronGlyph size={11} color={t.accent} dir="right" /></Animated.View>
+          </View>
         </View>
-      </View>
-      <View style={{ marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-        {p.serverAck ? (
-          <Chip glyph={<PhoneGlyph size={16} color={t.ink} />} text={tt("chip.saved")} />
-        ) : (
-          <Chip glyph={<SignalOffGlyph size={14} color={t.ink} />} text={tt("chip.localOnly")} />
-        )}
-        {legacy && <Chip glyph={<PlusGlyph size={14} color={t.ink} />} text={tt("chip.addPhone")} onPress={onEdit} />}
-      </View>
-      <Pressable
-        onPress={onEdit}
-        accessibilityRole="button"
-        accessibilityLabel={tt("profile.edit")}
-        style={({ pressed, hovered, focused }: PressState) => [
-          // marginBottom -12 balances the card: the 48px touch box stays, but the
-          // label sits about 16px from the bottom edge, like the avatar from the top.
-          { minHeight: 48, flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", marginTop: 4, marginBottom: -12, paddingRight: 8, borderRadius: 8 },
-          (hovered || pressed) && { opacity: 0.75 },
-          webCursor, focusRing(focused, t.accent),
-        ]}
-      >
-        <Text style={{ color: t.ink, fontSize: 15, lineHeight: 22, fontWeight: "700" }}>{tt("profile.edit")}</Text>
-        <ChevronGlyph size={12} color={t.ink} dir="right" />
-      </Pressable>
-    </View>
+      </Animated.View>
+      )}
+    </Pressable>
   );
 }
 
-function Chip({ glyph, text, onPress }: { glyph: React.ReactNode; text: string; onPress?: () => void }) {
+/** A status word with its icon, tinted by its meaning (the word carries it too). */
+function Chip({ glyph, text, tone }: { glyph: React.ReactNode; text: string; tone: string }) {
   const t = useTheme();
-  const body = (
-    <>
+  return (
+    <View style={{
+      minHeight: 28, borderRadius: R.pill, paddingHorizontal: 10, backgroundColor: tint(tone, 0.1),
+      flexDirection: "row", alignItems: "center", gap: 6,
+    }}>
       {glyph}
       <Text style={{ color: t.ink, fontSize: 13, lineHeight: 18, fontWeight: "600" }}>{text}</Text>
-    </>
-  );
-  const base = {
-    minHeight: 32, borderRadius: 999, paddingHorizontal: 10, borderWidth: 1.5, borderColor: t.dim,
-    flexDirection: "row" as const, alignItems: "center" as const, gap: 6,
-  };
-  if (!onPress) return <View style={base}>{body}</View>;
-  // Pressable chips keep a 48px touch box around the 32px visual chip.
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={text}
-      style={({ pressed, hovered, focused }: PressState) => [
-        { minHeight: 48, justifyContent: "center", borderRadius: 999 },
-        (hovered || pressed) && { opacity: 0.8 },
-        webCursor, focusRing(focused, t.accent),
-      ]}
-    >
-      <View style={base}>{body}</View>
-    </Pressable>
+    </View>
   );
 }
 
@@ -520,19 +596,19 @@ function GuestBlock({ onSignIn }: { onSignIn: () => void }) {
   return (
     <View>
       <View style={{ flexDirection: "row", gap: 14, alignItems: "center" }}>
-        <View style={{ width: 56, height: 56, borderRadius: 28, borderWidth: 2, borderColor: t.dim, alignItems: "center", justifyContent: "center" }}>
-          <PersonGlyph size={26} color={t.dim} />
+        <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: tint(t.ink, 0.06), alignItems: "center", justifyContent: "center" }}>
+          <PersonGlyph size={24} color={t.dim} />
         </View>
-        <Text style={{ flex: 1, color: t.ink, fontSize: 18, lineHeight: 24, fontWeight: "800" }}>{tt("guest.title")}</Text>
+        <Text style={{ flex: 1, color: t.ink, ...T.headline }}>{tt("guest.title")}</Text>
       </View>
-      <Text style={{ color: t.dim, fontSize: 15, lineHeight: 22, fontWeight: "500", marginTop: 10 }}>{tt("guest.body")}</Text>
+      <Text style={{ color: t.dim, fontSize: 15, lineHeight: 22, marginTop: S.md }}>{tt("guest.body")}</Text>
       <Pressable
         onPress={onSignIn}
         accessibilityRole="button"
         accessibilityLabel={tt("guest.cta")}
         style={({ pressed, hovered, focused }: PressState) => [
           {
-            minHeight: 52, borderRadius: 14, backgroundColor: t.accent, marginTop: 12,
+            minHeight: 52, borderRadius: R.btn, backgroundColor: t.accent, marginTop: 12,
             flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
             opacity: pressed ? 0.85 : hovered ? 0.92 : 1,
           },
@@ -550,34 +626,51 @@ function NavRow({
   label, active, glyph, onPress, drawer,
 }: { label: string; active: boolean; glyph: (color: string) => React.ReactNode; onPress: () => void; drawer: boolean }) {
   const t = useTheme();
-  const activeBg = drawer ? t.bg : t.raised;
+  const { h, p, handlers, reduce } = useLift();
+  // The selected row eases in (and out) rather than jumping when the page changes.
+  const on = useSharedValue(active ? 1 : 0);
+  useEffect(() => {
+    on.value = reduce ? (active ? 1 : 0) : withTiming(active ? 1 : 0, { duration: 220, easing: Easing.out(Easing.quad) });
+  }, [active, reduce]);
+  const wash = useAnimatedStyle(() => ({ opacity: Math.max(h.value * 0.8, p.value) * (1 - on.value) }));
+  const sel = useAnimatedStyle(() => ({ opacity: on.value }));
+  const wellFrom = tint(t.accent, 0);
+  const wellTo = t.accent;
+  const well = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(on.value, [0, 1], [wellFrom, wellTo]),
+    transform: [{ scale: reduce ? 1 : 1 - 0.08 * p.value }, { translateX: reduce ? 0 : 2 * h.value * (1 - on.value) }],
+  }));
+  const text = useAnimatedStyle(() => ({ transform: [{ translateX: reduce ? 0 : 3 * h.value * (1 - on.value) }] }));
   return (
     <Pressable
       onPress={onPress}
+      {...handlers}
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ selected: active }}
       aria-current={active ? "page" : undefined}
-      style={({ pressed, hovered, focused }: PressState) => [
+      style={({ focused }: PressState) => [
         {
-          minHeight: 56, marginHorizontal: 8, borderRadius: 12, paddingHorizontal: 12,
-          flexDirection: "row", alignItems: "center", gap: 14,
-          backgroundColor: active || hovered ? activeBg : "transparent",
-          opacity: pressed ? 0.7 : 1,
+          minHeight: 52, marginHorizontal: S.md, borderRadius: R.md + 2, paddingHorizontal: S.sm,
+          flexDirection: "row", alignItems: "center", gap: S.md,
         },
         webCursor, focusRing(focused, t.accent),
       ]}
     >
-      {active && (
-        <View style={{ position: "absolute", left: 0, top: "50%", marginTop: -16, width: 4, height: 32, borderRadius: 2, backgroundColor: t.accent }} />
-      )}
-      <View style={{ width: 28, height: 28, alignItems: "center", justifyContent: "center" }}>
-        {glyph(active ? t.accent : t.ink)}
-      </View>
-      <Text style={{ flex: 1, color: t.ink, fontSize: 17, lineHeight: 22, fontWeight: active ? "800" : "700" }}>{label}</Text>
+      {/* Hover wash and the selected fill: two still layers whose opacity moves. */}
+      <Animated.View style={[{ pointerEvents: "none", position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: R.md + 2, backgroundColor: tint(t.ink, 0.06) }, wash]} />
+      <Animated.View style={[{ pointerEvents: "none", position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: R.md + 2, backgroundColor: t.panel }, cardRaise(t), sel]} />
+      <IconWell style={well}>{glyph(active ? t.field : t.dim)}</IconWell>
+      <Animated.View style={[{ flex: 1 }, text]}>
+        <Text style={{ color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: active ? "700" : "600" }}>{label}</Text>
+      </Animated.View>
     </Pressable>
   );
 }
+
+/** The selected nav row sits on the card surface, so "you are here" reads as a page pulled forward. */
+const cardRaise = (t: Theme): ViewStyle => (t.key === "savanna"
+  ? ({ boxShadow: "0 1px 2px rgba(20, 32, 27, 0.06), 0 4px 12px -6px rgba(20, 32, 27, 0.12)" } as ViewStyle)
+  : { borderWidth: B.line, borderColor: t.line, borderTopColor: tint(t.ink, 0.14) });
 
 function ThemeTile({
   theme, selected, onPress, hint, narrow, pressRef, keys,
@@ -606,10 +699,12 @@ function ThemeTile({
       aria-checked={selected}
       style={({ pressed, focused }: PressState) => [
         {
-          flex: 1, minHeight: 96, borderRadius: 14, padding: (narrow ? 8 : 10) - (selected ? 1 : 0), gap: 4,
+          // Border + padding stays 10/12 so content sits where it always did;
+          // selection changes the border colour only, never its weight.
+          flex: 1, minHeight: 96, borderRadius: R.md, padding: (narrow ? 10 : 12) - B.control, gap: 4,
           // Room for the theme name pinned to the bottom edge.
-          ...(narrow ? null : { paddingBottom: 20 - (selected ? 1 : 0) }),
-          backgroundColor: theme.bg, borderWidth: selected ? 3 : 2, borderColor: selected ? t.accent : theme.line,
+          ...(narrow ? null : { paddingBottom: 24 - B.control }),
+          backgroundColor: theme.bg, borderWidth: B.control, borderColor: selected ? t.accent : theme.line,
           opacity: pressed ? 0.85 : 1,
         },
         webCursor, focusRing(focused, t.accent),
@@ -618,22 +713,22 @@ function ThemeTile({
       {glyph}
       {/* A fixed two-line block: "Bora juani" wraps on a 360px phone, and the
           theme names must still share one baseline across the three tiles. */}
-      <Text numberOfLines={2} style={{ color: theme.ink, fontSize: narrow ? 13 : 14, lineHeight: 18, minHeight: 36, fontWeight: "800" }}>{hint}</Text>
+      <Text numberOfLines={2} style={{ color: theme.ink, fontSize: narrow ? 13 : 14, lineHeight: 18, minHeight: 36, fontWeight: "700" }}>{hint}</Text>
       {/* Docked tiles are ~80px wide: the monospace theme name (still in the
           label) is left out there to keep the column short. */}
       {!narrow && (
         <Text
           numberOfLines={1}
           style={{
-            position: "absolute", left: 10 - (selected ? 1 : 0), right: 6, bottom: 6 - (selected ? 1 : 0),
-            color: theme.dim, fontSize: 11, lineHeight: 14, fontFamily: "monospace",
+            position: "absolute", left: 12 - B.control, right: 6, bottom: 8 - B.control,
+            color: theme.dim, fontSize: 12, lineHeight: 16, fontFamily: "monospace",
           }}
         >
           {theme.name}
         </Text>
       )}
       {selected && (
-        <Animated.View style={[{ position: "absolute", top: 6, right: 6 }, coinStyle]}>
+        <Animated.View style={[{ position: "absolute", top: 9 - B.control, right: 9 - B.control }, coinStyle]}>
           <CheckCoin size={20} bg={t.accent} fg={t.field} />
         </Animated.View>
       )}
@@ -684,7 +779,7 @@ function SignOutBlock({ variant, open }: { variant: Variant; open: boolean }) {
   };
 
   return (
-    <View style={{ borderTopWidth: 1, borderTopColor: t.line }}>
+    <View style={{ borderTopWidth: B.line, borderTopColor: t.line, backgroundColor: t.rail }}>
       <Pressable
         onPress={() => setExpanded((e) => !e)}
         accessibilityRole="button"
@@ -692,14 +787,19 @@ function SignOutBlock({ variant, open }: { variant: Variant; open: boolean }) {
         accessibilityState={{ expanded }}
         aria-expanded={expanded}
         style={({ pressed, hovered, focused }: PressState) => [
-          { minHeight: 56, paddingHorizontal: 20, flexDirection: "row", alignItems: "center", gap: 14 },
-          hovered && { backgroundColor: t.raised },
+          { minHeight: 56, paddingHorizontal: S.xl, flexDirection: "row", alignItems: "center", gap: S.md },
+          (hovered || expanded) && { backgroundColor: tint(t.alert, 0.06) },
           pressed && { opacity: 0.7 },
-          webCursor, focusRing(focused, t.accent),
+          webCursor, focusRingInset(focused, t.accent),
         ]}
       >
-        <ExitGlyph size={22} color={t.ink} />
-        <Text numberOfLines={1} style={{ flex: 1, color: t.ink, fontSize: 17, lineHeight: 22, fontWeight: "700" }}>{tt("signout.row")}</Text>
+        {({ hovered }: PressState) => (
+          <>
+            <ExitGlyph size={20} color={hovered || expanded ? t.alert : t.dim} />
+            <Text numberOfLines={1} style={{ flex: 1, color: hovered || expanded ? t.alert : t.ink, fontSize: 15, lineHeight: 20, fontWeight: "600" }}>{tt("signout.row")}</Text>
+            <ChevronGlyph size={11} color={t.dim} dir={expanded ? "up" : "down"} />
+          </>
+        )}
       </Pressable>
       <Animated.View style={[{ overflow: "hidden" }, hStyle]}>
         {mounted && <View
@@ -722,7 +822,7 @@ function SignOutBlock({ variant, open }: { variant: Variant; open: boolean }) {
                   webCursor, focusRing(focused, t.accent),
                 ]}
               >
-                <View style={{ width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: forget ? t.accent : t.dim, backgroundColor: forget ? t.accent : "transparent", alignItems: "center", justifyContent: "center" }}>
+                <View style={{ width: 24, height: 24, borderRadius: 6, borderWidth: B.control, borderColor: forget ? t.accent : t.dim, backgroundColor: forget ? t.accent : "transparent", alignItems: "center", justifyContent: "center" }}>
                   {forget && <CheckGlyph size={14} color={t.field} />}
                 </View>
                 <Text style={{ flex: 1, color: t.ink, fontSize: 15, lineHeight: 22, fontWeight: "500" }}>{tt("signout.forget")}</Text>
@@ -733,7 +833,7 @@ function SignOutBlock({ variant, open }: { variant: Variant; open: boolean }) {
                   accessibilityRole="button"
                   accessibilityLabel={tt("signout.stay")}
                   style={({ pressed, hovered, focused }: PressState) => [
-                    { flex: 1, minHeight: 52, borderRadius: 14, borderWidth: 2, borderColor: t.dim, alignItems: "center", justifyContent: "center" },
+                    { flex: 1, minHeight: 52, borderRadius: R.btn, borderWidth: B.control, borderColor: t.dim, alignItems: "center", justifyContent: "center" },
                     (hovered || pressed) && { backgroundColor: t.raised },
                     webCursor, focusRing(focused, t.accent),
                   ]}
@@ -745,7 +845,7 @@ function SignOutBlock({ variant, open }: { variant: Variant; open: boolean }) {
                   accessibilityRole="button"
                   accessibilityLabel={tt("signout.confirm")}
                   style={({ pressed, hovered, focused }: PressState) => [
-                    { flex: 1, minHeight: 52, borderRadius: 14, backgroundColor: t.alert, alignItems: "center", justifyContent: "center", opacity: pressed ? 0.85 : hovered ? 0.92 : 1 },
+                    { flex: 1, minHeight: 52, borderRadius: R.btn, backgroundColor: t.alert, alignItems: "center", justifyContent: "center", opacity: pressed ? 0.85 : hovered ? 0.92 : 1 },
                     webCursor, focusRing(focused, t.accent),
                   ]}
                 >

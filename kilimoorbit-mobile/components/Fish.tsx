@@ -9,7 +9,7 @@ import { View, Pressable } from "react-native";
 import Text from "./Text";
 import Field from "./Field";
 import Icon from "./Icon";
-import { Btn, Card, CheckRow, Chip, ChipRow, Empty, Eyebrow, Group, Sheet, Stepper, T, Tag, tint } from "./Kit";
+import { B, Btn, Card, CheckRow, Chip, ChipRow, Empty, Eyebrow, Group, R, Sheet, Stepper, T, Tag, tint, useSpace } from "./Kit";
 import { PlanSheet } from "./Nurseries";
 import { useTheme } from "../lib/theme-context";
 import { useLang } from "../lib/session";
@@ -36,9 +36,10 @@ export function FishSection() {
   const [entry, setEntry] = useState<{ pond: Pond; kind: "weigh" | "loss" | "sale" } | null>(null);
   const [finding, setFinding] = useState<Pond | null | "new">(null);
   const county = farm.county ?? "Nakuru";
+  const sp = useSpace();
 
   return (
-    <View style={{ gap: 14 }} testID="fish-section">
+    <View style={{ gap: sp.gap }} testID="fish-section">
       {fish.ponds.length === 0 ? (
         <Card>
           <Empty
@@ -94,10 +95,10 @@ function PondCard({ pond, onWeigh, onLoss, onSell, onFind }: { pond: Pond; onWei
         </View>
         <Text style={{ color: t.dim, ...T.meta }} testID="pond-anchor">{a.sampled ? tt("fs.sampled", { date: dayMonth(lang, a.date), g: a.g }) : tt("fs.projected")}</Text>
 
-        <View style={{ borderRadius: 14, padding: 12, gap: 6, backgroundColor: tint(t.water, 0.1), borderWidth: 1, borderColor: tint(t.water, 0.25) }} testID="pond-feed">
+        <View style={{ borderRadius: R.md, padding: 12, gap: 6, backgroundColor: tint(t.water, 0.1), borderWidth: B.line, borderColor: tint(t.water, 0.25) }} testID="pond-feed">
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
             <Icon name="silverware-fork-knife" size={16} color={t.water} />
-            <Text style={{ color: t.water, fontSize: 12, lineHeight: 16, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase" }}>{tt("fs.feed.title")}</Text>
+            <Text style={{ color: t.water, ...T.label }}>{tt("fs.feed.title")}</Text>
           </View>
           <Text style={{ color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "700" }}>
             {tt("fs.feed.body", { kg: kg1(f.kgPerDay), pellet: pick(lang, FEED_PELLET[f.stage]), protein: f.protein, meals: f.meals })}
@@ -105,10 +106,10 @@ function PondCard({ pond, onWeigh, onLoss, onSell, onFind }: { pond: Pond; onWei
           <Text style={{ color: t.dim, ...T.meta }}>{tt("fs.feed.tip")}</Text>
         </View>
 
-        <View style={{ borderRadius: 14, padding: 12, gap: 6, backgroundColor: tint(t.ok, 0.08), borderWidth: 1, borderColor: tint(t.ok, 0.22) }} testID="pond-harvest">
+        <View style={{ borderRadius: R.md, padding: 12, gap: 6, backgroundColor: tint(t.ok, 0.08), borderWidth: B.line, borderColor: tint(t.ok, 0.22) }} testID="pond-harvest">
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
             <Icon name="basket-outline" size={16} color={t.ok} />
-            <Text style={{ color: t.ok, fontSize: 12, lineHeight: 16, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase" }}>{tt("fs.harvest.title")}</Text>
+            <Text style={{ color: t.ok, ...T.label }}>{tt("fs.harvest.title")}</Text>
           </View>
           <Text style={{ color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "700" }}>
             {h.reached ? tt("fs.harvest.ready", { kg: h.kg.toLocaleString("en-KE"), value: fmtMoney(h.value) })
@@ -183,7 +184,7 @@ function HealthCard() {
         {FISH_PROBLEMS.map((p) => {
           const on = open === p.id;
           return (
-            <View key={p.id} style={{ borderRadius: 12, borderWidth: 1, borderColor: on ? t.alert : t.line, backgroundColor: on ? tint(t.alert, 0.06) : t.raised }}>
+            <View key={p.id} style={{ borderRadius: R.md, borderWidth: B.line, borderColor: on ? t.alert : t.line, backgroundColor: on ? tint(t.alert, 0.06) : t.raised }}>
               <Pressable onPress={() => setOpen(on ? null : p.id)} accessibilityRole="button" accessibilityState={{ expanded: on }}
                 style={({ focused }: PressState) => [{ flexDirection: "row", alignItems: "center", gap: 10, padding: 12, minHeight: 48 }, webCursor, focusRing(focused, t.accent)]} testID={`fish-problem-${p.id}`}>
                 <Icon name={p.urgent ? "alert-circle-outline" : "information-outline"} size={20} color={p.urgent ? t.alert : t.dim} />

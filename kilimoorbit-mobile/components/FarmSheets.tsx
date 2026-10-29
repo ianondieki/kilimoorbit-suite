@@ -15,7 +15,7 @@ import { CROPS, CROP_KEYS, acresFromSteps, inputsFor, pick, type CropKey } from 
 import { addDays, longDay, todayKey } from "../lib/dates";
 import { EXPENSE_CATS, INCOME_CATS, farmActions, useFarm, type Entry } from "../lib/farm";
 import type { Key } from "../lib/i18n";
-import { Btn, Chip, ChipRow, Group, Sheet, Stepper, T } from "./Kit";
+import { B, Btn, Chip, ChipRow, Group, R, Sheet, Stepper, T } from "./Kit";
 import { CropCoin } from "./ShambaPanel";
 import Field from "./Field";
 import Segmented from "./Segmented";
@@ -43,7 +43,7 @@ export function DateNudge({ value, onChange, label }: { value: string; onChange:
     </Pressable>
   );
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", borderWidth: 2, borderColor: t.line, borderRadius: 14, backgroundColor: t.field }}>
+    <View style={{ flexDirection: "row", alignItems: "center", borderWidth: B.control, borderColor: t.line, borderRadius: R.md, backgroundColor: t.field }}>
       {arrow(-1)}
       <Text accessibilityLabel={`${label}: ${longDay(lang, value)}`} aria-live="polite" style={{ flex: 1, textAlign: "center", color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "700" }}>
         {longDay(lang, value)}
@@ -68,7 +68,7 @@ export function MeasureField({ onUse }: { onUse: (acres: number) => void }) {
     );
   const num = (v: string) => v.replace(/[^\d]/g, "").slice(0, 4);
   return (
-    <View style={{ backgroundColor: t.raised, borderRadius: 14, padding: 14, gap: 10 }} testID="measure">
+    <View style={{ backgroundColor: t.raised, borderRadius: R.md, padding: 14, gap: 10 }} testID="measure">
       <Text style={{ color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "800" }}>{tt("measure.title")}</Text>
       <Text style={{ color: t.dim, ...T.meta }}>{tt("measure.how")}</Text>
       <View style={{ flexDirection: "row", gap: 10 }}>
@@ -263,7 +263,7 @@ export function AddCropSheet({ visible, onClose, initialCrop }: { visible: boole
         <DateNudge value={date} onChange={setDate} label={tt(transplant ? "add.whenTransplant" : "add.when")} />
       </Group>
 
-      <View style={{ backgroundColor: t.raised, borderRadius: 14, padding: 14, gap: 8 }}>
+      <View style={{ backgroundColor: t.raised, borderRadius: R.md, padding: 14, gap: 8 }}>
         <Text style={{ color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "800" }}>{tt("plant.inputs")}</Text>
         {needs.map((n) => (
           <View key={n.label} style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>

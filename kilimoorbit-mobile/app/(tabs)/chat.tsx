@@ -1,51 +1,50 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  View, TextInput, Pressable, FlatList, ScrollView, StyleSheet, KeyboardAvoidingView, Platform, Switch,
+  View, TextInput, Pressable, FlatList, ScrollView, StyleSheet, KeyboardAvoidingView, Platform,
 } from "react-native";
+import { SwitchVisual } from "../../components/Sidebar";
 import Text from "../../components/Text";
 import { SANS } from "../../lib/typography";
-import { webLang } from "../../lib/ui";
+import { focusRing, webCursor, webLang, type PressState } from "../../lib/ui";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { refreshVoicePref, useVoicePref } from "../../lib/voice";
 import Header from "../../components/Header";
 import Icon from "../../components/Icon";
 import { PhotoHero } from "../../components/PhotoHero";
+import { PHOTO_SETS } from "../../lib/photos";
 import { useLang } from "../../lib/session";
+import { trMaybe } from "../../lib/i18n";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Speech from "expo-speech";
 import Pill from "../../components/Pill";
 import { Enter, PressScale } from "../../components/Motion";
 import { Bounded, CONTENT_MAX_W } from "../../components/Bounded";
 import { useTheme } from "../../lib/theme-context";
+import { B, Btn, R, S, T, TOUCH, useSpace } from "../../components/Kit";
 import { callApex, getMeta, type ChatResult, type ApexError } from "../../lib/api";
 
-type Msg = { id: string; from: "user" | "apex"; text: string; intent?: string; err?: boolean };
+// An error bubble keeps the question that failed (`retry`) so it can be sent again.
+type Msg = { id: string; from: "user" | "apex"; text: string; intent?: string; err?: boolean; retry?: string };
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 const WELCOME: Msg = {
   id: "w",
   from: "apex",
-  text: "Karibu! Ask me about masoko prices, weather windows, or delivery routing. 🌿",
+  // Shown in the farmer's language (chat.welcome); this English copy is what Apex sees as history.
+  text: "Karibu! Ask me about masoko prices, weather windows, or delivery routing.",
   intent: "general_advisory",
 };
 
 const CHAT_LOG_KEY = "ko-chat-log";
 const HISTORY_TURNS = 6; // prior turns sent to Apex as conversation memory
 
-const QUICK = [
-  "Je, bei ya nyanya iko juu wiki hii?",
-  "Will the rain block my delivery today?",
-  "How do I change my notification settings?",
-];
-
-// RN core types only expose `pressed`; react-native-web also provides `hovered`.
-type PressState = { pressed: boolean; hovered?: boolean };
-const webCursor = Platform.OS === "web" ? ({ cursor: "pointer" } as const) : null;
+const QUICK = ["chat.q1", "chat.q2", "chat.q3"] as const;
 
 export default function Chat() {
   const t = useTheme();
+  const sp = useSpace();
   const [msgs, setMsgs] = useState<Msg[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -55,7 +54,7 @@ export default function Chat() {
   const inputRef = useRef<TextInput>(null);
   const market = useRef<any>(null);
   const hydrated = useRef(false);
-  const { t: tt } = useLang();
+  const { lang, t: tt } = useLang();
   const { q } = useLocalSearchParams<{ q?: string }>();
 
   // A question handed over from another screen (e.g. Crop doctor's "Ask
@@ -77,7 +76,7 @@ export default function Chat() {
           // A stored log is re-checked: only well-formed messages are shown.
           const saved = (JSON.parse(raw) as unknown[] | null ?? [])
             .filter((m: any): m is Msg => !!m && typeof m.id === "string" && (m.from === "user" || m.from === "apex") && typeof m.text === "string")
-            .map((m) => ({ id: m.id, from: m.from, text: m.text.slice(0, 2000), intent: typeof m.intent === "string" ? m.intent : undefined, err: m.err === true }));
+            .map((m) => ({ id: m.id, from: m.from, text: m.text.slice(0, 2000), intent: typeof m.intent === "string" ? m.intent : undefined, err: m.err === true, retry: typeof m.retry === "string" ? m.retry : undefined }));
           if (saved.length) {
             setMsgs(saved);
             setTimeout(() => list.current?.scrollToEnd({ animated: false }), 80);
@@ -115,6 +114,19 @@ export default function Chat() {
     AsyncStorage.removeItem(CHAT_LOG_KEY).catch(() => {});
   };
 
+  // Send a failed question again: the error bubble and the question it answered make way for a fresh try.
+  const retry = (item: Msg) => {
+    if (!item.retry || busy) return;
+    const i = msgs.findIndex((m) => m.id === item.id);
+    const asked = i > 0 && msgs[i - 1].from === "user" && msgs[i - 1].text === item.retry ? i - 1 : -1;
+    const base = msgs.filter((_, j) => j !== i && j !== asked);
+    setMsgs(base);
+    send(item.retry, base);
+  };
+
+  // The welcome is written in the farmer's language; everything else as sent or received.
+  const textOf = (m: Msg) => (m.id === WELCOME.id ? tt("chat.welcome") : m.text);
+
   const speak = (text: string) => {
     if (!voice) return;
     const clean = text.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "");
@@ -123,14 +135,14 @@ export default function Chat() {
     Speech.speak(clean, { language: sw ? "sw" : "en", rate: 1.02 });
   };
 
-  const send = async (raw?: string) => {
+  const send = async (raw?: string, base: Msg[] = msgs) => {
     const text = (raw ?? input).trim();
     if (!text || busy) return;
     setInput("");
     setBusy(true);
     // Prior turns only (connection-error bubbles excluded) — the new message
     // travels as user_message, the context as chat_history.
-    const chat_history = msgs
+    const chat_history = base
       .filter((m) => !m.err)
       .slice(-HISTORY_TURNS)
       .map((m) => ({ role: m.from, text: m.text }));
@@ -146,15 +158,17 @@ export default function Chat() {
         ...(market.current ? { market_data: market.current } : {}),
       });
       const r = res.result;
-      const reply =
-        (r as ApexError).execution_mode === "error"
-          ? `Apex error: ${(r as ApexError).error_message}`
-          : (r as ChatResult).chat_response;
-      const intent = (r as ChatResult).intent_detected;
-      setMsgs((m) => [...m, { id: `a${Date.now()}`, from: "apex", text: reply, intent }]);
-      speak(reply);
-    } catch (e: any) {
-      setMsgs((m) => [...m, { id: `e${Date.now()}`, from: "apex", text: `Cannot reach Sentinel server — ${e.message}`, err: true }]);
+      if ((r as ApexError).execution_mode === "error") {
+        // Apex's own error text is for developers; the farmer gets a plain line and a retry.
+        setMsgs((m) => [...m, { id: `e${Date.now()}`, from: "apex", text: tt("chat.apexError"), err: true, retry: text }]);
+      } else {
+        const reply = (r as ChatResult).chat_response;
+        const intent = (r as ChatResult).intent_detected;
+        setMsgs((m) => [...m, { id: `a${Date.now()}`, from: "apex", text: reply, intent }]);
+        speak(reply);
+      }
+    } catch {
+      setMsgs((m) => [...m, { id: `e${Date.now()}`, from: "apex", text: tt("chat.failed"), err: true, retry: text }]);
     } finally {
       setBusy(false);
       setTimeout(() => list.current?.scrollToEnd({ animated: true }), 80);
@@ -162,7 +176,7 @@ export default function Chat() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]} {...webLang("en")}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]} {...webLang(lang)}>
       <Header
         title={tt("nav.chat")}
         right={
@@ -172,22 +186,33 @@ export default function Chat() {
               hitSlop={10}
               accessibilityRole="button"
               accessibilityLabel={tt("chat.clear")}
-              style={({ pressed, hovered }: PressState) => [
-                { width: 40, height: 40, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+              style={({ pressed, hovered, focused }: PressState) => [
+                { width: TOUCH, height: TOUCH, borderRadius: R.md, alignItems: "center", justifyContent: "center" },
                 webCursor,
                 (hovered || pressed) && { backgroundColor: t.raised },
+                focusRing(focused, t.accent),
               ]}
             >
-              <Icon name="broom" size={20} color={t.dim} />
+              {/* "New conversation": a fresh page reads at a glance where a broom did not. */}
+              <Icon name="message-plus-outline" size={22} color={t.ink} />
             </Pressable>
-            <Icon name={voice ? "volume-high" : "volume-off"} size={18} color={voice ? t.accent : t.dim} />
-            <Switch
-              value={voice}
-              onValueChange={toggleVoice}
+            {/* The whole control is one switch with a full-size touch target; the toggle is drawn. */}
+            <Pressable
+              onPress={() => toggleVoice(!voice)}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: voice }}
+              aria-checked={voice}
               accessibilityLabel={tt("chat.voice")}
-              trackColor={{ true: t.accent, false: t.line }}
-              thumbColor={t.panel}
-            />
+              style={({ pressed, hovered, focused }: PressState) => [
+                s.voiceToggle,
+                webCursor,
+                (hovered || pressed) && { backgroundColor: t.raised },
+                focusRing(focused, t.accent),
+              ]}
+            >
+              <Icon name={voice ? "volume-high" : "volume-off"} size={22} color={voice ? t.accent : t.dim} />
+              <SwitchVisual value={voice} />
+            </Pressable>
           </View>
         }
       />
@@ -197,8 +222,8 @@ export default function Chat() {
           ref={list}
           data={msgs}
           keyExtractor={(m) => m.id}
-          contentContainerStyle={s.chatContent}
-          ListHeaderComponent={<View style={{ marginBottom: 14 }}><PhotoHero photo="chat" icon="chat-processing-outline" eyebrow={tt("ph.chat.eyebrow")} title={tt("ph.chat.title")} subtitle={tt("ph.chat.sub")} height={200} testID="chat-hero" /></View>}
+          contentContainerStyle={[s.chatContent, { paddingHorizontal: sp.pad, paddingTop: sp.gap }]}
+          ListHeaderComponent={<View style={{ marginBottom: S.xl }}><PhotoHero photo="chat" photos={PHOTO_SETS.chat} icon="chat-processing-outline" eyebrow={tt("ph.chat.eyebrow")} title={tt("ph.chat.title")} subtitle={tt("ph.chat.sub")} compact height={170} testID="chat-hero" /></View>}
           renderItem={({ item }) => (
             <Enter from={item.from === "user" ? "up" : "down"}>
             <View
@@ -209,21 +234,35 @@ export default function Chat() {
                   : { alignSelf: "flex-start", borderColor: item.err ? t.alert : t.line, backgroundColor: t.panel },
               ]}
             >
-              <Text style={{ color: t.ink, fontSize: 15 }}>{item.text}</Text>
-              {item.from === "apex" && (
+              {item.err ? (
+                // Not colour alone: a failed reply also carries an alert icon.
+                <View style={s.errRow}>
+                  <Icon name="alert-circle-outline" size={18} color={t.alert} style={{ marginTop: 3 }} />
+                  <Text style={{ flex: 1, color: t.ink, ...T.body }}>{item.text}</Text>
+                </View>
+              ) : (
+                <Text style={{ color: t.ink, ...T.body }}>{textOf(item)}</Text>
+              )}
+              {item.err && item.retry ? (
+                <Btn kind="secondary" small label={tt("result.retry")} onPress={() => retry(item)} disabled={busy} style={{ alignSelf: "flex-start", marginTop: S.md }} testID="chat-retry" />
+              ) : null}
+              {item.from === "apex" && !item.err && (
                 <View style={s.metaRow}>
-                  {item.intent ? <Pill label={item.intent.toUpperCase()} tone="warn" /> : null}
+                  {item.intent ? <Pill label={(trMaybe(lang, `intent.${item.intent}`) ?? item.intent).toUpperCase()} tone="dim" /> : null}
                   <Pressable
-                    onPress={() => speak(item.text)}
+                    onPress={() => speak(textOf(item))}
                     hitSlop={10}
                     accessibilityRole="button"
                     accessibilityLabel={tt("chat.speak")}
-                    style={({ pressed, hovered }: PressState) => [
+                    style={({ pressed, hovered, focused }: PressState) => [
+                      s.speak,
                       webCursor,
                       (hovered || pressed) && { opacity: 0.7 },
+                      focusRing(focused, t.accent),
                     ]}
                   >
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 4, minHeight: 32 }}><Icon name="volume-high" size={15} color={t.accent} /><Text style={{ color: t.accent, fontSize: 13, fontWeight: "700" }}>{tt("chat.speak")}</Text></View>
+                    <Icon name="volume-high" size={16} color={t.accent} />
+                    <Text style={{ color: t.accent, ...T.meta, fontWeight: "700" }}>{tt("chat.speak")}</Text>
                   </Pressable>
                 </View>
               )}
@@ -232,8 +271,12 @@ export default function Chat() {
           )}
           ListFooterComponent={
             busy ? (
-              <View style={[s.bubble, { alignSelf: "flex-start", borderColor: t.line, backgroundColor: t.panel }]}>
-                <Text style={{ color: t.dim, fontSize: 15 }}>{tt("chat.typing")}</Text>
+              <View
+                accessibilityLiveRegion="polite"
+                aria-live="polite"
+                style={[s.bubble, { alignSelf: "flex-start", borderColor: t.line, backgroundColor: t.panel }]}
+              >
+                <Text style={{ color: t.dim, ...T.body }}>{tt("chat.typing")}</Text>
               </View>
             ) : null
           }
@@ -241,33 +284,34 @@ export default function Chat() {
 
         {/* Quick prompts scroll sideways at full length, never truncated. */}
         <Bounded>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.quickRow}>
-            {QUICK.map((q) => (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[s.quickRow, { paddingHorizontal: sp.pad }]}>
+            {QUICK.map((k) => tt(k)).map((q) => (
               <Pressable
                 key={q}
                 onPress={() => send(q)}
                 accessibilityRole="button"
-                accessibilityLabel={`Ask: ${q}`}
-                style={({ pressed, hovered }: PressState) => [
+                accessibilityLabel={tt("chat.ask", { q })}
+                style={({ pressed, hovered, focused }: PressState) => [
                   s.quick,
                   { borderColor: hovered ? t.accent : t.line, backgroundColor: hovered ? t.raised : "transparent", opacity: pressed ? 0.6 : 1 },
                   webCursor,
+                  focusRing(focused, t.accent),
                 ]}
               >
-                <Text style={{ color: t.ink, fontSize: 13, lineHeight: 18 }}>{q}</Text>
+                <Text style={{ color: t.ink, ...T.meta }}>{q}</Text>
               </Pressable>
             ))}
           </ScrollView>
         </Bounded>
 
-        <View style={[s.inputRow, { borderTopColor: t.line, backgroundColor: t.panel }]}>
+        <View style={[s.inputRow, { paddingHorizontal: sp.pad, borderTopColor: t.line, backgroundColor: t.panel }]}>
           <Bounded style={s.inputInner}>
           <TextInput
             ref={inputRef}
             testID="chat-input"
-            accessibilityLabel="Message to Apex"
+            accessibilityLabel={tt("chat.inputLabel")}
             style={[s.input, { color: t.ink, backgroundColor: t.field, borderColor: t.line }]}
-            placeholder="Uliza Apex…"
+            placeholder={tt("chat.placeholder")}
             placeholderTextColor={t.dim}
             value={input}
             onChangeText={setInput}
@@ -275,10 +319,10 @@ export default function Chat() {
             returnKeyType="send"
             editable={!busy}
           />
-          <PressScale onPress={() => send()} disabled={busy} accessibilityLabel="Send message" focusColor={t.accent}
+          <PressScale onPress={() => send()} disabled={busy} accessibilityLabel={tt("chat.sendLabel")} accessibilityState={{ busy, disabled: busy }} focusColor={t.accent}
             outerStyle={{ alignSelf: "stretch" }}
             style={[s.send, { backgroundColor: t.accent, opacity: busy ? 0.5 : 1 }]}>
-            <Text style={{ color: t.bg, fontWeight: "800" }}>{busy ? "…" : "Send"}</Text>
+            <Text style={{ color: t.field, fontSize: 16, lineHeight: 22, fontWeight: "800" }}>{busy ? "…" : tt("chat.send")}</Text>
           </PressScale>
           </Bounded>
         </View>
@@ -288,16 +332,19 @@ export default function Chat() {
 }
 
 const s = StyleSheet.create({
-  voiceRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  chatContent: { padding: 14, gap: 10, width: "100%", maxWidth: CONTENT_MAX_W, alignSelf: "center" },
-  bubble: { maxWidth: "86%", borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11 },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 7 },
-  quickRow: { flexDirection: "row", gap: 8, paddingHorizontal: 12, paddingBottom: 10 },
-  quick: { minHeight: 40, justifyContent: "center", borderWidth: 1, borderRadius: 999, paddingHorizontal: 14 },
-  inputRow: { padding: 12, borderTopWidth: 1 },
-  inputInner: { flexDirection: "row", gap: 10 },
-  input: { flex: 1, minHeight: 48, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15.5, fontFamily: SANS["500"] },
-  send: { flex: 1, minHeight: 48, borderRadius: 12, paddingHorizontal: 18, justifyContent: "center" },
+  voiceRow: { flexDirection: "row", alignItems: "center", gap: S.xs },
+  voiceToggle: { flexDirection: "row", alignItems: "center", gap: S.sm, minHeight: TOUCH, paddingHorizontal: S.sm, borderRadius: R.md },
+  chatContent: { padding: S.lg, gap: S.md, width: "100%", maxWidth: CONTENT_MAX_W, alignSelf: "center" },
+  bubble: { maxWidth: "86%", borderWidth: B.line, borderRadius: R.btn, paddingHorizontal: S.lg, paddingVertical: S.md },
+  errRow: { flexDirection: "row", alignItems: "flex-start", gap: S.sm },
+  metaRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: S.md, marginTop: S.xs },
+  speak: { flexDirection: "row", alignItems: "center", gap: S.xs, minHeight: TOUCH, paddingHorizontal: S.xs, marginHorizontal: -S.xs, borderRadius: R.sm },
+  quickRow: { flexDirection: "row", gap: S.sm, paddingHorizontal: S.lg, paddingBottom: S.md },
+  quick: { minHeight: TOUCH, justifyContent: "center", borderWidth: B.control, borderRadius: R.pill, paddingHorizontal: S.lg },
+  inputRow: { paddingVertical: S.md, paddingHorizontal: S.lg, borderTopWidth: B.line },
+  inputInner: { flexDirection: "row", gap: S.md },
+  input: { flex: 1, minHeight: 48, borderWidth: B.control, borderRadius: R.md, paddingHorizontal: S.lg, paddingVertical: S.md, fontSize: 16, fontFamily: SANS["500"] },
+  send: { flex: 1, minHeight: 48, borderRadius: R.md, paddingHorizontal: S.lg, justifyContent: "center" },
 });
 
 // A screen that throws shows a "try again" card, never a blank app.

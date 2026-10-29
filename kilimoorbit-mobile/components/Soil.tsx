@@ -12,7 +12,7 @@ import { useLang } from "../lib/session";
 import { limeAdvice, phBand } from "../lib/soil";
 import type { CropKey } from "../lib/agronomy";
 import type { Key } from "../lib/i18n";
-import { Chip, ChipRow, Group, Stepper, T } from "./Kit";
+import { B, Chip, ChipRow, Group, Stepper, T } from "./Kit";
 
 /** The lime row of an input list: amount for the plot, when, and the cheaper microdose. */
 export function LimeLine({ crop, acres, ph, planted }: { crop: CropKey; acres: number; ph: number | null; planted?: boolean }) {
@@ -43,7 +43,7 @@ export function GenuineNote() {
   const t = useTheme();
   const { t: tt } = useLang();
   return (
-    <View style={{ gap: 4, borderTopWidth: 1, borderTopColor: t.line, paddingTop: 8 }} testID="genuine-note">
+    <View style={{ gap: 4, borderTopWidth: B.line, borderTopColor: t.line, paddingTop: 8 }} testID="genuine-note">
       <Text style={{ color: t.ink, fontSize: 12.5, lineHeight: 17, fontWeight: "700" }}>{tt("inputs.genuine")}</Text>
       <Text style={{ color: t.dim, fontSize: 12.5, lineHeight: 17 }}>{tt("inputs.subsidy")}</Text>
     </View>

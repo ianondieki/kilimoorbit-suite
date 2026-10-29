@@ -21,7 +21,7 @@ import { BudgetSheet } from "../../components/Budget";
 import { LastScoutLine, ScoutSheet } from "../../components/Scout";
 import { GenuineNote, LimeLine } from "../../components/Soil";
 import { isStoreCrop, type Lot, type StoreCrop } from "../../lib/postharvest";
-import { Btn, Card, Chip, ChipRow, Empty, Eyebrow, T, Tag, tint } from "../../components/Kit";
+import { B, Btn, Card, Chip, ChipRow, Empty, Eyebrow, R, S, T, Tag, surfaceAttr, tint, useSpace } from "../../components/Kit";
 import { Enter, LevelBar } from "../../components/Motion";
 import { CropCoin } from "../../components/ShambaPanel";
 import { ArrowGlyph, BarsGlyph, ChevronGlyph, CrossGlyph, PlusGlyph, CoinGlyph } from "../../components/Glyphs";
@@ -31,7 +31,7 @@ import { SaccosCard } from "../../components/Saccos";
 import { FishSection } from "../../components/Fish";
 import { HeroChip, PhotoHero } from "../../components/PhotoHero";
 import { useFish } from "../../lib/fish";
-import type { PhotoKey } from "../../lib/photos";
+import { PHOTO_SETS, type PhotoKey } from "../../lib/photos";
 import { useTheme } from "../../lib/theme-context";
 import { useLang, useSession } from "../../lib/session";
 import { announce, focusRing, webCursor, webLang, type PressState } from "../../lib/ui";
@@ -49,11 +49,13 @@ import { DEMO_COUNTY } from "../../lib/counties";
 
 type Tab = "calendar" | "livestock" | "fish" | "records";
 const TAB_PHOTO: Record<Tab, PhotoKey> = { calendar: "farm", livestock: "livestock", fish: "fish", records: "farm" };
+const TAB_PHOTOS: Record<Tab, PhotoKey[]> = { calendar: PHOTO_SETS.shamba, livestock: PHOTO_SETS.livestock, fish: PHOTO_SETS.fish, records: PHOTO_SETS.shamba };
 
 export default function Shamba() {
   const t = useTheme();
   const { lang, t: tt } = useLang();
   const { farm } = useFarm();
+  const sp = useSpace();
   // ?tab=livestock (or records) opens that section directly.
   const params = useLocalSearchParams<{ tab?: string }>();
   const [tab, setTab] = useState<Tab>(params.tab === "livestock" || params.tab === "records" || params.tab === "fish" ? params.tab : "calendar");
@@ -84,13 +86,14 @@ export default function Shamba() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }} edges={["top"]} {...webLang(lang)}>
       <Header title={tt("farm.title")} />
-      <ScrollView contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}>
-        <Bounded style={{ padding: 16, gap: 14 }}>
+      <ScrollView contentContainerStyle={{ flexGrow: 1, paddingBottom: S.x5 }}>
+        <Bounded style={{ paddingHorizontal: sp.pad, paddingTop: sp.gap, gap: sp.gap }}>
           <PhotoHero
-            photo={TAB_PHOTO[tab]} icon="barn"
+            photo={TAB_PHOTO[tab]} photos={TAB_PHOTOS[tab]} icon="barn"
             eyebrow={tt("ph.farm.eyebrow", { county: farm.county ?? tt("farm.noCounty") })}
             title={tt(`ph.farm.title.${tab}` as Key)} subtitle={tt(`ph.farm.sub.${tab}` as Key)}
             testID="farm-hero"
+            style={{ marginBottom: sp.gap }}
           >
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
               <HeroChip icon="sprout" value={String(farm.plantings.length)} label={tt("ph.chip.crops")} />
@@ -104,8 +107,9 @@ export default function Shamba() {
             accessibilityRole="button"
             accessibilityLabel={`${farm.county ? `${farm.county}${farm.acres ? `, ${acresText(tt, farm.acres)}` : ""}` : tt("farm.noCounty")}. ${tt("farm.editA11y")}`}
             testID="farm-profile"
+            {...surfaceAttr()}
             style={({ pressed, hovered, focused }: PressState) => [
-              { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: t.line, backgroundColor: hovered ? t.raised : t.panel, opacity: pressed ? 0.85 : 1 },
+              { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: R.card, borderWidth: B.line, borderColor: t.line, backgroundColor: hovered ? t.raised : t.panel, opacity: pressed ? 0.85 : 1 },
               webCursor, focusRing(focused, t.accent),
             ]}
           >
@@ -136,7 +140,7 @@ export default function Shamba() {
             {tab === "calendar" ? (
               <Calendar actions={actions} />
             ) : tab === "livestock" ? (
-              <View style={{ gap: 14 }}>
+              <View style={{ gap: sp.gap }}>
                 <HerdSection />
                 <Guard name="saccos"><SaccosCard /></Guard>
               </View>
@@ -178,9 +182,10 @@ function Calendar({ actions }: { actions: CropActions }) {
   const { farm } = useFarm();
   const wx = useForecast(farm.county ?? DEMO_COUNTY);
   const sorted = [...farm.plantings].sort((a, b) => (a.plantedOn < b.plantedOn ? -1 : 1));
+  const sp = useSpace();
 
   return (
-    <View style={{ gap: 14 }}>
+    <View style={{ gap: sp.gap }}>
       {sorted.length === 0 ? (
         <Card>
           <Empty
@@ -283,7 +288,7 @@ function PlantingCard({ p, days, actions }: { p: Planting; days?: WxDay[]; actio
       {open && (
         <View style={{ marginTop: 12, gap: 14 }}>
           <TaskRows tasks={all} dates days={days} />
-          <View style={{ backgroundColor: t.raised, borderRadius: 14, padding: 14, gap: 8 }}>
+          <View style={{ backgroundColor: t.raised, borderRadius: R.md, padding: 14, gap: 8 }}>
             <Text style={{ color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "800" }}>{tt("plant.inputs")}</Text>
             {inputsFor(p.crop, p.acres, lang).map((n) => (
               <View key={n.label} style={{ flexDirection: "row", gap: 12 }}>
@@ -429,6 +434,7 @@ function Records({ onAdd }: { onAdd: () => void }) {
     .sort((a, b) => (a.date === b.date ? 0 : a.date < b.date ? 1 : -1));
   const sum = totals(entries);
   const crops = byCrop(entries);
+  const sp = useSpace();
 
   if (!farm.entries.length)
     return (
@@ -442,7 +448,7 @@ function Records({ onAdd }: { onAdd: () => void }) {
     );
 
   return (
-    <View style={{ gap: 14 }}>
+    <View style={{ gap: sp.gap }}>
       <Card>
         <ChipRow role="radiogroup" label={tt("rec.period")}>
           <Chip role="radio" selected={period === "season"} onPress={() => setPeriod("season")} label={tt("rec.season")} />
@@ -532,7 +538,7 @@ function EntryRow({ e, last }: { e: Entry; last: boolean }) {
   const what = [tt(`rec.cat.${e.category}` as Key), e.crop ? cropName(lang, e.crop) : null].filter(Boolean).join(" · ");
   const sign = e.kind === "income" ? "+" : "−";
   return (
-    <View style={{ borderBottomWidth: last ? 0 : 1, borderBottomColor: t.line, paddingVertical: 6 }}>
+    <View style={{ borderBottomWidth: last ? 0 : B.line, borderBottomColor: t.line, paddingVertical: 6 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: 44 }}>
         <View style={{ width: 52 }}>
           <Text style={{ color: t.dim, fontSize: 12.5, lineHeight: 16, fontWeight: "700" }}>{dayMonth(lang, e.date)}</Text>

@@ -22,7 +22,7 @@ import {
   STORE, STORE_CROPS, bagsLabel, bagsOf, checkKind, dueChecks, holdPlan, isStoreCrop, nextCheck,
   type DueCheck, type HoldPlan, type Lot, type StoreCrop,
 } from "../lib/postharvest";
-import { Btn, Card, CheckRow, Chip, ChipRow, Eyebrow, Group, Sheet, Stepper, T, Tag } from "./Kit";
+import { B, Btn, Card, CheckRow, Chip, ChipRow, Eyebrow, Group, R, Sheet, Stepper, T, Tag } from "./Kit";
 import { CropCoin, DemoTag } from "./ShambaPanel";
 import { DateNudge } from "./FarmSheets";
 import { dueText } from "./TaskRows";
@@ -130,7 +130,7 @@ export function StoreSheet({
         <DateNudge value={since} onChange={(k) => setSince(k > today ? today : k)} label={tt("store.sinceLabel")} />
       </Group>
 
-      <View style={{ backgroundColor: t.raised, borderRadius: 14, padding: 14, gap: 8 }}>
+      <View style={{ backgroundColor: t.raised, borderRadius: R.md, padding: 14, gap: 8 }}>
         <Text style={{ color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "800" }}>{tt("store.tipsTitle")}</Text>
         {(crop === "potatoes" ? ["store.tip.cure", "store.tip.dark", "store.tip.rot"] : ["store.tip.dry", "store.tip.sort", "store.tip.pallets"]).map((k) => (
           <View key={k} style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
@@ -259,7 +259,7 @@ function LotRow({ lot, last, onSell }: { lot: Lot; last: boolean; onSell: () => 
   const kind = lot.crop === "potatoes" ? "" : ` · ${tt(lot.hermetic ? "store.hermetic" : "store.open")}`;
 
   return (
-    <View style={{ paddingVertical: 10, gap: 8, borderBottomWidth: last ? 0 : 1, borderBottomColor: t.line }} testID={`lot-${lot.crop}`}>
+    <View style={{ paddingVertical: 10, gap: 8, borderBottomWidth: last ? 0 : B.line, borderBottomColor: t.line }} testID={`lot-${lot.crop}`}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
         <CropCoin cropKey={lot.crop} size={36} />
         <View style={{ flex: 1 }}>
@@ -407,7 +407,7 @@ function HoldBars({ plan }: { plan: HoldPlan }) {
           const now = m.k === 0;
           return (
             <View key={m.k} style={{ flex: 1, alignItems: "center", gap: 4 }}>
-              <Text style={{ color: best ? t.accent : t.dim, fontSize: 11.5, lineHeight: 14, fontWeight: "700" }}>{m.price}</Text>
+              <Text style={{ color: best ? t.accent : t.dim, fontSize: 12, lineHeight: 16, fontWeight: "700", fontVariant: ["tabular-nums"] }}>{m.price}</Text>
               <View style={{ width: "100%", maxWidth: 34, height: h(m.price), borderRadius: 6, backgroundColor: best ? t.accent : now ? t.dim : t.raised, borderWidth: now || best ? 0 : 1, borderColor: t.line }} />
             </View>
           );
@@ -415,7 +415,7 @@ function HoldBars({ plan }: { plan: HoldPlan }) {
       </View>
       <View style={{ flexDirection: "row", gap: 6 }}>
         {plan.months.map((m) => (
-          <Text key={m.k} style={{ flex: 1, textAlign: "center", color: m.k === 0 ? t.ink : t.dim, fontSize: 11.5, lineHeight: 14, fontWeight: m.k === 0 ? "800" : "600" }}>
+          <Text key={m.k} style={{ flex: 1, textAlign: "center", color: m.k === 0 ? t.ink : t.dim, fontSize: 12, lineHeight: 16, fontWeight: m.k === 0 ? "800" : "600" }}>
             {m.k === 0 ? tt("hold.now") : monthShort(lang, m.month)}
           </Text>
         ))}

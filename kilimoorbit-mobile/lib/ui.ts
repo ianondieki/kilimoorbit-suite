@@ -27,6 +27,12 @@ export const focusRing = (focused: boolean | undefined, color: string): ViewStyl
     ? ({ outlineWidth: 3, outlineStyle: "solid", outlineColor: color, outlineOffset: 2 } as any)
     : null;
 
+/** The same ring drawn inside the edge: for full-width rows, whose outer ring the scroll pane would clip at the sides. */
+export const focusRingInset = (focused: boolean | undefined, color: string): ViewStyle | null =>
+  isWeb && focused && keyboardModality
+    ? ({ outlineWidth: 3, outlineStyle: "solid", outlineColor: color, outlineOffset: -3 } as any)
+    : null;
+
 /** Removes the browser's own focus outline (inputs draw their own ring). */
 export const noOutline: any = isWeb ? { outlineStyle: "none" } : null;
 

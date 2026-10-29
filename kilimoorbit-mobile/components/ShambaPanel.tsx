@@ -7,7 +7,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Pressable, type LayoutChangeEvent } from "react-native";
 import Text from "./Text";
-import { Eyebrow } from "./Kit";
+import { B, Eyebrow, R, surfaceAttr } from "./Kit";
 import Icon from "./Icon";
 import Animated, {
   Easing, FadeIn, ReduceMotion, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withTiming,
@@ -104,8 +104,8 @@ export function DemoTag() {
   const t = useTheme();
   const { t: tt } = useLang();
   return (
-    <View style={{ borderWidth: 1.5, borderColor: t.dim, borderRadius: 999, paddingHorizontal: 8, minHeight: 22, justifyContent: "center", alignSelf: "center" }}>
-      <Text style={{ color: t.ink, fontSize: 11, fontFamily: "monospace", fontWeight: "700" }}>{tt("prices.demo")}</Text>
+    <View style={{ borderWidth: B.control, borderColor: t.dim, borderRadius: R.pill, paddingHorizontal: 8, minHeight: 22, justifyContent: "center", alignSelf: "center" }}>
+      <Text style={{ color: t.ink, fontSize: 12, lineHeight: 16, fontFamily: "monospace", fontWeight: "700" }}>{tt("prices.demo")}</Text>
     </View>
   );
 }
@@ -120,7 +120,7 @@ function PriceRow({ row, coin, big }: { row: StapleRow; coin: number; big?: bool
       {...groupRole}
       style={{
         minHeight: big ? 56 : 52, flexDirection: "row", gap: 12, alignItems: "center",
-        ...(big ? { borderBottomWidth: 1, borderBottomColor: t.line, paddingVertical: 6 } : { paddingVertical: 4 }),
+        ...(big ? { borderBottomWidth: B.line, borderBottomColor: t.line, paddingVertical: 6 } : { paddingVertical: 4 }),
       }}
     >
       <CropCoin cropKey={row.key} size={coin} />
@@ -240,7 +240,7 @@ function Strip({ board, season, expanded = false, onToggle, inset = 16 }: Props)
   const rowsStyle = useAnimatedStyle(() => ({ opacity: rows.value }));
 
   return (
-    <View style={{ marginTop: 4, marginHorizontal: inset, minHeight: 64, borderRadius: 16, backgroundColor: t.panel, borderWidth: 1, borderColor: t.line }}>
+    <View {...surfaceAttr()} style={{ marginTop: 4, marginHorizontal: inset, minHeight: 64, borderRadius: R.card, backgroundColor: t.panel, borderWidth: B.line, borderColor: t.line }}>
       <Pressable
         onPress={onToggle}
         accessibilityRole="button"
@@ -250,7 +250,7 @@ function Strip({ board, season, expanded = false, onToggle, inset = 16 }: Props)
         aria-expanded={expanded}
         style={({ focused, pressed }: PressState) => [
           // The whole visible header is the touch box (>= 48; 62 inside the 1px border).
-          { flexDirection: "row", gap: 12, alignItems: "center", minHeight: 62, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 15, opacity: pressed ? 0.8 : 1 },
+          { flexDirection: "row", gap: 12, alignItems: "center", minHeight: 62, paddingHorizontal: 12, paddingVertical: 10, borderRadius: R.card - B.line, opacity: pressed ? 0.8 : 1 },
           webCursor, focusRing(focused, t.accent),
         ]}
       >
@@ -298,7 +298,7 @@ function Tiles({ board, season }: Props) {
   const { lang, t: tt } = useLang();
   const s = useSeasonCopy(season);
   return (
-    <View style={{ borderRadius: 16, backgroundColor: t.panel, borderWidth: 1, borderColor: t.line, padding: 14 }}>
+    <View {...surfaceAttr()} style={{ borderRadius: R.card, backgroundColor: t.panel, borderWidth: B.line, borderColor: t.line, padding: 14 }}>
       <View accessible accessibilityLabel={`${s.name}, ${s.desc}. ${s.next}`} {...groupRole} style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
         <SeasonOrbit size={40} variant="mini" />
         <View style={{ flex: 1 }} {...webHidden}>
@@ -308,10 +308,10 @@ function Tiles({ board, season }: Props) {
       </View>
       <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
         {board.status === "loading"
-          ? [0, 1, 2].map((i) => <Skeleton key={i} height={76} radius={14} width={"30%"} color={t.raised} style={{ flex: 1 }} />)
+          ? [0, 1, 2].map((i) => <Skeleton key={i} height={76} radius={R.md} width={"30%"} color={t.raised} style={{ flex: 1 }} />)
           : board.rows.length
             ? board.rows.slice(0, 3).map((r) => (
-                <View key={r.key} accessible accessibilityLabel={rowA11y(lang, r)} {...groupRole} style={{ flex: 1, minHeight: 76, borderRadius: 14, backgroundColor: t.raised, padding: 10 }}>
+                <View key={r.key} accessible accessibilityLabel={rowA11y(lang, r)} {...groupRole} style={{ flex: 1, minHeight: 76, borderRadius: R.md, backgroundColor: t.raised, padding: 10 }}>
                   <View {...webHidden}>
                     <Text numberOfLines={1} style={{ color: t.ink, fontSize: 14, lineHeight: 20, fontWeight: "700" }}>{cropName(lang, r.key)}</Text>
                     <Text style={{ color: t.ink, fontSize: 16, lineHeight: 22, fontFamily: "monospace", fontWeight: "700" }}>KES {r.best.price}/kg</Text>
@@ -389,7 +389,7 @@ function Side({ board, season, width, height }: Props) {
           ) : board.rows.length ? (
             board.rows.map((r) => <PriceRow key={r.key} row={r} coin={36} big />)
           ) : (
-            <View style={{ minHeight: 120, borderRadius: 14, borderWidth: 2, borderColor: t.line, alignItems: "center", justifyContent: "center", padding: 16, marginTop: 8, gap: 10 }}>
+            <View style={{ minHeight: 120, borderRadius: R.md, borderWidth: B.line, borderColor: t.line, alignItems: "center", justifyContent: "center", padding: 16, marginTop: 8, gap: 10 }}>
               <SignalOffGlyph size={20} color={t.dim} />
               <Text style={{ color: t.dim, fontSize: 15, lineHeight: 22, textAlign: "center" }}>{tt("prices.none")}</Text>
             </View>

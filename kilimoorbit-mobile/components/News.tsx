@@ -1,7 +1,9 @@
 /**
- * Farm news on Today: the county's headlines first, then national, one story
- * per page. A story opens in the browser; a SAMPLE tip (server with no
- * internet) opens the app screen it is about. Data: lib/news.ts.
+ * Farm news on Today: the county's headlines first, then national, a row of
+ * story cards that turns by itself (the next story peeks at the edge) and
+ * holds still under the farmer's finger, pointer or keyboard. A story opens in
+ * the browser; a SAMPLE tip (server with no internet) opens the app screen it
+ * is about. Data: lib/news.ts.
  */
 import React from "react";
 import { View } from "react-native";
@@ -13,42 +15,58 @@ import { announce, webLang } from "../lib/ui";
 import { ageText } from "../lib/prices";
 import { minutesSince, openLink, useNews } from "../lib/news";
 import type { NewsItem } from "../lib/api";
-import { Btn, Card, Eyebrow, T, Tag } from "./Kit";
+import { Btn, Card, Eyebrow, S, T, Tag } from "./Kit";
 import { DemoTag } from "./ShambaPanel";
 import { Skeleton } from "./Motion";
 import { ArrowGlyph, SignalOffGlyph, NewsGlyph } from "./Glyphs";
 import Pager from "./Pager";
 
-export function NewsCard({ county }: { county: string | null }) {
+/** How long a story stays before the next one comes in. */
+export const NEWS_TURN = 6500;
+
+/** `peek`: how much of the next story shows; 0 where the row sits beside another (wide Today). */
+export function NewsCard({ county, peek = S.x3 }: { county: string | null; peek?: number }) {
   const t = useTheme();
   const { lang, t: tt } = useLang();
   const news = useNews(county);
   const d = news.data;
   const name = (d?.county ?? county ?? "").toUpperCase();
   return (
-    <Card>
+    <View testID="news-block">
       <Eyebrow domain="news" icon={(c) => <NewsGlyph size={15} color={c} />} text={name ? tt("news.eyebrow", { county: name }) : tt("news.eyebrowAll")} right={d?.source === "SAMPLE" ? <DemoTag /> : null} />
       {news.status === "loading" && !d ? (
-        <View style={{ gap: 10 }}>
-          <Skeleton height={14} width={"40%"} color={t.raised} />
-          <Skeleton height={44} color={t.raised} radius={10} />
-          <Skeleton height={14} width={"80%"} color={t.raised} />
-        </View>
+        <Card domain="news">
+          <View style={{ gap: S.md }}>
+            <Skeleton height={14} width={"40%"} color={t.raised} />
+            <Skeleton height={44} color={t.raised} radius={10} />
+            <Skeleton height={14} width={"80%"} color={t.raised} />
+          </View>
+        </Card>
       ) : !d ? (
-        <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
-          <SignalOffGlyph size={20} color={t.dim} />
-          <Text style={{ flex: 1, color: t.dim, ...T.body }}>{tt("news.none")}</Text>
-        </View>
+        <Card domain="news">
+          <View style={{ flexDirection: "row", gap: S.md, alignItems: "center" }}>
+            <SignalOffGlyph size={20} color={t.dim} />
+            <Text style={{ flex: 1, color: t.dim, ...T.body }}>{tt("news.none")}</Text>
+          </View>
+        </Card>
       ) : (
         <View testID="news-card">
           {news.status === "cached" && news.cachedAgeMin != null && (
-            <Text style={{ color: t.dim, ...T.meta, marginTop: -6, marginBottom: 8 }}>{tt("news.cached", { age: ageText(lang, news.cachedAgeMin) })}</Text>
+            <Text style={{ color: t.dim, ...T.meta, marginTop: -S.sm, marginBottom: S.md }}>{tt("news.cached", { age: ageText(lang, news.cachedAgeMin) })}</Text>
           )}
-          <Pager items={d.items} keyOf={(i) => i.id} label={tt("news.eyebrowAll")} testID="news" render={(item) => <Story item={item} />} />
-          {d.source === "SAMPLE" && <Text style={{ color: t.dim, fontSize: 12.5, lineHeight: 17, marginTop: 8 }}>{tt("news.sampleNote")}</Text>}
+          <Pager
+            items={d.items}
+            keyOf={(i) => i.id}
+            label={tt("news.a11y")}
+            testID="news"
+            autoplay={NEWS_TURN}
+            peek={peek}
+            render={(item) => <Story item={item} />}
+          />
+          {d.source === "SAMPLE" && <Text style={{ color: t.dim, ...T.meta, marginTop: S.xs }}>{tt("news.sampleNote")}</Text>}
         </View>
       )}
-    </Card>
+    </View>
   );
 }
 
@@ -66,22 +84,24 @@ function Story({ item }: { item: NewsItem }) {
     }
   };
   return (
-    <View style={{ gap: 6, paddingRight: 2 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <Text style={{ color: t.dim, ...T.meta, fontWeight: "700" }} {...webLang("en")}>{[item.source, when].filter(Boolean).join(" · ")}</Text>
-        {item.scope === "county" && item.county ? <Tag tone="water" label={item.county} /> : null}
+    <Card domain="news" style={{ flex: 1 }}>
+      <View style={{ flex: 1, gap: S.sm }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: S.sm, flexWrap: "wrap", minHeight: 24 }}>
+          <Text style={{ color: t.dim, ...T.meta, fontWeight: "700" }} {...webLang("en")}>{[item.source, when].filter(Boolean).join(" · ")}</Text>
+          {item.scope === "county" && item.county ? <Tag tone="water" label={item.county} /> : null}
+        </View>
+        <Text {...(item.title_sw && lang === "sw" ? {} : webLang("en"))} style={{ color: t.ink, ...T.headline }} numberOfLines={3}>{title}</Text>
+        {item.summary ? <Text {...webLang("en")} style={{ color: t.dim, ...T.body }} numberOfLines={3}>{item.summary}</Text> : null}
+        <Btn
+          kind="ghost"
+          small
+          label={tt(item.link ? "news.read" : "news.openTip")}
+          onPress={open}
+          icon={(c) => <ArrowGlyph size={14} color={c} />}
+          style={{ flexDirection: "row-reverse", alignSelf: "flex-start", marginTop: "auto", paddingTop: S.sm }}
+          testID={`news-open-${item.id}`}
+        />
       </View>
-      <Text {...(item.title_sw && lang === "sw" ? {} : webLang("en"))} style={{ color: t.ink, ...T.headline }} numberOfLines={3}>{title}</Text>
-      {item.summary ? <Text {...webLang("en")} style={{ color: t.ink, ...T.meta }} numberOfLines={3}>{item.summary}</Text> : null}
-      <Btn
-        kind="ghost"
-        small
-        label={tt(item.link ? "news.read" : "news.openTip")}
-        onPress={open}
-        icon={(c) => <ArrowGlyph size={14} color={c} />}
-        style={{ flexDirection: "row-reverse", alignSelf: "flex-start", marginTop: 2 }}
-        testID={`news-open-${item.id}`}
-      />
-    </View>
+    </Card>
   );
 }

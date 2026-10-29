@@ -9,9 +9,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getMeta, type CommodityFeed, type CommodityQuote } from "./api";
 import { tr, trMaybe, type Lang } from "./i18n";
 
+/**
+ * One picture per crop, from emoji every phone since 2018 draws (no 🫘, which
+ * older Androids show as a box). Beans take the seedling and sukuma wiki the
+ * leafy green, so the app's own crops never fall back to letters; only a crop
+ * the server adds later does.
+ */
 export const SAFE_EMOJI: Record<string, string> = {
-  maize: "🌽", onions: "🧅", carrots: "🥕", oranges: "🍊", tomato: "🍅",
-  potatoes: "🥔", cabbage: "🥬", bananas: "🍌", avocado: "🥑",
+  maize: "🌽", beans: "🌱", onions: "🧅", carrots: "🥕", oranges: "🍊", tomato: "🍅",
+  potatoes: "🥔", cabbage: "🥬", kale: "🥬", bananas: "🍌", avocado: "🥑",
 };
 
 const STAPLES = ["maize", "beans", "tomato", "potatoes"];

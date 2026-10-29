@@ -17,7 +17,7 @@ import { cleanBase, hostOf, probe, type Probe } from "../lib/connection";
 import { setApiBaseOverride, useApiBase } from "../lib/config";
 import { loadSentinel } from "../lib/sentinel";
 import type { Key } from "../lib/i18n";
-import { Btn, Group, Sheet, T, Tag } from "./Kit";
+import { Btn, Group, R, Sheet, T, Tag } from "./Kit";
 import Field from "./Field";
 
 export function ConnectionSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
@@ -69,7 +69,7 @@ export function ConnectionSheet({ visible, onClose }: { visible: boolean; onClos
         </View>
       }
     >
-      <View style={{ backgroundColor: t.raised, borderRadius: 14, padding: 14, gap: 8 }} accessibilityLiveRegion="polite" aria-live="polite" testID="conn-status">
+      <View style={{ backgroundColor: t.raised, borderRadius: R.md, padding: 14, gap: 8 }} accessibilityLiveRegion="polite" aria-live="polite" testID="conn-status">
         <Text style={{ color: t.dim, ...T.meta, fontWeight: "700" }}>{tt(override ? "conn.custom" : "conn.auto")}</Text>
         <Text selectable style={{ color: t.ink, fontFamily: "monospace", fontSize: 15, lineHeight: 20 }}>{hostOf(result?.base ?? base)}</Text>
         {busy || !r ? (

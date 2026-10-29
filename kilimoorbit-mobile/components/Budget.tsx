@@ -18,7 +18,7 @@ import { DEFAULT_PRICES, TYPICAL_PRICE, budgetFor, compareCrops, type BudgetLine
 import { acresText, farmActions, fmtMoney, useFarm } from "../lib/farm";
 import type { CommodityFeed } from "../lib/api";
 import type { Key } from "../lib/i18n";
-import { Btn, Chip, ChipRow, Group, Sheet, Stepper, T } from "./Kit";
+import { B, Btn, Chip, ChipRow, Group, R, Sheet, Stepper, T } from "./Kit";
 import { CropCoin } from "./ShambaPanel";
 import Field from "./Field";
 import { bagsLabel } from "../lib/postharvest";
@@ -48,7 +48,7 @@ function PriceInput({ value, onChange, onDone, label, testID }: { value: string;
       selectTextOnFocus
       testID={testID}
       style={[
-        { width: 96, height: 44, borderWidth: 2, borderColor: focused ? t.accent : t.line, borderRadius: 10, paddingHorizontal: 10, backgroundColor: t.field, color: t.ink, fontSize: 16, fontFamily: SANS["700"] },
+        { width: 96, height: 44, borderWidth: B.control, borderColor: focused ? t.accent : t.line, borderRadius: 10, paddingHorizontal: 10, backgroundColor: t.field, color: t.ink, fontSize: 16, fontFamily: SANS["700"] },
         noOutline,
       ]}
     />
@@ -161,7 +161,7 @@ export function BudgetSheet({
       />
 
       {/* The answer first, then what it is made of. */}
-      <View style={{ backgroundColor: t.raised, borderRadius: 14, padding: 14, gap: 4 }} accessibilityLiveRegion="polite" aria-live="polite">
+      <View style={{ backgroundColor: t.raised, borderRadius: R.md, padding: 14, gap: 4 }} accessibilityLiveRegion="polite" aria-live="polite">
         <Text style={{ color: t.dim, fontSize: 12.5, lineHeight: 16, fontWeight: "700" }}>{tt(loss ? "bud.loss" : "bud.profit")}</Text>
         <Text style={{ color: loss ? t.alert : t.ok, fontSize: 28, lineHeight: 34, fontWeight: "800" }} testID="bud-profit">
           {loss ? "−" : ""}{fmtMoney(Math.abs(b.profit))}
@@ -177,7 +177,7 @@ export function BudgetSheet({
 
       <Group label={tt("bud.costs")}>
         {b.lines.map((l) => (
-          <View key={l.key} style={{ paddingVertical: 6, gap: 6, borderBottomWidth: 1, borderBottomColor: t.line }}>
+          <View key={l.key} style={{ paddingVertical: 6, gap: 6, borderBottomWidth: B.line, borderBottomColor: t.line }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <Text style={{ flex: 1, color: t.ink, fontSize: 15, lineHeight: 20, fontWeight: "700" }}>{lineLabel(l)}</Text>
               <Text style={{ color: t.ink, fontFamily: "monospace", fontWeight: "700", fontSize: 14 }}>{fmtMoney(l.cost)}</Text>

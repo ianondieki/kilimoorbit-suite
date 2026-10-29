@@ -138,16 +138,20 @@ export function Thinking({
     const d = setInterval(() => setDots((s) => (s.length >= 3 ? "" : s + "•")), 450);
     return () => { clearInterval(m); clearInterval(d); };
   }, [messages.length]);
-  const o = useSharedValue(0.4);
+  // Reduced motion: a steady dot instead of a breathing one (the words still change).
+  const reduce = useReducedMotion();
+  const o = useSharedValue(reduce ? 1 : 0.4);
   useEffect(() => {
+    if (reduce) { o.value = 1; return; }
     o.value = withRepeat(withTiming(1, { duration: 700, easing: Easing.inOut(Easing.quad) }), -1, true);
-  }, []);
+    return () => cancelAnimation(o);
+  }, [reduce]);
   const a = useAnimatedStyle(() => ({ opacity: o.value }));
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }} accessibilityLiveRegion="polite" aria-live="polite">
       <Animated.View style={[{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }, a]} />
-      <Text style={{ color, fontFamily: "monospace", fontSize: 11, letterSpacing: 1 }}>
-        {messages[i]} {dots}
+      <Text style={{ color, fontSize: 14, lineHeight: 20, fontWeight: "700", letterSpacing: 0.4 }}>
+        {messages[i]} {reduce ? "" : dots}
       </Text>
     </View>
   );

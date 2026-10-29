@@ -13,7 +13,8 @@ import Text from "./Text";
 import Field from "./Field";
 import Icon, { type IconName } from "./Icon";
 import { PhotoHero } from "./PhotoHero";
-import { Btn, Card, Chip, ChipRow, Group, Sheet, T, Tag, tint } from "./Kit";
+import { PHOTO_SETS } from "../lib/photos";
+import { B, Btn, Card, Chip, ChipRow, Group, R, Sheet, T, Tag, tint } from "./Kit";
 import { CheckCoin } from "./Glyphs";
 import { useTheme } from "../lib/theme-context";
 import { useLang, useSession } from "../lib/session";
@@ -70,7 +71,7 @@ export function SaccosCard() {
   return (
     <Card>
       <View style={{ gap: 14 }} testID="saccos-card">
-        <PhotoHero photo="sacco" compact height={176} icon="account-group-outline" eyebrow={tt("sc.eyebrow")} title={tt("sc.title")} />
+        <PhotoHero photo="sacco" photos={PHOTO_SETS.sacco} compact height={176} icon="account-group-outline" eyebrow={tt("sc.eyebrow")} title={tt("sc.title")} />
         <Text style={{ color: t.dim, ...T.body }}>{tt("sc.body")}</Text>
         {inputs.total > 0 && <Tag block tone="ok" label={tt("sc.inputs", { amount: fmtMoney(inputs.total) })} />}
         {phase !== "done" && (
@@ -93,7 +94,7 @@ export function SaccosCard() {
           <View style={{ gap: 8 }} testID="sc-mine">
             <Text style={{ color: t.ink, fontSize: 15, lineHeight: 20, fontWeight: "700" }}>{tt("sc.mine")}</Text>
             {mine.map((m) => (
-              <View key={m.id} style={{ flexDirection: "row", alignItems: "center", gap: 10, padding: 10, borderRadius: 12, backgroundColor: t.raised, borderWidth: 1, borderColor: t.line }}>
+              <View key={m.id} style={{ flexDirection: "row", alignItems: "center", gap: 10, padding: 10, borderRadius: R.md, backgroundColor: t.raised, borderWidth: B.line, borderColor: t.line }}>
                 <Icon name="file-document-check-outline" size={20} color={t.ok} />
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: t.ink, fontSize: 15, lineHeight: 20, fontWeight: "700" }}>{m.name}</Text>
@@ -115,13 +116,13 @@ function SaccoRow({ s, first, focus, requested, onJoin }: { s: Sacco; first: boo
   const { lang, t: tt } = useLang();
   const office = s.kind === "office";
   return (
-    <View style={{ borderRadius: 14, borderWidth: first ? 2 : 1, borderColor: first ? t.accent : t.line, backgroundColor: first ? tint(t.accent, 0.08) : t.raised, padding: 12, gap: 8 }} testID={`sc-row-${s.id}`}>
+    <View style={{ borderRadius: R.md, borderWidth: B.line, borderColor: first ? t.accent : t.line, backgroundColor: first ? tint(t.accent, 0.08) : t.raised, padding: 12, gap: 8 }} testID={`sc-row-${s.id}`}>
       <View style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
         <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: tint(office ? t.water : t.ok, 0.16), alignItems: "center", justifyContent: "center" }}>
           <Icon name={KIND_ICON[s.kind]} size={20} color={office ? t.water : t.ok} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={{ color: t.ink, fontSize: 15.5, lineHeight: 21, fontWeight: "800" }}>{s.name}</Text>
+          <Text style={{ color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "800" }}>{s.name}</Text>
           <Text style={{ color: t.dim, ...T.meta }}>{tt(`sc.kind.${s.kind}` as Key)} · {s.town === s.county ? s.town : `${s.town}, ${s.county}`}</Text>
         </View>
         <Text style={{ color: t.ink, fontSize: 16, lineHeight: 20, fontWeight: "800" }}>{kmText(s.distance_km)}</Text>

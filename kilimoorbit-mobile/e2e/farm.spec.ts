@@ -718,18 +718,18 @@ test("Markets: each crop chip carries today's best price; there is no ticker", a
   await expect(page.getByText(/E-BODA/)).toHaveCount(0);
 });
 
-test("Type: the bundled display and text faces are loaded and used (greeting and question in Space Grotesk, the rest in Nunito Sans)", async ({ page }) => {
+test("Type: the bundled display, label and text faces are loaded and used (greeting and question in Fraunces, the rest in Nunito Sans)", async ({ page }) => {
   await start(page, "/", "en", { county: "Nakuru" });
   await expect(page.getByText("0/5 today")).toBeVisible();
   const loaded = await page.evaluate(async () => {
     await document.fonts.ready;
     return [...document.fonts].filter((f) => f.status === "loaded").map((f) => f.family);
   });
-  expect(loaded).toEqual(expect.arrayContaining(["SpaceGrotesk_600SemiBold", "NunitoSans_400Regular", "NunitoSans_700Bold"]));
+  expect(loaded).toEqual(expect.arrayContaining(["Fraunces_500Medium", "Fraunces_600SemiBold", "SpaceGrotesk_600SemiBold", "NunitoSans_400Regular", "NunitoSans_700Bold"]));
   const greeting = page.getByRole("heading").filter({ hasText: /^(Good (morning|afternoon|evening|night)|Hello|Habari|Jambo)/ }).first();
-  await expect(greeting).toHaveCSS("font-family", /SpaceGrotesk_600SemiBold/);
+  await expect(greeting).toHaveCSS("font-family", /Fraunces_500Medium/);
   const first = byId(pickDaily(todayKey(), {})[0])!;
-  await expect(page.getByTestId("trivia-card").getByText(first.q.en)).toHaveCSS("font-family", /SpaceGrotesk_600SemiBold/);
+  await expect(page.getByTestId("trivia-card").getByText(first.q.en)).toHaveCSS("font-family", /Fraunces_600SemiBold/);
   await expect(page.getByText("0/5 today")).toHaveCSS("font-family", /NunitoSans_700Bold/);
   await expect(page.getByTestId("trivia-option-1-0").getByText(first.options[0].en)).toHaveCSS("font-family", /NunitoSans_600SemiBold/);
 });
@@ -838,7 +838,7 @@ test("Theme: with nothing chosen the app opens in the daylight Shamba theme; the
   await page.reload();
   const hero = page.getByTestId("today-hero");
   await expect(hero).toBeVisible();
-  await expect(hero).toHaveCSS("background-color", "rgb(0, 35, 26)"); // the forest green of the daylight theme
+  await expect(hero).toHaveCSS("background-color", "rgb(15, 42, 33)"); // the forest under the photographs (#0F2A21)
   await expect(page.getByTestId("hero-stats")).toContainText("Tasks this week");
   await expect(page.getByTestId("hero-stats")).toContainText("Next rain");
 });
@@ -960,13 +960,13 @@ test("Fish: add a pond, get today's feed and the harvest, weigh a sample, read t
 });
 
 /* ── photographs, credits and the motto ── */
-test("Photos: each main screen opens on a credited photo; the credits open their sources; the motto is in the sidebar", async ({ page }) => {
+test("Photos: each main screen opens on a photo with no words printed on it; the credits list opens their sources; the motto is in the sidebar", async ({ page }) => {
   await start(page, "/masoko");
   for (const [path, id] of [["/masoko", "markets-hero"], ["/daktari", "doctor-hero"], ["/chat", "chat-hero"], ["/autopilot", "autopilot-hero"], ["/shamba", "farm-hero"]] as const) {
     await page.goto(path);
     const hero = page.getByTestId(id);
     await expect(hero).toBeVisible();
-    await expect(hero.getByTestId("photo-credit")).toContainText(/CC BY|Public domain/);
+    await expect(hero).not.toContainText(/CIAT|CC BY|Public domain/); // credits live in Settings → Photo credits, not on the picture
     await expect(hero.getByRole("img")).toHaveCount(0); // the photo is decorative: hidden from screen readers
   }
   const menu = page.locator('[data-ko-menu-button="1"]');

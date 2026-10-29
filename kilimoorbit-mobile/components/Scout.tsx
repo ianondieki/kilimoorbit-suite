@@ -17,7 +17,7 @@ import { acresText, farmActions, useFarm, type Planting } from "../lib/farm";
 import { PER_STOP, STOPS, ageOn, pushPullPlan, scoutsFor, verdict, type Scout, type Verdict } from "../lib/scouting";
 import { shareScout, usePestWatch } from "../lib/pestwatch";
 import type { Key } from "../lib/i18n";
-import { Btn, Card, CheckRow, Chip, ChipRow, Eyebrow, Group, Sheet, Stepper, T, Tag } from "./Kit";
+import { Btn, Card, CheckRow, Chip, ChipRow, Eyebrow, Group, R, Sheet, Stepper, T, Tag } from "./Kit";
 import { CropCoin, DemoTag } from "./ShambaPanel";
 import { ArrowGlyph, LensGlyph, CheckGlyph } from "./Glyphs";
 
@@ -140,7 +140,7 @@ function VerdictBox({ v, plants, hit }: { v: Verdict; plants: number; hit: numbe
     : v.near ? tt("scout.v.near", { th: v.threshold })
     : tt("scout.v.ok", { th: v.threshold });
   return (
-    <View style={{ backgroundColor: t.raised, borderRadius: 14, padding: 14, gap: 6 }} accessibilityLiveRegion="polite" aria-live="polite" testID="scout-verdict">
+    <View style={{ backgroundColor: t.raised, borderRadius: R.md, padding: 14, gap: 6 }} accessibilityLiveRegion="polite" aria-live="polite" testID="scout-verdict">
       <Text style={{ color: t.ink, fontSize: 22, lineHeight: 28, fontWeight: "800" }}>{tt("scout.pct", { hit, plants, p: v.pct })}</Text>
       <Tag block tone={tone} label={head} />
     </View>
@@ -263,7 +263,7 @@ export function PushPullSheet({ visible, onClose }: { visible: boolean; onClose:
         <Stepper value={acres} onChange={setAcres} step={0.25} min={0.25} max={50} format={acresFmt} label={tt("bud.acres")} />
       </Group>
       {plan ? (
-        <View style={{ backgroundColor: t.raised, borderRadius: 14, padding: 14, gap: 8 }} testID="pp-plan">
+        <View style={{ backgroundColor: t.raised, borderRadius: R.md, padding: 14, gap: 8 }} testID="pp-plan">
           <Text style={{ color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "800" }}>{tt("pp.need")}</Text>
           {[
             [tt("pp.plots"), tt("pp.plotsVal", { n: plan.plots, side: plan.side })],

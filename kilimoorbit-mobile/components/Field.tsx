@@ -17,6 +17,7 @@ import Animated, {
 import { useTheme } from "../lib/theme-context";
 import { isWeb, noOutline } from "../lib/ui";
 import { CheckCoin, CheckGlyph, CrossGlyph } from "./Glyphs";
+import { B, R } from "./Kit";
 
 export type FieldStatus =
   | { kind: "rest"; text: string }
@@ -104,19 +105,20 @@ export default function Field({
 
       <View
         style={{
-          height, borderRadius: 14, backgroundColor: t.field, borderWidth: 2,
+          height, borderRadius: R.md, backgroundColor: t.field, borderWidth: B.control,
           borderColor: error ? t.alert : t.dim, flexDirection: "row", alignItems: "center",
         }}
       >
         <Animated.View
           style={[{ pointerEvents: "none",
-            // Absolute offsets count from inside the 2px border, so -8 puts the
-            // ring 6px outside the border's outer edge: a clear 3px gap of
+            // Absolute offsets count from inside the control border, so this puts
+            // the ring 6px outside the border's outer edge: a clear 3px gap of
             // background between the 3px ring and the border, so a red error
             // border still reads as red while the field is focused after a
-            // failed submit. Radius 20 = the well's 14 + 6.
-            position: "absolute", left: -8, right: -8, top: -8, bottom: -8,
-            borderRadius: 20, borderWidth: 3, borderColor: t.accent,
+            // failed submit. Radius 18 = the well's 12 + 6. The ring is an
+            // overlay, so focusing never changes the well's border or layout.
+            position: "absolute", left: -6 - B.control, right: -6 - B.control, top: -6 - B.control, bottom: -6 - B.control,
+            borderRadius: R.md + 6, borderWidth: 3, borderColor: t.accent,
           }, ringStyle]}
         />
         <TextInput

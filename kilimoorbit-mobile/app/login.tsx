@@ -6,6 +6,8 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { PhotoHero } from "../components/PhotoHero";
+import { PHOTO_SETS } from "../lib/photos";
+import { B, R, T } from "../components/Kit";
 import {
   View, ScrollView, Pressable, KeyboardAvoidingView, Platform, TextInput,
   useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent,
@@ -541,7 +543,7 @@ function LoginScreen({ edit, leaving }: { edit: boolean; leaving: React.MutableR
       {!result && (
         <>
           {!wide && !edit && (
-            <PhotoHero photo="login" compact height={168} icon="sprout" eyebrow={tt("motto.label")} title={tt("motto")} style={{ marginBottom: 16 }} testID="login-hero" />
+            <PhotoHero photo="login" photos={PHOTO_SETS.login} compact heading={false} height={180} icon="sprout" eyebrow={tt("motto.label")} title={tt("motto")} style={{ marginBottom: 16 }} testID="login-hero" />
           )}
           {/* minHeight 48 on phone and medium: the Listen pill mounts only once
               voices load (late on web), and must not push the form down. */}
@@ -549,7 +551,7 @@ function LoginScreen({ edit, leaving }: { edit: boolean; leaving: React.MutableR
             <Text
               accessibilityRole="header"
               accessibilityLanguage={lang}
-              display style={[{ color: t.ink, fontWeight: "700", flexShrink: 1 }, headlineSize]}
+              display style={[{ color: t.ink, fontWeight: "500", letterSpacing: -1, flexShrink: 1 }, headlineSize]}
             >
               {edit ? tt("edit.headline") : tt("form.headline")}
             </Text>
@@ -559,11 +561,12 @@ function LoginScreen({ edit, leaving }: { edit: boolean; leaving: React.MutableR
             {tt("form.sub")}
           </Text>}
           {!edit && (
-            <View style={{ flexDirection: "row", gap: 8, marginTop: 14 }} testID="login-stats">
-              {([["47", tt("login.stat.counties")], ["7", tt("login.stat.forecast")], ["2", tt("login.stat.langs")]] as const).map(([v, l]) => (
-                <View key={l} style={{ flex: 1, borderRadius: 12, borderWidth: 1, borderColor: t.line, backgroundColor: t.panel, paddingVertical: 10, paddingHorizontal: 10, gap: 2 }}>
-                  <Text display style={{ color: t.ink, fontSize: 22, lineHeight: 26 }}>{v}</Text>
-                  <Text numberOfLines={2} style={{ color: t.dim, fontSize: 10.5, lineHeight: 13, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase" }}>{l}</Text>
+            // A ledger line, as on Today: one rule, open columns, no boxes.
+            <View style={{ flexDirection: "row", marginTop: 18, paddingTop: 12, borderTopWidth: B.line, borderTopColor: t.line }} testID="login-stats">
+              {([["47", tt("login.stat.counties")], ["7", tt("login.stat.forecast")], ["2", tt("login.stat.langs")]] as const).map(([v, l], i) => (
+                <View key={l} style={{ flex: 1, gap: 2, paddingLeft: i ? 12 : 0, paddingRight: 8, borderLeftWidth: i ? B.line : 0, borderLeftColor: t.line }}>
+                  <Text style={{ color: i === 0 ? t.accent : t.ink, ...T.big, fontSize: 32, lineHeight: 36 }}>{v}</Text>
+                  <Text style={{ color: t.dim, ...T.label, letterSpacing: 0.8 }}>{l}</Text>
                 </View>
               ))}
             </View>
@@ -705,7 +708,7 @@ function LoginScreen({ edit, leaving }: { edit: boolean; leaving: React.MutableR
         webCursor, focusRing(focused, t.accent),
       ]}
     >
-      <View style={{ width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: t.dim, alignItems: "center", justifyContent: "center" }}>
+      <View style={{ width: 28, height: 28, borderRadius: 14, borderWidth: B.control, borderColor: t.dim, alignItems: "center", justifyContent: "center" }}>
         <PlusGlyph size={14} color={t.ink} />
       </View>
       <Text style={{ color: t.ink, fontSize: 15, lineHeight: 22, fontWeight: "600" }}>{tt("email.add")}</Text>
@@ -730,7 +733,7 @@ function LoginScreen({ edit, leaving }: { edit: boolean; leaving: React.MutableR
       {trustOpen && (
         <Animated.View
           entering={reduce ? undefined : FadeIn.duration(160)}
-          style={{ marginTop: 4, backgroundColor: t.panel, borderWidth: 1, borderColor: t.line, borderRadius: 12, padding: 14, gap: 10 }}
+          style={{ marginTop: 4, backgroundColor: t.panel, borderWidth: B.line, borderColor: t.line, borderRadius: R.md, padding: 14, gap: 10 }}
         >
           {trustBullets}
         </Animated.View>
@@ -739,8 +742,8 @@ function LoginScreen({ edit, leaving }: { edit: boolean; leaving: React.MutableR
   );
 
   const trustAlways = (
-    <View style={{ marginTop: 40, borderTopWidth: 1, borderTopColor: t.line, paddingTop: 20, gap: 10 }}>
-      <Text style={{ color: t.dim, fontSize: 11, lineHeight: 14, fontFamily: "monospace", fontWeight: "700", letterSpacing: 2 }}>
+    <View style={{ marginTop: 40, borderTopWidth: B.line, borderTopColor: t.line, paddingTop: 20, gap: 10 }}>
+      <Text style={{ color: t.dim, fontSize: 12, lineHeight: 16, fontFamily: "monospace", fontWeight: "700", letterSpacing: 2 }}>
         {tt("trust.eyebrow")}
       </Text>
       {trustBullets}
@@ -812,9 +815,9 @@ function LoginScreen({ edit, leaving }: { edit: boolean; leaving: React.MutableR
     const panelW = Math.min(520, Math.max(380, Math.round(width * 0.4)));
     return (
       <SafeAreaView edges={["top", "bottom"]} style={[{ flex: 1, flexDirection: "row", backgroundColor: t.bg }, Platform.OS === "web" && ({ minHeight: "100vh" } as any)]}>
-        <View style={{ width: panelW, backgroundColor: t.panel, borderRightWidth: 1, borderRightColor: t.line }}>
+        <View style={{ width: panelW, backgroundColor: t.panel, borderRightWidth: B.line, borderRightColor: t.line }}>
           <ScrollView contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 40, paddingVertical: 40 }}>
-            <PhotoHero photo="login" icon="sprout" eyebrow={tt("motto.label")} title={tt("login.hero.title")} subtitle={tt("motto")} height={260} style={{ marginBottom: 24 }} testID="login-hero" />
+            <PhotoHero photo="login" photos={PHOTO_SETS.login} heading={false} icon="sprout" eyebrow={tt("motto.label")} title={tt("login.hero.title")} subtitle={tt("motto")} height={260} style={{ marginBottom: 24 }} testID="login-hero" />
             <ShambaPanel variant="side" board={board} season={season} width={width} height={height} />
           </ScrollView>
         </View>
@@ -959,7 +962,7 @@ function LoginScreen({ edit, leaving }: { edit: boolean; leaving: React.MutableR
         </View>
         <Animated.View
           style={[{
-            backgroundColor: t.bg, borderTopWidth: 1, borderTopColor: t.line,
+            backgroundColor: t.bg, borderTopWidth: B.line, borderTopColor: t.line,
             paddingHorizontal: gutter, paddingTop: 12, paddingBottom: Math.max(12, insets.bottom),
           }, barStyle]}
         >

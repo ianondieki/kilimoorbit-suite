@@ -21,21 +21,84 @@ import type { Theme } from "../lib/themes";
 import { useLang } from "../lib/session";
 import { focusElement, focusRing, isWeb, spaceActivates, webCursor, type PressState } from "../lib/ui";
 import { haptic } from "../lib/haptics";
-import { DISPLAY } from "../lib/typography";
+import { DISPLAY, ITALIC, LABEL } from "../lib/typography";
 import { CheckGlyph, CrossGlyph, MinusGlyph, PlusGlyph } from "./Glyphs";
+import Icon, { type IconName } from "./Icon";
 
-/* ── type scale (Nunito Sans; the three display presets are Space Grotesk) ── */
+/* ── spacing (4px base) and corner radii: every gap and corner comes from here (DESIGN.md) ── */
+export const S = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, x3: 32, x4: 40, x5: 48, x6: 64, x7: 80 } as const;
+export const R = { sm: 8, md: 12, btn: 12, card: 16, sheet: 20, pill: 999 } as const;
+/**
+ * Border weights (DESIGN.md): one hairline for every surface and divider, one
+ * outline for every control, one rule for accent bars. Selection and state
+ * change a border's colour, never its weight, so nothing shifts when it changes.
+ */
+export const B = { line: 1, control: 2, rule: 3 } as const;
+/** The smallest touch target for anything a finger presses. */
+export const TOUCH = 44;
+
+/**
+ * The page rhythm (DESIGN.md): the screen's side padding, the gap between
+ * cards in a group, the air between sections, and the padding inside a card.
+ * It opens up from phone to wide screens, so a screen breathes instead of
+ * stacking boxes edge to edge.
+ */
+export function useSpace() {
+  const { width } = useWindowDimensions();
+  const wide = width >= 900;
+  const mid = width >= 600;
+  return {
+    pad: wide ? S.x4 : mid ? S.x3 : S.xl,
+    gap: wide ? S.xxl : S.xl,
+    section: wide ? S.x7 : mid ? S.x6 : S.x5,
+    card: mid ? S.xxl : S.xl,
+  };
+}
+
+/* ── heading levels: a Section's cards label themselves one level below its title ── */
+const HeadingLevel = React.createContext(2);
+
+/**
+ * A titled group of cards on a screen: a Fraunces title (and an optional
+ * line under it) set apart by whitespace, not by another box. Card labels
+ * inside it become level-3 headings.
+ */
+export function Section({
+  title, sub, children, testID, style,
+}: { title: string; sub?: string; children: React.ReactNode; testID?: string; style?: StyleProp<ViewStyle> }) {
+  const t = useTheme();
+  const sp = useSpace();
+  const { width } = useWindowDimensions();
+  return (
+    <View style={[{ gap: sp.gap }, style]} testID={testID}>
+      <View style={{ gap: S.sm, maxWidth: 640 }}>
+        <Text accessibilityRole="header" aria-level={2} style={{ color: t.ink, ...(width >= 600 ? T.section : T.sectionSm) }}>{title}</Text>
+        {sub ? <Text style={{ color: t.dim, ...T.body }}>{sub}</Text> : null}
+      </View>
+      <HeadingLevel.Provider value={3}>{children}</HeadingLevel.Provider>
+    </View>
+  );
+}
+
+/* ── type scale (DESIGN.md): Nunito Sans text, Space Grotesk labels, Fraunces display ── */
 export const T = {
+  /** Uppercase section labels and stat captions: the smallest text a farmer must read. */
+  label: { fontFamily: LABEL["600"], fontSize: 12, lineHeight: 16, letterSpacing: 1.4, textTransform: "uppercase" as const },
   title: { fontSize: 17, lineHeight: 22, fontWeight: "700" as const },
-  body: { fontSize: 15.5, lineHeight: 22 },
-  meta: { fontSize: 13, lineHeight: 18 },
-  big: { fontSize: 32, lineHeight: 38, fontWeight: "800" as const },
+  body: { fontSize: 16, lineHeight: 24 },
+  meta: { fontSize: 14, lineHeight: 20 },
+  big: { fontFamily: DISPLAY["600"], fontSize: 34, lineHeight: 38, letterSpacing: -0.6, fontVariant: ["tabular-nums" as const] },
   /** A headline inside a card: a news title, a show's name, a trivia question. */
-  headline: { fontFamily: DISPLAY["600"], fontSize: 19, lineHeight: 26 },
+  headline: { fontFamily: DISPLAY["600"], fontSize: 20, lineHeight: 26, letterSpacing: -0.2 },
   /** A screen's greeting or a sheet's title. */
-  display: { fontFamily: DISPLAY["600"], fontSize: 24, lineHeight: 30 },
+  display: { fontFamily: DISPLAY["500"], fontSize: 28, lineHeight: 32, letterSpacing: -0.6 },
+  /** A section's title on a screen (Today's "On the farm today"). */
+  section: { fontFamily: DISPLAY["500"], fontSize: 30, lineHeight: 36, letterSpacing: -0.6 },
+  sectionSm: { fontFamily: DISPLAY["500"], fontSize: 24, lineHeight: 30, letterSpacing: -0.4 },
   /** The one big line on a screen. */
-  displayLg: { fontFamily: DISPLAY["700"], fontSize: 30, lineHeight: 36 },
+  displayLg: { fontFamily: DISPLAY["500"], fontSize: 36, lineHeight: 40, letterSpacing: -1 },
+  /** The accent word inside a display line (set on a nested Text). */
+  accent: { fontFamily: ITALIC },
 };
 
 /** "#RRGGBB" + alpha (0..1) → "#RRGGBBAA". Theme colours are all 6-digit hex. */
@@ -67,19 +130,76 @@ export function IconBadge({ color, size = 28, children }: { color: string; size?
   );
 }
 
+/* ── Surfaces: how a card answers the pointer (web) ──
+   A card at rest wears the warm hairline. Under the pointer the same 1px border
+   takes its section's colour (its `domain`, or the eyebrow inside it), the shadow
+   deepens and the card rises 2px; with keyboard focus inside, the border colours
+   without the lift. Plain CSS, so nothing re-renders. The weight never changes, so
+   nothing moves. Reduced motion: the colour still fades, nothing rises. Phones have no hover. */
+type SurfaceTone = "plain" | "alert" | "accent";
+const DOMAINS: Domain[] = ["weather", "farm", "market", "money", "doctor", "alerts", "news", "season", "shows", "store", "soil", "quiz", "herd"];
+
+/** Marks a view as a surface, optionally of a section (for cards whose eyebrow sits outside them). Spread on the outer View. */
+export const surfaceAttr = (tone: SurfaceTone = "plain", domain?: Domain): Record<string, unknown> =>
+  isWeb ? { dataSet: domain ? { koSurface: tone, koDomain: domain } : { koSurface: tone } } : {};
+
+function surfaceCSS(t: Theme): string {
+  const light = t.key === "savanna";
+  const a = light ? 0.55 : 0.65;
+  const lift = light
+    ? "0 2px 4px rgba(20, 32, 27, 0.05), 0 16px 32px -14px rgba(20, 32, 27, 0.18)"
+    : "0 16px 32px -14px rgba(0, 0, 0, 0.6)";
+  const S0 = "[data-ko-surface]";
+  const on = (sel: string, color: string) =>
+    `@media (hover:hover){${sel}:hover{border-color:${color}!important;box-shadow:${lift}!important}}` +
+    // Keyboard focus only: a mouse click inside must not leave the border coloured.
+    `${sel}:has(:focus-visible){border-color:${color}!important}`;
+  let css =
+    `${S0}{transition:border-color 180ms ease-out,box-shadow 240ms ease-out,transform 240ms cubic-bezier(0.2,0.7,0.2,1)}` +
+    `@media (hover:hover){${S0}:hover{transform:translateY(-2px)}` +
+    // The risen card keeps the 2px it left under the pointer, so its bottom edge never flickers.
+    `${S0}:hover::after{content:"";position:absolute;left:0;right:0;bottom:-3px;height:3px}}` +
+    // Inside a horizontal pager the scroll box clips a rising card, so there it only colours.
+    `@media (hover:hover){[data-ko-pager] ${S0}:hover{transform:none}}` +
+    on(`${S0}[data-ko-surface="plain"]`, tint(t.accent, a));
+  for (const d of DOMAINS) css += on(`${S0}[data-ko-surface="plain"]:has([data-ko-eyebrow="${d}"])`, tint(domainColor(t, d), a));
+  // A declared domain wins over an eyebrow found inside (same specificity, later rule).
+  for (const d of DOMAINS) css += on(`${S0}[data-ko-surface="plain"][data-ko-domain="${d}"]`, tint(domainColor(t, d), a));
+  css += on(`${S0}[data-ko-surface="alert"]`, t.alert) + on(`${S0}[data-ko-surface="accent"]`, t.accent);
+  css += `@media (prefers-reduced-motion:reduce){${S0}{transition:border-color 120ms linear,box-shadow 120ms linear}${S0}:hover{transform:none!important}}`;
+  return css;
+}
+
+/** Web: keeps one stylesheet of surface states in step with the theme. Called once by the root layout. */
+export function useSurfaceStyles(t: Theme) {
+  useEffect(() => {
+    if (!isWeb || typeof document === "undefined") return;
+    let el = document.getElementById("ko-surface") as HTMLStyleElement | null;
+    if (el?.dataset.theme === t.key) return;
+    if (!el) {
+      el = document.createElement("style");
+      el.id = "ko-surface";
+      document.head.appendChild(el);
+    }
+    el.textContent = surfaceCSS(t);
+    el.dataset.theme = t.key;
+  }, [t.key]);
+}
+
 /* ── Card ── */
 export function Card({
-  children, style, tone = "plain",
-}: { children: React.ReactNode; style?: StyleProp<ViewStyle>; tone?: "plain" | "alert" | "accent" }) {
+  children, style, tone = "plain", domain,
+}: { children: React.ReactNode; style?: StyleProp<ViewStyle>; tone?: SurfaceTone; domain?: Domain }) {
   const t = useTheme();
+  const sp = useSpace();
   const light = t.key === "savanna";
   const border = tone === "alert" ? t.alert : tone === "accent" ? t.accent : t.line;
   // Depth: a soft shadow on the light theme; on the dark ones a lighter top edge, as if lit from above.
   const depth: ViewStyle = light
-    ? ({ boxShadow: "0 1px 2px rgba(16, 42, 29, 0.05), 0 2px 8px rgba(16, 42, 29, 0.06)" } as ViewStyle)
+    ? ({ boxShadow: "0 1px 2px rgba(20, 32, 27, 0.04), 0 8px 24px -8px rgba(20, 32, 27, 0.08)" } as ViewStyle)
     : tone === "plain" ? { borderTopColor: tint(t.ink, 0.14) } : {};
   return (
-    <View style={[{ backgroundColor: t.panel, borderColor: border, borderWidth: 1, borderRadius: 18, padding: 16 }, depth, style]}>
+    <View {...surfaceAttr(tone, domain)} style={[{ backgroundColor: t.panel, borderColor: border, borderWidth: B.line, borderRadius: R.card, padding: sp.card }, depth, style]}>
       {children}
     </View>
   );
@@ -90,16 +210,17 @@ export function Eyebrow({
   text, right, style, domain, icon,
 }: { text: string; right?: React.ReactNode; style?: StyleProp<ViewStyle>; domain?: Domain; icon?: (color: string) => React.ReactNode }) {
   const t = useTheme();
+  const level = React.useContext(HeadingLevel);
   const c = domainColor(t, domain);
   return (
-    <View style={[{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: icon ? 28 : 22, marginBottom: 12 }, style]} testID={domain ? `eyebrow-${domain}` : undefined}>
+    <View style={[{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, minHeight: icon ? 28 : 22, marginBottom: S.lg }, style]} testID={domain ? `eyebrow-${domain}` : undefined} {...(isWeb && domain ? { dataSet: { koEyebrow: domain } } : null)}>
       <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10 }}>
         {icon ? <IconBadge color={c}>{icon(c)}</IconBadge> : null}
         <Text
           accessibilityRole="header"
-          aria-level={2}
+          aria-level={level}
           numberOfLines={2}
-          style={{ flexShrink: 1, color: domain ? c : t.dim, fontSize: 11.5, lineHeight: 14, fontWeight: "800", letterSpacing: 1.3, textTransform: "uppercase" }}
+          style={{ flexShrink: 1, color: domain ? c : t.dim, ...T.label }}
         >
           {text}
         </Text>
@@ -143,11 +264,11 @@ export function Btn({
         accessibilityState={{ disabled: !!disabled }}
         style={({ pressed, hovered, focused }: PressState) => [
           {
-            minHeight: small ? 44 : 52, borderRadius: 14, paddingHorizontal: kind === "ghost" ? 4 : 18,
+            minHeight: small ? 44 : 52, borderRadius: R.btn, paddingHorizontal: kind === "ghost" ? 4 : 18,
             flexDirection: "row", alignItems: "center", justifyContent: kind === "ghost" ? "flex-start" : "center", gap: 8,
-            backgroundColor: bg,
-            ...(kind === "secondary" ? { borderWidth: 2, borderColor: t.dim } : null),
-            ...(kind === "primary" || kind === "danger" ? { borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.28)" } : null),
+            backgroundColor: kind === "secondary" ? t.panel : bg,
+            ...(kind === "secondary" ? { borderWidth: B.control, borderColor: t.dim } : null),
+            ...(kind === "primary" || kind === "danger" ? ({ boxShadow: "0 1px 2px rgba(20, 32, 27, 0.08), 0 8px 20px -10px rgba(20, 32, 27, 0.45)" } as ViewStyle) : null),
             opacity: disabled ? 0.45 : pressed ? 0.9 : 1,
           },
           hovered && !disabled && (kind === "secondary" ? { backgroundColor: t.raised } : kind === "ghost" ? { opacity: 0.8 } : { opacity: 0.92 }),
@@ -190,7 +311,7 @@ export function Chip({
         {
           minHeight: 44, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8,
           flexDirection: "row", alignItems: "center", gap: 8,
-          borderWidth: selected ? 2 : 1.5, borderColor: selected ? t.accent : t.line,
+          borderWidth: B.control, borderColor: selected ? t.accent : hovered ? t.dim : t.line,
           backgroundColor: selected ? tint(t.accent, 0.14) : hovered ? t.raised : "transparent",
           opacity: pressed ? 0.8 : 1,
         },
@@ -269,7 +390,7 @@ export function CheckRow({
     >
       <Animated.View
         style={[{
-          width: 26, height: 26, borderRadius: 8, borderWidth: 2,
+          width: 26, height: 26, borderRadius: R.sm, borderWidth: B.control,
           borderColor: checked ? t.ok : t.dim, backgroundColor: checked ? t.ok : "transparent",
           alignItems: "center", justifyContent: "center",
         }, popStyle]}
@@ -280,21 +401,21 @@ export function CheckRow({
       <View style={{ flex: 1 }}>
         <Text
           style={{
-            color: checked ? t.dim : t.ink, fontSize: 15, lineHeight: 20, fontWeight: "600",
+            color: checked ? t.dim : t.ink, fontSize: 16, lineHeight: 22, fontWeight: "600",
             textDecorationLine: checked ? "line-through" : "none",
           }}
         >
           {title}
         </Text>
         {meta ? (
-          <Text style={{ color: metaTone === "late" && !checked ? t.alert : t.dim, fontSize: 13, lineHeight: 18, fontWeight: metaTone ? "700" : "500" }}>
+          <Text style={{ color: metaTone === "late" && !checked ? t.alert : t.dim, ...T.meta, fontWeight: metaTone ? "700" : "500" }}>
             {checked ? tt("tasks.doneA11y") : meta}
           </Text>
         ) : null}
         {hint && !checked ? (
           <View style={{ flexDirection: "row", gap: 6, alignItems: "flex-start", marginTop: 3 }}>
-            <View style={{ width: 7, height: 7, borderRadius: 4, marginTop: 6, backgroundColor: hint.tone === "ok" ? t.ok : t.accent }} />
-            <Text style={{ flex: 1, color: t.ink, fontSize: 13, lineHeight: 18 }}>{hint.text}</Text>
+            <View style={{ width: 7, height: 7, borderRadius: 4, marginTop: 7, backgroundColor: hint.tone === "ok" ? t.ok : t.accent }} />
+            <Text style={{ flex: 1, color: t.ink, ...T.meta }}>{hint.text}</Text>
           </View>
         ) : null}
       </View>
@@ -320,7 +441,7 @@ export function Stepper({
         accessibilityRole="button"
         accessibilityLabel={`${label} ${dir < 0 ? "−" : "+"}${format(step)}`}
         style={({ pressed, hovered, focused }: PressState) => [
-          { width: 52, height: 52, borderRadius: 14, borderWidth: 2, borderColor: t.dim, alignItems: "center", justifyContent: "center", opacity: disabled ? 0.35 : pressed ? 0.75 : 1 },
+          { width: 52, height: 52, borderRadius: R.btn, borderWidth: B.control, borderColor: t.dim, alignItems: "center", justifyContent: "center", opacity: disabled ? 0.35 : pressed ? 0.75 : 1 },
           hovered && !disabled && { backgroundColor: t.raised },
           webCursor, focusRing(focused, t.accent),
         ]}
@@ -353,6 +474,46 @@ export function Empty({ glyph, title, body, action }: { glyph?: React.ReactNode;
       <Text style={{ color: t.ink, ...T.title, textAlign: "center" }}>{title}</Text>
       {body ? <Text style={{ color: t.dim, ...T.body, textAlign: "center", maxWidth: 420 }}>{body}</Text> : null}
       {action ? <View style={{ marginTop: 8, alignSelf: "stretch", alignItems: "center" }}>{action}</View> : null}
+    </View>
+  );
+}
+
+/* ── Notice: an inline state (loading, error, offline, info) with an optional action ──
+   A callout with a coloured left bar and an icon, so the tone never rests on colour alone.
+   Errors and offline notes are announced (role alert); loading is a polite live region. */
+export function Notice({
+  tone = "info", title, body, action, testID, style,
+}: {
+  tone?: "info" | "error" | "offline" | "loading" | "ok";
+  title?: string; body?: string;
+  action?: { label: string; onPress: () => void; testID?: string; disabled?: boolean };
+  testID?: string; style?: StyleProp<ViewStyle>;
+}) {
+  const t = useTheme();
+  const c = tone === "error" ? t.alert : tone === "offline" ? t.dim : tone === "ok" ? t.ok : tone === "loading" ? t.accent : t.water;
+  const icon: IconName = tone === "error" ? "alert-circle-outline" : tone === "offline" ? "wifi-off" : tone === "ok" ? "check-circle-outline" : tone === "loading" ? "progress-clock" : "information-outline";
+  const loud = tone === "error" || tone === "offline";
+  return (
+    <View
+      testID={testID}
+      accessibilityRole={loud ? "alert" : undefined}
+      accessibilityLiveRegion={loud ? "assertive" : "polite"}
+      aria-live={loud ? "assertive" : "polite"}
+      style={[{
+        flexDirection: "row", gap: S.md, padding: S.md, paddingLeft: S.lg, borderRadius: R.md,
+        backgroundColor: tone === "offline" ? t.panel : tint(c, 0.08), borderLeftWidth: B.rule, borderLeftColor: c,
+        borderWidth: tone === "offline" ? B.line : 0, borderColor: t.line,
+      }, style]}
+    >
+      <Icon name={icon} size={20} color={c} style={{ marginTop: 2 }} />
+      <View style={{ flex: 1, gap: S.xs }}>
+        {title ? <Text style={{ color: t.ink, ...T.body, fontWeight: "700" }}>{title}</Text> : null}
+        {body ? <Text style={{ color: t.ink, ...T.meta }}>{body}</Text> : null}
+        {action ? (
+          // Secondary (ink on the tint), not ghost: accent text on a tinted callout falls under 4.5:1.
+          <Btn kind="secondary" small label={action.label} onPress={action.onPress} disabled={action.disabled} testID={action.testID} style={{ alignSelf: "flex-start" }} />
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -432,7 +593,7 @@ export function Sheet({
         >
           {!dialog && <View style={{ alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: t.line, marginTop: 8 }} />}
           <View style={{ flexDirection: "row", alignItems: "center", paddingLeft: 20, paddingRight: 6, minHeight: 56 }}>
-            <Text accessibilityRole="header" style={{ flex: 1, color: t.ink, ...T.display, fontSize: 21, lineHeight: 27 }}>{title}</Text>
+            <Text accessibilityRole="header" aria-level={2} style={{ flex: 1, color: t.ink, ...T.display, fontSize: 21, lineHeight: 27 }}>{title}</Text>
             <Pressable
               ref={closeRef}
               onPress={onClose}

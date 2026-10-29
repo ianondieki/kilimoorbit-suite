@@ -19,7 +19,7 @@ import { bookingActions, googleCalendarUrl, onNow, useBookings, useShows, whenTe
 import { openLink } from "../lib/news";
 import { useFarm } from "../lib/farm";
 import type { Key } from "../lib/i18n";
-import { Btn, Card, Chip, ChipRow, Eyebrow, Group, Sheet, T, Tag } from "./Kit";
+import { Btn, Card, Chip, ChipRow, Eyebrow, Group, S, Sheet, T, Tag } from "./Kit";
 import { Skeleton } from "./Motion";
 import Field from "./Field";
 import { ArrowGlyph, CheckCoin, SignalOffGlyph, CalendarGlyph } from "./Glyphs";
@@ -27,7 +27,8 @@ import Pager from "./Pager";
 
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/;
 
-export function ShowsCard({ county }: { county: string }) {
+/** `peek`: how much of the next show shows; 0 where the row sits beside another (wide Today). */
+export function ShowsCard({ county, peek = S.x3 }: { county: string; peek?: number }) {
   const t = useTheme();
   const { lang, t: tt } = useLang();
   const shows = useShows(county);
@@ -37,37 +38,46 @@ export function ShowsCard({ county }: { county: string }) {
   const d = shows.data;
   const list = d?.events.slice(0, 6) ?? [];
   return (
-    <Card>
+    <View testID="shows-block">
       <Eyebrow domain="shows" icon={(c) => <CalendarGlyph size={15} color={c} />} text={tt("shows.eyebrow", { county: (d?.county ?? county).toUpperCase() })} />
       {shows.status === "loading" && !d ? (
-        <View style={{ gap: 10 }}>
-          <Skeleton height={44} color={t.raised} radius={10} />
-          <Skeleton height={14} width={"60%"} color={t.raised} />
-        </View>
+        <Card domain="shows">
+          <View style={{ gap: S.md }}>
+            <Skeleton height={44} color={t.raised} radius={10} />
+            <Skeleton height={14} width={"60%"} color={t.raised} />
+          </View>
+        </Card>
       ) : !d || !list.length ? (
-        <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
-          <SignalOffGlyph size={20} color={t.dim} />
-          <Text style={{ flex: 1, color: t.dim, ...T.body }}>{tt(d ? "shows.empty" : "shows.none")}</Text>
-        </View>
+        <Card domain="shows">
+          <View style={{ flexDirection: "row", gap: S.md, alignItems: "center" }}>
+            <SignalOffGlyph size={20} color={t.dim} />
+            <Text style={{ flex: 1, color: t.dim, ...T.body }}>{tt(d ? "shows.empty" : "shows.none")}</Text>
+          </View>
+        </Card>
       ) : (
         <View testID="shows-card">
           {shows.status === "cached" && shows.cachedAgeMin != null && (
-            <Text style={{ color: t.dim, ...T.meta, marginTop: -6, marginBottom: 8 }}>{tt("news.cached", { age: ageText(lang, shows.cachedAgeMin) })}</Text>
+            <Text style={{ color: t.dim, ...T.meta, marginTop: -S.sm, marginBottom: S.md }}>{tt("news.cached", { age: ageText(lang, shows.cachedAgeMin) })}</Text>
           )}
           <Pager
             items={list}
             keyOf={(s) => s.id}
             label={tt("shows.eyebrowA11y")}
             testID="shows"
+            autoplay={SHOWS_TURN}
+            peek={peek}
             render={(s) => <ShowPage s={s} today={today} booked={bookings.some((b) => b.event_id === s.id && b.end >= today)} onOpen={() => setOpen(s)} />}
           />
-          <Text style={{ color: t.dim, fontSize: 12.5, lineHeight: 17, marginTop: 8 }}>{tt("shows.note")}</Text>
+          <Text style={{ color: t.dim, ...T.meta, marginTop: S.xs }}>{tt("shows.note")}</Text>
         </View>
       )}
       <ShowSheet show={open} onClose={() => setOpen(null)} />
-    </Card>
+    </View>
   );
 }
+
+/** A little slower than the news, so the two rows never turn together. */
+const SHOWS_TURN = 7500;
 
 function ShowPage({ s, today, booked, onOpen }: { s: Show; today: string; booked: boolean; onOpen: () => void }) {
   const t = useTheme();
@@ -75,27 +85,29 @@ function ShowPage({ s, today, booked, onOpen }: { s: Show; today: string; booked
   const live = onNow(s, today);
   const when = live ? tt("shows.onNow") : s.days_until === 0 ? tt("shows.today") : s.days_until === 1 ? tt("common.tomorrow") : tt("shows.inDays", { n: s.days_until });
   return (
-    <View style={{ gap: 6, paddingRight: 2 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <Text style={{ color: live ? t.ok : t.dim, ...T.meta, fontWeight: "700" }}>{when}</Text>
-        {s.estimated && <Tag tone="warn" label={tt("shows.estimated")} />}
-        {booked && <Tag tone="ok" label={tt("shows.going")} />}
+    <Card domain="shows" style={{ flex: 1 }}>
+      <View style={{ flex: 1, gap: S.sm }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: S.sm, flexWrap: "wrap", minHeight: 24 }}>
+          <Text style={{ color: live ? t.ok : t.dim, ...T.meta, fontWeight: "700" }}>{when}</Text>
+          {s.estimated && <Tag tone="warn" label={tt("shows.estimated")} />}
+          {booked && <Tag tone="ok" label={tt("shows.going")} />}
+        </View>
+        <Text {...webLang("en")} style={{ color: t.ink, ...T.headline }} numberOfLines={2}>{s.name}</Text>
+        <Text style={{ color: t.ink, ...T.body }}>
+          {whenText(lang, s.start, s.end)} · {s.town}{s.distance_km > 0 ? ` · ${tt("shows.km", { n: s.distance_km.toLocaleString("en-KE") })}` : ""}
+        </Text>
+        <Text {...webLang("en")} style={{ color: t.dim, ...T.meta }} numberOfLines={1}>{s.organiser}</Text>
+        <Btn
+          kind={booked ? "ghost" : "secondary"}
+          small
+          label={tt(booked ? "shows.manage" : "shows.book")}
+          onPress={onOpen}
+          icon={(c) => <ArrowGlyph size={14} color={c} />}
+          style={{ flexDirection: "row-reverse", alignSelf: "flex-start", marginTop: "auto", paddingTop: S.md }}
+          testID={`show-open-${s.id}`}
+        />
       </View>
-      <Text {...webLang("en")} style={{ color: t.ink, ...T.headline }} numberOfLines={2}>{s.name}</Text>
-      <Text style={{ color: t.ink, ...T.meta }}>
-        {whenText(lang, s.start, s.end)} · {s.town}{s.distance_km > 0 ? ` · ${tt("shows.km", { n: s.distance_km.toLocaleString("en-KE") })}` : ""}
-      </Text>
-      <Text {...webLang("en")} style={{ color: t.dim, ...T.meta }} numberOfLines={1}>{s.organiser}</Text>
-      <Btn
-        kind={booked ? "ghost" : "secondary"}
-        small
-        label={tt(booked ? "shows.manage" : "shows.book")}
-        onPress={onOpen}
-        icon={(c) => <ArrowGlyph size={14} color={c} />}
-        style={{ flexDirection: "row-reverse", alignSelf: "flex-start", marginTop: 4 }}
-        testID={`show-open-${s.id}`}
-      />
-    </View>
+    </Card>
   );
 }
 

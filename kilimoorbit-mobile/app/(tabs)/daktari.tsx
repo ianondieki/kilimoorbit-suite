@@ -13,7 +13,7 @@ import { PestWatchCard, PushPullSheet, ScoutCard, ScoutSheet } from "../../compo
 import { DEMO_COUNTY } from "../../lib/counties";
 import Header from "../../components/Header";
 import { Bounded } from "../../components/Bounded";
-import { Btn, Card, Chip, ChipRow, Eyebrow, T, Tag } from "../../components/Kit";
+import { B, Btn, Card, Chip, ChipRow, Eyebrow, R, S, T, Tag, useSpace } from "../../components/Kit";
 import { Enter } from "../../components/Motion";
 import { CropCoin } from "../../components/ShambaPanel";
 import { ChatGlyph, ChevronGlyph, CrossGlyph, LensGlyph } from "../../components/Glyphs";
@@ -27,6 +27,7 @@ import { seasonFor } from "../../lib/season";
 import { useFarm } from "../../lib/farm";
 import type { Key } from "../../lib/i18n";
 import { PhotoHero } from "../../components/PhotoHero";
+import { PHOTO_SETS } from "../../lib/photos";
 
 const PARTS: Part[] = ["leaf", "stem", "fruit"];
 
@@ -61,6 +62,7 @@ export default function Daktari() {
   // while they are out of view.
   const scroller = useRef<ScrollView>(null);
   const { height } = useWindowDimensions();
+  const sp = useSpace();
   // Scroll geometry lives in refs; only the yes/no "results are below the fold" answer is state,
   // so scrolling re-renders nothing until that answer changes.
   const geo = useRef({ resultsY: 0, scrollY: 0, viewH: 0 });
@@ -77,14 +79,14 @@ export default function Daktari() {
       <Header title={tt("dr.title")} />
       <ScrollView
         ref={scroller}
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: S.x5 }}
         keyboardShouldPersistTaps="handled"
         scrollEventThrottle={64}
         onScroll={(e) => { geo.current.scrollY = e.nativeEvent.contentOffset.y; recalc(); }}
         onLayout={(e) => { geo.current.viewH = e.nativeEvent.layout.height; recalc(); }}
       >
-        <Bounded style={{ padding: 16, gap: 14 }}>
-          <PhotoHero photo="doctor" icon="stethoscope" eyebrow={tt("ph.doctor.eyebrow")} title={tt("ph.doctor.title")} subtitle={tt("ph.doctor.sub")} testID="doctor-hero" />
+        <Bounded style={{ paddingHorizontal: sp.pad, paddingTop: sp.gap, gap: sp.gap }}>
+          <PhotoHero photo="doctor" photos={PHOTO_SETS.doctor} icon="stethoscope" eyebrow={tt("ph.doctor.eyebrow")} title={tt("ph.doctor.title")} subtitle={tt("ph.doctor.sub")} testID="doctor-hero" style={{ marginBottom: sp.gap }} />
           {/* Maize: fall armyworm scouting and the county pest watch first. */}
           {crop === "maize" && (
             <>
@@ -128,7 +130,7 @@ export default function Daktari() {
           <View
             accessibilityLiveRegion="polite"
             aria-live="polite"
-            style={{ gap: 12 }}
+            style={{ gap: sp.gap, marginTop: sp.section - sp.gap }}
             onLayout={(e) => { geo.current.resultsY = e.nativeEvent.layout.y; recalc(); }}
           >
             {picked.length > 0 ? (
@@ -156,7 +158,7 @@ export default function Daktari() {
             )}
           </View>
 
-          <View style={{ padding: 14, borderRadius: 16, borderWidth: 1, borderColor: t.line, gap: 6 }}>
+          <View style={{ padding: 14, borderRadius: R.card, borderWidth: B.line, borderColor: t.line, gap: 6 }}>
             <Text style={{ color: t.ink, fontSize: 15, lineHeight: 20, fontWeight: "800" }}>{tt("dr.safety")}</Text>
             <Text style={{ color: t.ink, ...T.meta }}>{tt("dr.safetyBody")}</Text>
             <Text style={{ color: t.dim, ...T.meta, marginTop: 4 }}>{tt("dr.disclaimer")}</Text>
@@ -238,7 +240,7 @@ function Section({ title, items, numbered }: { title: string; items: string[]; n
   const t = useTheme();
   return (
     <View style={{ gap: 8 }}>
-      <Text accessibilityRole="header" aria-level={3} style={{ color: t.dim, fontSize: 11, lineHeight: 14, fontFamily: "monospace", fontWeight: "700", letterSpacing: 1.6 }}>
+      <Text accessibilityRole="header" aria-level={3} style={{ color: t.dim, ...T.label }}>
         {title.toUpperCase()}
       </Text>
       {items.map((it, i) => (

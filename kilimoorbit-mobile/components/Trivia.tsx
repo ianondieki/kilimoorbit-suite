@@ -21,7 +21,7 @@ import { todayKey } from "../lib/dates";
 import { byId, liveStreak, todayScore, type Trivia } from "../lib/trivia";
 import { quizActions, useQuiz } from "../lib/quiz";
 import type { Key } from "../lib/i18n";
-import { Btn, Card, Eyebrow, T, Tag, tint } from "./Kit";
+import { B, Btn, Card, Eyebrow, R, T, Tag, tint } from "./Kit";
 import { CheckGlyph, CrossGlyph, BulbGlyph, ArrowGlyph } from "./Glyphs";
 import Pager, { type PagerHandle } from "./Pager";
 
@@ -172,7 +172,7 @@ function Option({
         {...(answered ? ({ "aria-disabled": true } as any) : null)}
         testID={testID}
         style={({ pressed, hovered, focused }: PressState) => [
-          { minHeight: 48, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, borderRadius: 12, borderWidth: 2, borderColor: tone ?? t.line, backgroundColor: tone ? tint(tone, 0.16) : t.panel, opacity: answered && !tone ? 0.55 : pressed ? 0.9 : 1 },
+          { minHeight: 48, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, borderRadius: R.btn, borderWidth: B.control, borderColor: tone ?? t.line, backgroundColor: tone ? tint(tone, 0.16) : t.panel, opacity: answered && !tone ? 0.55 : pressed ? 0.9 : 1 },
           hovered && !answered && { backgroundColor: t.raised },
           webCursor, focusRing(focused, t.accent),
         ]}
@@ -180,7 +180,7 @@ function Option({
         <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: tone ?? t.raised, alignItems: "center", justifyContent: "center" }}>
           {answered && right ? <CheckGlyph size={13} color={t.field} /> : answered && mine ? <CrossGlyph size={11} color={t.field} /> : <Text style={{ color: t.accent, fontSize: 12, fontWeight: "800" }}>{letter}</Text>}
         </View>
-        <Text style={{ flex: 1, color: t.ink, fontSize: 15.5, lineHeight: 21, fontWeight: answered && right ? "800" : "600" }}>{label}</Text>
+        <Text style={{ flex: 1, color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: answered && right ? "800" : "600" }}>{label}</Text>
       </Pressable>
     </Animated.View>
   );

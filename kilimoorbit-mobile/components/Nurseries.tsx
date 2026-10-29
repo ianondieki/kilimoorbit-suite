@@ -18,8 +18,9 @@ import { NEEDS, fareText, kmText, mapsUrl, needLabel, type NeedKey } from "../li
 import { openLink } from "../lib/news";
 import { haptic } from "../lib/haptics";
 import type { Key } from "../lib/i18n";
-import { Btn, Card, Chip, ChipRow, Sheet, T, Tag, tint } from "./Kit";
+import { B, Btn, Card, Chip, ChipRow, R, Sheet, T, Tag, tint } from "./Kit";
 import { PhotoHero } from "./PhotoHero";
+import { PHOTO_SETS } from "../lib/photos";
 import { DemoTag } from "./ShambaPanel";
 import Icon from "./Icon";
 import { CheckCoin } from "./Glyphs";
@@ -66,7 +67,7 @@ export function NurseriesCard() {
   return (
     <Card>
       <View style={{ gap: 12 }} testID="nurseries-card">
-        <PhotoHero photo="nursery" compact height={176} icon="sprout" eyebrow={tt("nz.eyebrow")} title={tt("nz.title")} />
+        <PhotoHero photo="nursery" photos={PHOTO_SETS.nursery} compact height={176} icon="sprout" eyebrow={tt("nz.eyebrow")} title={tt("nz.title")} />
         <Text style={{ color: t.dim, ...T.body }}>{tt("nz.body")}</Text>
         <Text style={{ color: t.ink, fontSize: 15, lineHeight: 20, fontWeight: "700" }}>{tt("nz.need")}</Text>
         <ChipRow role="radiogroup" label={tt("nz.need")}>
@@ -173,13 +174,13 @@ function NurseryRow({ n, first, need }: { n: Nursery; first: boolean; need: Need
   const { lang, t: tt } = useLang();
   const kindIcon = n.kind === "research" ? "flask-outline" : n.kind === "forestry" ? "pine-tree" : n.kind === "training" ? "school-outline" : n.kind === "seed" ? "seed-outline" : n.kind === "hatchery" ? "fish" : "storefront-outline";
   return (
-    <View style={{ borderRadius: 14, borderWidth: first ? 2 : 1, borderColor: first ? t.accent : t.line, backgroundColor: first ? tint(t.accent, 0.08) : t.raised, padding: 12, gap: 8 }} testID={`nz-row-${n.id}`}>
+    <View style={{ borderRadius: R.md, borderWidth: B.line, borderColor: first ? t.accent : t.line, backgroundColor: first ? tint(t.accent, 0.08) : t.raised, padding: 12, gap: 8 }} testID={`nz-row-${n.id}`}>
       <View style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
         <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: tint(n.carries_need ? t.ok : t.dim, 0.16), alignItems: "center", justifyContent: "center" }}>
           <Icon name={kindIcon as any} size={19} color={n.carries_need ? t.ok : t.dim} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={{ color: t.ink, fontSize: 15.5, lineHeight: 21, fontWeight: "800" }}>{n.name}</Text>
+          <Text style={{ color: t.ink, fontSize: 16, lineHeight: 22, fontWeight: "800" }}>{n.name}</Text>
           <Text style={{ color: t.dim, ...T.meta }}>{tt(`nz.kind.${n.kind}` as Key)} · {n.town === n.county ? n.town : `${n.town}, ${n.county}`}</Text>
         </View>
         <Text style={{ color: t.ink, fontSize: 16, lineHeight: 20, fontWeight: "800" }}>{kmText(n.distance_km)}</Text>
